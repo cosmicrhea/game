@@ -13,7 +13,7 @@ public class Light {
     init(_ light: aiLight) {
         lightPtr = withUnsafePointer(to: light) { UnsafePointer($0) }
         name = String(light.mName)
-        type = AiLightSourceType(light.mType)
+        type = AssimpLightSourceType(light.mType)
         position = AssimpVec3(light.mPosition)
         direction = AssimpVec3(light.mDirection)
         up = AssimpVec3(light.mUp)
@@ -43,7 +43,7 @@ public class Light {
     public var name: String?
 
     /// The type of the light source.
-    public var type: AiLightSourceType
+    public var type: AssimpLightSourceType
 
     /// Position of the light source in space. Relative to the
     /// transformation of the node corresponding to the light.
@@ -143,7 +143,7 @@ public class Light {
     public var size: AssimpVec2
 }
 
-public enum AiLightSourceType {
+public enum AssimpLightSourceType {
     case undefined
 
     /// A directional light source has a well-defined direction
