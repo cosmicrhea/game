@@ -64,10 +64,10 @@ class MeshRenderer {
   }
 
   func draw() {
-//        let material = scene.materials[mesh.materialIndex]
-//        material.getMaterialTexture(texType: .baseColor, texIndex: 0)
-//        glActiveTextureARB(texture: GL_TEXTURE0)
-//        glBindTexture(GL_TEXTURE_2D)
+    //        let material = scene.materials[mesh.materialIndex]
+    //        material.getMaterialTexture(texType: .baseColor, texIndex: 0)
+    //        glActiveTextureARB(texture: GL_TEXTURE0)
+    //        glBindTexture(GL_TEXTURE_2D)
 
     glBindVertexArray(VAO)
     glDrawElements(GL_TRIANGLES, GLsizei(mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
@@ -84,9 +84,9 @@ extension Mesh {
     let uvs = texCoordsPacked.0
 
     var result: [MeshRenderer.Vertex] = []
-    result.reserveCapacity(numVertices)
+    result.reserveCapacity(numberOfVertices)
 
-    for i in 0..<numVertices {
+    for i in 0..<numberOfVertices {
       let p = (
         positions[i * 3 + 0],
         positions[i * 3 + 1],

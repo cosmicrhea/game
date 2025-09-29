@@ -149,7 +149,7 @@ print("\(scene.rootNode)")
 ////print("\(scene.meshes.map { $0.numBones })")
 
 let renderers = scene.meshes
-  .filter { $0.numVertices > 0 }
+  .filter { $0.numberOfVertices > 0 }
   .map { MeshRenderer(scene: scene, mesh: $0) }
 
 while !window.shouldClose {
