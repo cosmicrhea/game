@@ -7,6 +7,11 @@ final class TextRenderer {
   private let font: TrueTypeFont
   private var atlas: GlyphAtlas?
   private let program: GLProgram
+  private let maxAboveBaseline: Float
+  private let maxBelowBaseline: Float
+  private let baselinePx: Float
+  /// Global scale factor applied at draw time (acts like em scale)
+  var scale: Float = 1.0
 
   init?(_ name: String, _ pixelHeight: Float? = nil) {
     guard let entry = FontLibrary.resolve(name: name) else { return nil }
@@ -16,11 +21,41 @@ final class TextRenderer {
     }
     self.font = font
     self.program = try! GLProgram("ui/text")
+
+    // Precompute conservative line metrics by scanning a representative ASCII range.
+    var above: Float = 0
+    var below: Float = 0
+    for cp in 32...126 {
+      if let g = font.getGlyphBitmap(for: Int32(cp)) {
+        let gAbove = max(0, -Float(g.yoff))
+        let gBelow = max(0, Float(g.yoff + g.height))
+        above = max(above, gAbove)
+        below = max(below, gBelow)
+      }
+    }
+    self.maxAboveBaseline = above
+    self.maxBelowBaseline = below
+    self.baselinePx = font.getBaseline()
   }
+
+  /// Pixel height to move the pen between lines.
+  /// Calculated as distance from highest ascender to lowest descender encountered.
+  // Use a conservative ascent that accounts for glyphs exceeding the font ascender,
+  // then add the maximum descender depth we observed.
+  var lineHeight: Float { baselineFromTop + maxBelowBaseline }
+  /// Line height with `scale` applied
+  var scaledLineHeight: Float { lineHeight * scale }
+
+  /// Baseline offset from the top of the line box (useful for aligning mixed sizes).
+  var baselineFromTop: Float { baselinePx }
+
+  /// Distance below the baseline to the deepest descender encountered.
+  var descentFromBaseline: Float { maxBelowBaseline }
 
   func draw(
     _ text: String, at origin: (x: Float, y: Float), windowSize: (w: Int32, h: Int32),
-    color: (Float, Float, Float, Float) = (1, 1, 1, 1)
+    color: (Float, Float, Float, Float) = (1, 1, 1, 1),
+    scale overrideScale: Float? = nil
   ) {
     let neededCodepoints = Set(text.utf8.map { Int32($0) })
     let haveCodepoints: Set<Int32> =
@@ -36,10 +71,11 @@ final class TextRenderer {
 
     guard let atlas = atlas else { return }
 
+    let s = overrideScale ?? self.scale
     var verts: [Float] = []
     var indices: [UInt32] = []
     var penX = origin.x
-    let baseline = font.getBaseline()
+    let baseline = font.getBaseline() * s
 
     let bytes = Array(text.utf8)
     for (idx, u8) in bytes.enumerated() {
@@ -50,11 +86,11 @@ final class TextRenderer {
       let glyphAdvance = font.getAdvance(for: cp, next: next)
 
       if let g = atlas.glyphs[cp] {
-        let x0 = penX + Float(g.xoff)
-        // Convert STBTT y-down offsets to our y-up coordinate system
-        let y1 = origin.y + baseline - Float(g.yoff)  // top
-        let y0 = y1 - Float(g.h)  // bottom
-        let x1 = x0 + Float(g.w)
+        let x0 = penX + Float(g.xoff) * s
+        // Convert STBTT y-down offsets to our y-up coordinate system, then scale
+        let y1 = origin.y + baseline - Float(g.yoff) * s  // top
+        let y0 = y1 - Float(g.h) * s  // bottom
+        let x1 = x0 + Float(g.w) * s
 
         let u0 = g.u0
         let v0 = g.v0
@@ -71,7 +107,7 @@ final class TextRenderer {
         indices += [base, base + 1, base + 2, base + 2, base + 3, base]
       }
 
-      penX += glyphAdvance
+      penX += glyphAdvance * s
     }
 
     var vao: GLuint = 0

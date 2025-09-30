@@ -15,7 +15,7 @@ let HEIGHT = 720
 
 //YourApp.main()
 
-LoggingSystem.bootstrap(LoggingOSLog.init)
+LoggingSystem.bootstrap { LoggingOSLog(label: $0) }
 sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
 try! GLFWSession.initialize()
@@ -31,6 +31,7 @@ window.nsWindow?.styleMask.insert(.fullSizeContentView)
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
+window.setIcon(Image("icon~squircle.png"))
 window.mouse.cursorMode = .disabled
 
 var polygonMode = GL_FILL
@@ -53,56 +54,18 @@ window.keyInputHandler = { _, key, _, state, _ in
   }
 }
 
-var lastX = Double(WIDTH) / 2.0
-var lastY = Double(HEIGHT) / 2.0
-var firstMouse = true
-
 var camera = FreeCamera()
 
 @MainActor func processInput() {
-  if window.keyboard.state(of: .w) == .pressed {
-    camera.processKeyboard(.forward, deltaTime: deltaTime)
-  }
-  if window.keyboard.state(of: .s) == .pressed {
-    camera.processKeyboard(.backward, deltaTime: deltaTime)
-  }
-  if window.keyboard.state(of: .a) == .pressed {
-    camera.processKeyboard(.left, deltaTime: deltaTime)
-  }
-  if window.keyboard.state(of: .d) == .pressed {
-    camera.processKeyboard(.right, deltaTime: deltaTime)
-  }
-  if window.keyboard.state(of: .q) == .pressed { camera.processKeyboard(.up, deltaTime: deltaTime) }
-  if window.keyboard.state(of: .e) == .pressed {
-    camera.processKeyboard(.down, deltaTime: deltaTime)
-  }
+  camera.processKeyboardState(window.keyboard, deltaTime)
 }
 
 window.cursorPositionHandler = { window, x, y in
   guard window.isFocused else { return }
-
-  let xpos = x
-  let ypos = y
-
-  if firstMouse {
-    lastX = xpos
-    lastY = ypos
-    firstMouse = false
-    return
-  }
-
-  let xoffset = xpos - lastX
-  let yoffset = lastY - ypos  // reversed since y-coordinates go from bottom to top
-
-  lastX = xpos
-  lastY = ypos
-
-  // logger.info("offsets: \(xoffset), \(yoffset)")
-  camera.processMouseMovement(xOffset: Float(xoffset), yOffset: Float(yoffset))
+  camera.processMousePosition(Float(x), Float(y))
 }
 
 window.scrollInputHandler = { _, _, yOffset in
-  // logger.info("yOffset: \(yOffset)")
   camera.processMouseScroll(Float(yOffset))
 }
 
@@ -155,16 +118,16 @@ while !window.shouldClose {
   deltaTime = currentFrame - lastFrame
   lastFrame = currentFrame
 
-//  // FPS in window title (update ~once per second)
-//  numberOfFrames += 1
-//  let now = GLFWSession.currentTime
-//  let elapsed = now - lastTitleUpdate
-//  if elapsed >= 1.0 {
-//    let fps = Double(numberOfFrames) / elapsed
-//    window.nsWindow?.title = String(format: "FPS: %.0f", fps)
-//    numberOfFrames = 0
-//    lastTitleUpdate = now
-//  }
+  //  // FPS in window title (update ~once per second)
+  //  numberOfFrames += 1
+  //  let now = GLFWSession.currentTime
+  //  let elapsed = now - lastTitleUpdate
+  //  if elapsed >= 1.0 {
+  //    let fps = Double(numberOfFrames) / elapsed
+  //    window.nsWindow?.title = String(format: "FPS: %.0f", fps)
+  //    numberOfFrames = 0
+  //    lastTitleUpdate = now
+  //  }
 
   processInput()
 
@@ -195,6 +158,13 @@ while !window.shouldClose {
 
   renderers.forEach { $0.draw() }
 
+  let debugText = """
+    Camera Zoom: \(camera.zoom)\n
+    Camera Position: \(camera.position)\n
+    """
+
+  determination.draw(debugText, at: (0, Float(HEIGHT) - 100), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+
   // grapeSoda.draw(
   //   "The quick brown fox jumps over the lazy dog", at: (100, 200),
   //   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
@@ -207,14 +177,15 @@ while !window.shouldClose {
 
   var yCursor: Float = 0
   for (renderer, resolvedFont) in fontRenderers {
-    let pixelHeight = Float(resolvedFont.pixelSize ?? 16)
-    yCursor += pixelHeight
+    // Treat yCursor as the baseline position. Move down to the baseline first,
+    // then draw, then add descender + padding for the next line.
+    yCursor += renderer.baselineFromTop
     renderer.draw(
-      resolvedFont.baseName,
+      resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
       at: (8, yCursor),
       windowSize: (Int32(WIDTH), Int32(HEIGHT))
     )
-    yCursor += 10
+    yCursor += renderer.descentFromBaseline + 6
   }
 
   if requestScreenshot {

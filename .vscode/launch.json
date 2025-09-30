@@ -1,0 +1,40 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Debug Glass",
+      "program": "${workspaceFolder:glass}/.build/debug/Glass",
+      "preLaunchTask": "swift: Build Debug Glass"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Release Glass",
+      "program": "${workspaceFolder:glass}/.build/release/Glass",
+      "preLaunchTask": "swift: Build Release Glass"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Debug glAss()",
+      "program": "${workspaceFolder:glass}/.build/debug/glAss()",
+      "preLaunchTask": "swift: Build Debug glAss()"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Release glAss()",
+      "program": "${workspaceFolder:glass}/.build/release/glAss()",
+      "preLaunchTask": "swift: Build Release glAss()"
+    }
+  ]
+}

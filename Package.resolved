@@ -1,15 +1,6 @@
 {
-  "originHash" : "63582ab1ce40bd51c4a91bd6115884b883c693cbf344c8d55413cf1e5411fed9",
+  "originHash" : "6129f1cc99bf497afb81ee04b672a4fb899c8eb09898f5dd38097b1241fcab8b",
   "pins" : [
-    {
-      "identity" : "cglfw3",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/thepotatoking55/CGLFW3.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "91e7f0dabc03ab14f433bfa5de8c5a77e295958a"
-      }
-    },
     {
       "identity" : "jpeg",
       "kind" : "remoteSourceControl",

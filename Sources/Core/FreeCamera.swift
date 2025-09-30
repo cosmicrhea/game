@@ -1,5 +1,6 @@
 import GL
 import GLMath
+import GLFW
 
 // Default camera values
 private let defaultYaw: Float = -90.0
@@ -26,6 +27,11 @@ class FreeCamera {
   var movementSpeed: Float
   var mouseSensitivity: Float
   var zoom: Float
+
+  // Internal mouse tracking state
+  private var lastMouseX: Float = 0
+  private var lastMouseY: Float = 0
+  private var isFirstMouseEvent: Bool = true
 
   /// Defines several possible options for camera movement.
   /// Used as abstraction to stay away from window-system specific input methods
@@ -68,7 +74,7 @@ class FreeCamera {
 
   /// Processes input received from any keyboard-like input system.
   /// Accepts input parameter in the form of camera defined enum (to abstract it from windowing systems)
-  func processKeyboard(_ direction: Movement, deltaTime: Float) {
+  func processMovement(_ direction: Movement, _ deltaTime: Float) {
     let velocity = movementSpeed * deltaTime
 
     switch direction {
@@ -87,11 +93,21 @@ class FreeCamera {
     }
   }
 
+  /// Processes GLFW keyboard state.
+  @MainActor func processKeyboardState(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
+    if keyboard.state(of: .w) == .pressed { processMovement(.forward, deltaTime) }
+    if keyboard.state(of: .s) == .pressed { processMovement(.backward, deltaTime) }
+    if keyboard.state(of: .a) == .pressed { processMovement(.left, deltaTime) }
+    if keyboard.state(of: .d) == .pressed { processMovement(.right, deltaTime) }
+    if keyboard.state(of: .q) == .pressed { processMovement(.up, deltaTime) }
+    if keyboard.state(of: .e) == .pressed { processMovement(.down, deltaTime) }
+  }
+
   /// Processes input received from a mouse input system.
   /// Expects the offset value in both the x and y direction.
   func processMouseMovement(
-    xOffset: Float,
-    yOffset: Float,
+    _ xOffset: Float,
+    _ yOffset: Float,
     constrainPitch: Bool = true
   ) {
     let xOffset = xOffset * mouseSensitivity
@@ -112,6 +128,24 @@ class FreeCamera {
 
     // Update Front, Right and Up Vectors using the updated Euler angles
     updateCameraVectors()
+  }
+
+  /// Processes absolute mouse position and converts it to offsets internally.
+  func processMousePosition(_ x: Float, _ y: Float) {
+    if isFirstMouseEvent {
+      lastMouseX = x
+      lastMouseY = y
+      isFirstMouseEvent = false
+      return
+    }
+
+    let xOffset = x - lastMouseX
+    let yOffset = lastMouseY - y  // invert Y so up is positive
+
+    lastMouseX = x
+    lastMouseY = y
+
+    processMouseMovement(xOffset, yOffset)
   }
 
   /// Processes input received from a mouse scroll-wheel event.

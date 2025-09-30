@@ -1,10 +1,15 @@
 import SwiftCrossUI
+import class Foundation.Bundle
 
 struct TitleScreen: View {
   var body: some View {
     VStack {
       Spacer()
         .frame(minHeight: 96)
+
+      Image(Bundle.module.url(forResource: "icon", withExtension: "png")!)
+        .resizable()
+        .frame(width: 96, height: 96)
 
       Text("Glass")
         .font(.largeTitle)
