@@ -51,9 +51,10 @@ final class TextRenderer {
 
       if let g = atlas.glyphs[cp] {
         let x0 = penX + Float(g.xoff)
-        let y0 = origin.y + baseline + Float(g.yoff)
+        // Convert STBTT y-down offsets to our y-up coordinate system
+        let y1 = origin.y + baseline - Float(g.yoff)  // top
+        let y0 = y1 - Float(g.h)  // bottom
         let x1 = x0 + Float(g.w)
-        let y1 = y0 + Float(g.h)
 
         let u0 = g.u0
         let v0 = g.v0
