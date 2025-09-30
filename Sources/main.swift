@@ -1,126 +1,119 @@
 import Assimp
 import Foundation
+import GL
 import GLFW
+import GLMath
+import ImageFormats
 import Logging
 import LoggingOSLog
-import SGLMath
-import SGLOpenGL
 import unistd
 
-import SwiftCrossUI
-import DefaultBackend
+typealias glm = GLMath
 
-struct YourApp: App {
-  @State var count = 0
-
-  var body: some SwiftCrossUI.Scene {
-    WindowGroup("YourApp") {
-      HStack {
-        Button("-") { count -= 1 }
-        Text("Count: \(count)")
-        Button("+") { count += 1 }
-      }
-      .padding()
-    }
-  }
-}
+let WIDTH = 1280
+let HEIGHT = 720
 
 //YourApp.main()
-
-//import class AppKit.NSScreen
-
-typealias glm = SGLMath
 
 LoggingSystem.bootstrap(LoggingOSLog.init)
 sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
 try! GLFWSession.initialize()
-GLFWSession.onReceiveError = { error in print("GLFW error: \(error)") }
+GLFWSession.onReceiveError = { error in logger.error("GLFW: \(error)") }
 
 GLFWWindow.hints.contextVersion = (4, 1)
 GLFWWindow.hints.openGLProfile = .core
 GLFWWindow.hints.openGLCompatibility = .forward
 
-let window = try! GLFWWindow(width: 1280, height: 720, title: "")
+let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 window.nsWindow?.styleMask.insert(.fullSizeContentView)
-//window.nsWindow?.setFrameTopLeftPoint(.init(x: 0, y: NSScreen.main!.frame.height))
 //window.nsWindow?.titlebarAppearsTransparent = true
 window.position = .zero
 window.context.makeCurrent()
+//window.context.setSwapInterval(0)
+window.mouse.cursorMode = .disabled
 
 var polygonMode = GL_FILL
+var requestScreenshot = false
+
+// timing
+var deltaTime: Float = 0.0
+var lastFrame: Float = 0.0
+var numberOfFrames: Int64 = 0
+var lastTitleUpdate: Double = GLFWSession.currentTime
 
 window.keyInputHandler = { _, key, _, state, _ in
   if key == .comma && state == .pressed {
-    Sound.play("RE_SELECT02")
+    UISound.select()
     polygonMode = polygonMode == GL_FILL ? GL_LINE : GL_FILL
   }
-}
-
-let vertexShaderSource = """
-    #version 330 core
-    layout (location = 0) in vec3 aPos;
-  
-    void main() {
-      gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-    }
-  """
-
-let vertexShader = glCreateShader(GL_VERTEX_SHADER)
-vertexShaderSource.withCString {
-  withUnsafePointer(to: $0) {
-    glShaderSource(vertexShader, 1, $0, nil)
+  if key == .p && state == .pressed {
+    UISound.shutter()
+    requestScreenshot = true
   }
 }
-glCompileShader(vertexShader)
 
-do {
-  var success = GLint()
-  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success)
-  if success == GL_FALSE { logger.glShaderError(vertexShader) }
-}
+var lastX = Double(WIDTH) / 2.0
+var lastY = Double(HEIGHT) / 2.0
+var firstMouse = true
 
-let fragmentShaderSource = """
-    #version 330 core
-    out vec4 FragColor;
-  
-    void main() {
-      FragColor = vec4(1.0f, 0.33f, 1.0f, 1.0f);
-    }
-  """
+var camera = FreeCamera()
 
-let fragmentShader = glCreateShader(GL_FRAGMENT_SHADER)
-fragmentShaderSource.withCString {
-  withUnsafePointer(to: $0) {
-    glShaderSource(fragmentShader, 1, $0, nil)
+@MainActor func processInput() {
+  if window.keyboard.state(of: .w) == .pressed {
+    camera.processKeyboard(.forward, deltaTime: deltaTime)
+  }
+  if window.keyboard.state(of: .s) == .pressed {
+    camera.processKeyboard(.backward, deltaTime: deltaTime)
+  }
+  if window.keyboard.state(of: .a) == .pressed {
+    camera.processKeyboard(.left, deltaTime: deltaTime)
+  }
+  if window.keyboard.state(of: .d) == .pressed {
+    camera.processKeyboard(.right, deltaTime: deltaTime)
+  }
+  if window.keyboard.state(of: .q) == .pressed { camera.processKeyboard(.up, deltaTime: deltaTime) }
+  if window.keyboard.state(of: .e) == .pressed {
+    camera.processKeyboard(.down, deltaTime: deltaTime)
   }
 }
-glCompileShader(fragmentShader)
 
-do {
-  var success = GLint()
-  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success)
-  if success == GL_FALSE { logger.glShaderError(fragmentShader) }
+window.cursorPositionHandler = { window, x, y in
+  guard window.isFocused else { return }
+
+  let xpos = x
+  let ypos = y
+
+  if firstMouse {
+    lastX = xpos
+    lastY = ypos
+    firstMouse = false
+    return
+  }
+
+  let xoffset = xpos - lastX
+  let yoffset = lastY - ypos  // reversed since y-coordinates go from bottom to top
+
+  lastX = xpos
+  lastY = ypos
+
+  // logger.info("offsets: \(xoffset), \(yoffset)")
+  camera.processMouseMovement(xOffset: Float(xoffset), yOffset: Float(yoffset))
 }
 
-let shaderProgram = glCreateProgram()
-glAttachShader(shaderProgram, vertexShader)
-glAttachShader(shaderProgram, fragmentShader)
-glLinkProgram(shaderProgram)
-
-do {
-  var success = GLint()
-  glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success)
-  if success == GL_FALSE { logger.glProgramError(shaderProgram) }
+window.scrollInputHandler = { _, _, yOffset in
+  // logger.info("yOffset: \(yOffset)")
+  camera.processMouseScroll(Float(yOffset))
 }
 
-glDeleteShader(vertexShader)
-glDeleteShader(fragmentShader)
+glEnable(GL_DEPTH_TEST)
+
+let basicShading = try! GLProgram("common/basic 2")
 
 let vertices: [Float] = [
   -0.5, -0.5, 0.0,
-   0.5, -0.5, 0.0,
-   0.0, 0.5, 0.0,
+  0.5, -0.5, 0.0,
+  0.0, 0.5, 0.0,
 ]
 
 var vertexBuffer = GLuint()
@@ -132,43 +125,102 @@ glGenVertexArrays(1, &vertexArray)
 glBindVertexArray(vertexArray)
 glBindBuffer(GL_ARRAY_BUFFER, vertexArray)
 glBufferData(GL_ARRAY_BUFFER, vertices.count * MemoryLayout<Float>.stride, vertices, GL_STATIC_DRAW)
-//glVertexAttribPointer(index: 0, size: 3, type: GL_FLOAT, normalized: false, stride: GLsizei(3 * MemoryLayout<Float>.stride), pointer: nil)
-glVertexAttribPointer(0, 3, GL_FLOAT, false, GLsizei(3 * MemoryLayout<Float>.stride), nil)
+glVertexAttribPointer(
+  index: 0, size: 3, type: GL_FLOAT, normalized: false,
+  stride: GLsizei(3 * MemoryLayout<Float>.stride), pointer: nil
+)
+//glVertexAttribPointer(0, 3, GL_FLOAT, false, GLsizei(3 * MemoryLayout<Float>.stride), nil)
 glEnableVertexAttribArray(0)
 
-let scenePath = Bundle.module.path(forResource: "actors/rat", ofType: "glb")!
+let scenePath = Bundle.module.path(forResource: "inventory/old_key", ofType: "glb")!
 
 let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
-//scene.rootNode.transformation = .init()
 print("\(scene.rootNode)")
-//print("\(scene.meshes)")
-////print("\(scene.meshes.map { $0.vertices })")
-////print("\(scene.meshes.map { $0.numFaces })")
-//print("\(scene.meshes.map { $0.faces })")
-////print("\(scene.meshes.map { $0.numVertices })")
-////print("\(scene.meshes.map { $0.numBones })")
 
 let renderers = scene.meshes
   .filter { $0.numberOfVertices > 0 }
   .map { MeshRenderer(scene: scene, mesh: $0) }
 
+let grapeSoda = TextRenderer("Grape Soda")!
+let determination = TextRenderer("Determination", 64)!
+
+let fontRenderers: [(TextRenderer, FontLibrary.ResolvedFont)] = FontLibrary.availableFonts
+  .compactMap { resolvedFont -> (TextRenderer, FontLibrary.ResolvedFont)? in
+    guard let renderer = TextRenderer(resolvedFont.displayName) else { return nil }
+    return (renderer, resolvedFont)
+  }
+
 while !window.shouldClose {
-  glClear(GL_COLOR_BUFFER_BIT)
-  //  glClearColor(0.2, 0.1, 0.1, 1)
+  let currentFrame = Float(GLFWSession.currentTime)
+  deltaTime = currentFrame - lastFrame
+  lastFrame = currentFrame
+
+//  // FPS in window title (update ~once per second)
+//  numberOfFrames += 1
+//  let now = GLFWSession.currentTime
+//  let elapsed = now - lastTitleUpdate
+//  if elapsed >= 1.0 {
+//    let fps = Double(numberOfFrames) / elapsed
+//    window.nsWindow?.title = String(format: "FPS: %.0f", fps)
+//    numberOfFrames = 0
+//    lastTitleUpdate = now
+//  }
+
+  processInput()
+
+  glClearColor(0.2, 0.1, 0.1, 1)
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
   //print(GLFWSession.currentTime)
 
-//    var model = mat4(1)
-//    model = glm.translate(model, vec3())
-//    model = glm.rotate(model, radians(20.0), vec3(1, 0.3, 0.5))
+  //    var model = mat4(1)
+  //    model = glm.translate(model, vec3())
+  //    model = glm.rotate(model, radians(20.0), vec3(1, 0.3, 0.5))
 
   glPolygonMode(GL_FRONT_AND_BACK, polygonMode)
 
-  glUseProgram(shaderProgram)
-//  glBindVertexArray(vertexArray)
-//  glDrawArrays(GL_TRIANGLES, 0, 3)
+  basicShading.use()
+  glBindVertexArray(vertexArray)
+  glDrawArrays(GL_TRIANGLES, 0, 3)
+
+  // pass projection matrix to shader (note that in this case it could change every frame)
+  let projection = GLMath.perspective(camera.zoom, 1, 0.001, 1000.0)
+  basicShading.setMat4("projection", value: projection)
+
+  // camera/view transformation
+  let view = camera.getViewMatrix()
+  basicShading.setMat4("view", value: view)
+
+  basicShading.setMat4("model", value: mat4(1))
 
   renderers.forEach { $0.draw() }
+
+  // grapeSoda.draw(
+  //   "The quick brown fox jumps over the lazy dog", at: (100, 200),
+  //   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+  // determination.draw(
+  //   "The quick brown fox jumps over the lazy dog", at: (0, 0),
+  //   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+  // determination.draw(
+  //   "Quizdeltagerne spiste jordbær med fløde mens cirkusklovnen Walther spillede på xylofon",
+  //   at: (0, 64), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+
+  var yCursor: Float = 0
+  for (renderer, resolvedFont) in fontRenderers {
+    let pixelHeight = Float(resolvedFont.pixelSize ?? 16)
+    yCursor += pixelHeight
+    renderer.draw(
+      resolvedFont.baseName,
+      at: (8, yCursor),
+      windowSize: (Int32(WIDTH), Int32(HEIGHT))
+    )
+    yCursor += 10
+  }
+
+  if requestScreenshot {
+    saveScreenshot(width: Int32(WIDTH), height: Int32(HEIGHT))
+    requestScreenshot = false
+  }
 
   window.swapBuffers()
   GLFWSession.pollInputEvents()

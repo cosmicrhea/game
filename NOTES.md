@@ -1,6 +1,6 @@
-# Red Glass
+# Glass
 
-Red Glass is a survival horror game for Mac, PC, and consoles. Taking place in Denmark, you play as [Name], an agent for the DDIS.
+Glass is a survival horror game for Mac, PC, and consoles. Taking place in Denmark, you play as [Name], an agent for the DDIS.
 
 ## Opening Cutscene
 
