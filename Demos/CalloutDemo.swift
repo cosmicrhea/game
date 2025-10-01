@@ -39,7 +39,7 @@ final class CalloutDemo: RenderLoop {
         fade: .right,
         icon: entry.image,
         iconName: entry.name,
-        label: "Make your way to The Citadel (\(entry.name))"
+        label: "Make your way to Kastellet (\(entry.name))"
       )
 
       currentTop -= (44 + verticalGap)  // Use fixed height since we know it's 44

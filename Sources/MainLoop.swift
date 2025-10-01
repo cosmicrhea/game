@@ -19,6 +19,7 @@ final class MainLoop: RenderLoop {
   // UI resources
   private let determination = TextRenderer("Determination", 32)!
   private let calloutRenderer = CalloutRenderer()
+  private let calloutRenderer2 = CalloutRenderer()
   private let inputPrompts: InputPromptsRenderer
   private let chevron = ImageRenderer("UI/Icons/chevron.png")
 
@@ -90,6 +91,15 @@ final class MainLoop: RenderLoop {
       icon: chevron,
       label: "Find the triangle and key"
     )
+
+//    // Input prompts callout
+//    calloutRenderer2.draw(
+//      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+//      size: (Float(WIDTH), 80),
+//      position: (Float(WIDTH) - 520, -2),
+//      anchor: .bottomLeft,
+//      fade: .left,
+//    )
 
     // Input prompts (bottom-right horizontal strip)
     let groups: [InputPromptsRenderer.Row] = [
