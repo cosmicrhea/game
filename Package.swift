@@ -17,6 +17,7 @@ let package = Package(
 
   dependencies: [
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
+    .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
     .package(url: "https://github.com/chrisaljoudi/swift-log-oslog", from: "0.2.1"),
     .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
 
@@ -37,6 +38,7 @@ let package = Package(
 
       dependencies: [
         .product(name: "Logging", package: "swift-log"),
+        .product(name: "Collections", package: "swift-collections"),
         .product(name: "LoggingOSLog", package: "swift-log-oslog"),
         .product(name: "ImageFormats", package: "swift-image-formats"),
         .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
@@ -46,22 +48,24 @@ let package = Package(
         .product(name: "GLFW", package: "glfw-swift"),
         .product(name: "Assimp", package: "assimp"),
         .product(name: "STBTrueType", package: "stb-truetype"),
-
-//        .product(name: "Pango", package: "pango"),
-//        .product(name: "Pango", package: "SwiftPango"),
+        
+        //        .product(name: "Pango", package: "pango"),
+        //        .product(name: "Pango", package: "SwiftPango"),
       ],
 
+      path: "./",
+
       resources: [
-        .copy("../Assets/Actors"),
-        .copy("../Assets/Common"),
-        .copy("../Assets/Effects"),
-        .copy("../Assets/Fonts"),
-        .copy("../Assets/Items"),
-        .copy("../Assets/UI"),
-        .copy("../Assets/icon.png"),
-        .copy("../Assets/icon~squircle.png"),
-        .copy("../Assets/icon.webp"),
-        .copy("../Assets/icon~squircle.webp"),
+        .copy("Assets/Actors"),
+        .copy("Assets/Common"),
+        .copy("Assets/Effects"),
+        .copy("Assets/Fonts"),
+        .copy("Assets/Items"),
+        .copy("Assets/UI"),
+        .copy("Assets/icon.png"),
+        .copy("Assets/icon~masked.png"),
+        .copy("Assets/icon.webp"),
+        .copy("Assets/icon~masked.webp"),
       ],
 
       cSettings: [

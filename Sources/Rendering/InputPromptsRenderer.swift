@@ -1,4 +1,11 @@
 import Foundation
+import OrderedCollections
+
+enum InputSource: String {
+  case keyboardMouse
+  case playstation
+  case xbox
+}
 
 /// Displays input prompts + labels in the bottom-right corner using an atlas and text.
 /// Example data:
@@ -39,7 +46,34 @@ final class InputPromptsRenderer {
     return (sz.w, sz.h)
   }
 
-  init(atlas: AtlasImageRenderer, labelFontName: String = "Determination", labelPx: Float = 24) {
+  /// Does a single icon name match the given input source by prefix?
+  @inline(__always) private func iconMatches(_ iconName: String, source: InputSource) -> Bool {
+    switch source {
+    case .keyboardMouse:
+      return iconName.hasPrefix("keyboard_") || iconName.hasPrefix("mouse_")
+    case .playstation, .xbox:
+      return iconName.hasPrefix("\(source.rawValue)_")
+    }
+  }
+
+  /// Pick the first option whose icons match the given source prefix and exist in this atlas
+  @inline(__always) private func chooseIcons(for source: InputSource, from options: [[String]]) -> [String]? {
+    for iconSet in options {
+      var setIsRenderableForSource = true
+      for iconName in iconSet {
+        if !iconMatches(iconName, source: source) || iconDrawSize(iconName) == nil {
+          setIsRenderableForSource = false
+          break
+        }
+      }
+      if setIsRenderableForSource { return iconSet }
+    }
+    return nil
+  }
+
+  init(
+    atlas: AtlasImageRenderer, labelFontName: String = "Determination", labelPx: Float = 24
+  ) {
     self.atlas = atlas
     self.text = TextRenderer(labelFontName, labelPx)!
   }
@@ -327,5 +361,41 @@ final class InputPromptsRenderer {
       x += m.labelWidth
       if gi + 1 < groups.count { x += groupSpacing }
     }
+  }
+
+  /// Convenience: build and draw a horizontal strip from a label→icon options matrix.
+  /// For each label, chooses the first icon-set matching the provided inputSource by prefix.
+  /// Dictionary iteration preserves insertion order.
+  func drawHorizontal(
+    prompts: [String: [[String]]],
+    inputSource: InputSource,
+    windowSize: (w: Int32, h: Int32),
+    origin: (x: Float, y: Float),
+    anchor: Anchor
+  ) {
+    var groups: [Row] = []
+    for (label, options) in prompts {
+      if let icons = chooseIcons(for: inputSource, from: options) {
+        groups.append(Row(iconNames: icons, label: label))
+      }
+    }
+    drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, anchor: anchor)
+  }
+
+  /// Ordered overload: preserves explicit label ordering using OrderedDictionary
+  func drawHorizontal(
+    prompts: OrderedDictionary<String, [[String]]>,
+    inputSource: InputSource,
+    windowSize: (w: Int32, h: Int32),
+    origin: (x: Float, y: Float),
+    anchor: Anchor
+  ) {
+    var groups: [Row] = []
+    for (label, options) in prompts {
+      if let icons = chooseIcons(for: inputSource, from: options) {
+        groups.append(Row(iconNames: icons, label: label))
+      }
+    }
+    drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, anchor: anchor)
   }
 }

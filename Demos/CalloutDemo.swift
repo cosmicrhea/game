@@ -1,6 +1,6 @@
 import Foundation
 
-final class CalloutDemo: Demo {
+final class CalloutDemo: RenderLoop {
 
   private let calloutRenderer = CalloutRenderer()
   private let arrowRight = ImageRenderer("UI/Arrows/curved-right.png")

@@ -31,14 +31,15 @@ let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
-window.setIcon(Image("icon~squircle.webp"))
+window.setIcon(Image("icon~masked.webp"))
 window.mouse.cursorMode = .disabled
 
 var polygonMode = GL_FILL
 var showDebugText = true
 var requestScreenshot = false
-var currentDemoIndex = 0
-var demoCount = 0
+var currentLoopIndex = 0
+var loopCount = 0
+var activeLoop: RenderLoop? = nil
 
 // timing
 var deltaTime: Float = 0.0
@@ -46,32 +47,46 @@ var lastFrame: Float = 0.0
 var numberOfFrames: Int64 = 0
 var lastTitleUpdate: Double = GLFWSession.currentTime
 
-window.keyInputHandler = { _, key, _, state, _ in
+window.keyInputHandler = { window, key, scancode, state, mods in
   guard state == .pressed else { return }
 
-  switch key {
-  case .comma:
-    polygonMode = polygonMode == GL_FILL ? GL_LINE : GL_FILL
-
-  case .backspace:
-    showDebugText.toggle()
-
-  case .p:
-    requestScreenshot = true
-    UISound.shutter()
-    return
-
-  case .leftBracket:
-    currentDemoIndex = (currentDemoIndex - 1 + demoCount) % demoCount
-
-  case .rightBracket:
-    currentDemoIndex = (currentDemoIndex + 1) % demoCount
-
-  default:
+  if let consumed = activeLoop?.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods),
+    consumed
+  {
     return
   }
 
-  UISound.select()
+  if key == .comma {
+    polygonMode = polygonMode == GL_FILL ? GL_LINE : GL_FILL
+    UISound.select()
+    return
+  }
+  if key == .backspace {
+    showDebugText.toggle()
+    UISound.select()
+    return
+  }
+  if key == .p {
+    requestScreenshot = true
+    UISound.shutter()
+    return
+  }
+  if key == .leftBracket || key == .rightBracket {
+    currentLoopIndex =
+      (key == .leftBracket)
+      ? (currentLoopIndex - 1 + loopCount) % loopCount
+      : (currentLoopIndex + 1) % loopCount
+
+    activeLoop?.onDetach(window: window)
+    if currentLoopIndex == 0 {
+      activeLoop = nil
+    } else {
+      activeLoop = loops[currentLoopIndex - 1]
+      activeLoop?.onAttach(window: window)
+    }
+    UISound.select()
+    return
+  }
 }
 
 var camera = FreeCamera()
@@ -82,11 +97,13 @@ var camera = FreeCamera()
 
 window.cursorPositionHandler = { window, x, y in
   guard window.isFocused else { return }
+  if let consumed = activeLoop?.onMouseMove(window: window, x: x, y: y), consumed { return }
   camera.processMousePosition(Float(x), Float(y))
   ScreenEffect.mousePosition = (Float(x), Float(y))
 }
 
-window.scrollInputHandler = { _, _, yOffset in
+window.scrollInputHandler = { window, xOffset, yOffset in
+  if let consumed = activeLoop?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset), consumed { return }
   camera.processMouseScroll(Float(yOffset))
 }
 
@@ -130,32 +147,10 @@ let grapeSoda = TextRenderer("Grape Soda")!
 let determination = TextRenderer("Determination", 32)!
 let ari = TextRenderer("Ari-W9500 Bold", 32)!
 
-let fontRenderers: [(TextRenderer, FontLibrary.ResolvedFont)] = FontLibrary.availableFonts
-  .compactMap { resolvedFont -> (TextRenderer, FontLibrary.ResolvedFont)? in
-    guard let renderer = TextRenderer(resolvedFont.displayName) else { return nil }
-    return (renderer, resolvedFont)
-  }
+let fontRenderers: [(TextRenderer, FontLibrary.ResolvedFont)] = []
 
-let gaussianBlur = ScreenEffect("effects/gaussian_blur")
-let frostedVignette = ScreenEffect("effects/frosted_vignette")
-let simpleVignette = ScreenEffect("effects/simple_vignette")
-let damageVignette = ScreenEffect("effects/damage_vignette")
-let test = ScreenEffect("effects/liquid_glass")
-let panel = ScreenEffect("effects/panel")
-let callout = ScreenEffect("effects/callout")
-let calloutRenderer = CalloutRenderer()
-//let gaussian_blur = ScreenEffect("effects/gaussian_blur")
-
-let arrowRight = ImageRenderer("UI/Arrows/curved-right.png")
-// let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/playstation.xml")
-//let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/xbox.xml")
-let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/keyboard-mouse.xml")
-let inputPrompts = InputPromptsRenderer(atlas: promptsAtlas, labelFontName: "Creato Display Bold", labelPx: 28)
-inputPrompts.labelBaselineOffset = -16
-
-// Demo scenes are now proper types under `Sources/Demos`
-let demoScenes: [Demo] = [CalloutDemo(), InputPromptsDemo(), FontsDemo()]
-demoCount = demoScenes.count + 1  // include 'no demo' state at index 0
+let loops: [RenderLoop] = [MainLoop(), CalloutDemo(), InputPromptsDemo(), FontsDemo()]
+loopCount = loops.count + 1
 
 while !window.shouldClose {
   let currentFrame = Float(GLFWSession.currentTime)
@@ -186,21 +181,7 @@ while !window.shouldClose {
 
   glPolygonMode(GL_FRONT_AND_BACK, polygonMode)
 
-  basicShading.use()
-  glBindVertexArray(vertexArray)
-  glDrawArrays(GL_TRIANGLES, 0, 3)
-
-  // pass projection matrix to shader (note that in this case it could change every frame)
-  let projection = GLMath.perspective(camera.zoom, 1, 0.001, 1000.0)
-
-  // camera/view transformation
-  let view = camera.getViewMatrix()
-
-  basicShading.setMat4("projection", value: projection)
-  basicShading.setMat4("view", value: view)
-  basicShading.setMat4("model", value: mat4(1))
-
-  renderers.forEach { $0.draw() }
+  // Scene drawing moved to active RenderLoop
 
   // grapeSoda.draw(
   //   "The quick brown fox jumps over the lazy dog", at: (100, 200),
@@ -234,34 +215,9 @@ while !window.shouldClose {
 
   //  panel.draw()
 
-  // Callouts via renderer
-  do {
-    // First callout
-    calloutRenderer.size = (520, 44)
-    calloutRenderer.position = (0, Float(HEIGHT) - 180)
-    calloutRenderer.anchor = .topLeft
-    calloutRenderer.fade = .right
-    calloutRenderer.label = "Find the triangle and key"
-    calloutRenderer.icon = arrowRight
-    calloutRenderer.iconSize = (24, 24)
-    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
-
-    //    // Second, taller callout below
-    //    calloutRenderer.size = (520, 96)
-    //    calloutRenderer.position = (0, Float(HEIGHT) - 180 - 44 - 12)
-    //    calloutRenderer.anchor = .topLeft
-    //    calloutRenderer.fade = .right
-    //    calloutRenderer.label = "Find the key in the storage room"
-    //    calloutRenderer.icon = arrowRight
-    //    calloutRenderer.iconSize = (32, 32)
-    //    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
-  }
-  //  img.draw(x: 100, y: 100, windowSize: (Int32(WIDTH), Int32(HEIGHT)), opacity: 0.5)
-
-  // Active demo scene if selected (index 1..N)
-  if currentDemoIndex != 0 {
-    demoScenes[currentDemoIndex - 1].draw()
-  }
+  // Active loop
+  if currentLoopIndex != 0 { loops[currentLoopIndex - 1].update(deltaTime: deltaTime) }
+  if currentLoopIndex != 0 { loops[currentLoopIndex - 1].draw() }
 
   // let prompts = [
   //   "Rotate": [
@@ -286,38 +242,25 @@ while !window.shouldClose {
   //   ],
   // ]
 
-  let groups: [InputPromptsRenderer.Row] = [
-    .init(iconNames: ["mouse_move"], label: "Rotate"),
-    .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
-    .init(iconNames: ["keyboard_r"], label: "Reset"),
-    .init(iconNames: ["keyboard_escape"], label: "Return"),
-  ]
-  //  let groups: [InputPromptsRenderer.Row] = [
-  //    .init(iconNames: ["xbox_stick_l"], label: "Rotate"),
-  //    .init(iconNames: ["xbox_stick_r_vertical"], label: "Zoom"),
-  //    .init(iconNames: ["xbox_button_color_x"], label: "Reset"),
-  //    .init(iconNames: ["xbox_button_color_b"], label: "Return"),
-  //  ]
   // let groups: [InputPromptsRenderer.Row] = [
-  //   .init(iconNames: ["playstation_stick_l"], label: "Rotate"),
-  //   .init(iconNames: ["playstation_stick_r_vertical"], label: "Zoom"),
-  //   .init(iconNames: ["playstation_button_color_cross"], label: "Reset"),
-  //   .init(iconNames: ["playstation_button_color_circle"], label: "Return"),
+  //   .init(iconNames: ["mouse_move"], label: "Rotate"),
+  //   .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
+  //   .init(iconNames: ["keyboard_r"], label: "Reset"),
+  //   .init(iconNames: ["keyboard_escape"], label: "Return"),
   // ]
-  inputPrompts.drawHorizontal(groups: groups, windowSize: (Int32(WIDTH), Int32(HEIGHT)))
-
-  if showDebugText {
-    let debugText = """
-      \(String(format: "%.1f", camera.zoom))x @ \(camera.position); \(String(format: "%.1f", camera.yaw)); \(String(format: "%.1f", camera.pitch))
-      """
-
-    determination.draw(
-      debugText,
-      at: (24, Float(HEIGHT) - 24),
-      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-      anchor: .topLeft
-    )
-  }
+  // //  let groups: [InputPromptsRenderer.Row] = [
+  // //    .init(iconNames: ["xbox_stick_l"], label: "Rotate"),
+  // //    .init(iconNames: ["xbox_stick_r_vertical"], label: "Zoom"),
+  // //    .init(iconNames: ["xbox_button_color_x"], label: "Reset"),
+  // //    .init(iconNames: ["xbox_button_color_b"], label: "Return"),
+  // //  ]
+  // // let groups: [InputPromptsRenderer.Row] = [
+  // //   .init(iconNames: ["playstation_stick_l"], label: "Rotate"),
+  // //   .init(iconNames: ["playstation_stick_r_vertical"], label: "Zoom"),
+  // //   .init(iconNames: ["playstation_button_color_cross"], label: "Reset"),
+  // //   .init(iconNames: ["playstation_button_color_circle"], label: "Return"),
+  // // ]
+  // inputPrompts.drawHorizontal(groups: groups, windowSize: (Int32(WIDTH), Int32(HEIGHT)))
 
   if requestScreenshot {
     saveScreenshot(width: Int32(WIDTH), height: Int32(HEIGHT))

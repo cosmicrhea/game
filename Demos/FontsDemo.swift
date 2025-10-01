@@ -1,6 +1,6 @@
 import Foundation
 
-final class FontsDemo: Demo {
+final class FontsDemo: RenderLoop {
 
   private let fontRenderers: [(TextRenderer, FontLibrary.ResolvedFont)] = FontLibrary.availableFonts
     .compactMap { resolvedFont -> (TextRenderer, FontLibrary.ResolvedFont)? in

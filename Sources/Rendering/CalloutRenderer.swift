@@ -65,6 +65,22 @@ final class CalloutRenderer {
     let leftWidth: Float = (fade == .left || fade == .both) ? fadeWidth : 0
     let rightWidth: Float = (fade == .right || fade == .both) ? fadeWidth : 0
 
+    // UI should render on top: no depth/cull interference
+    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST) == GLboolean(GL_TRUE)
+    let cullWasEnabled = glIsEnabled(GL_CULL_FACE) == GLboolean(GL_TRUE)
+    glDisable(GL_DEPTH_TEST)
+    glDisable(GL_CULL_FACE)
+    glDepthMask(GLboolean(GL_FALSE))
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+    // Ensure filled polys even if the app toggled wireframe
+    var prevPoly: [GLint] = [0, 0]
+    prevPoly.withUnsafeMutableBufferPointer { buf in
+      glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
+    }
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
     // Draw the background callout
     effect.draw { program in
       program.setVec2("uRectSize", value: (w, h))
@@ -75,7 +91,7 @@ final class CalloutRenderer {
 
     // Content layout (left-aligned inside the box)
     let left = center.x - w * 0.5
-//    let top = center.y + h * 0.5
+    //    let top = center.y + h * 0.5
 
     var contentX = left + iconPaddingX
 
@@ -97,5 +113,11 @@ final class CalloutRenderer {
         anchor: .topLeft
       )
     }
+
+    // Restore GL state
+    glPolygonMode(GL_FRONT_AND_BACK, GLenum(prevPoly[0]))
+    glDepthMask(GLboolean(GL_TRUE))
+    if depthWasEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+    if cullWasEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
   }
 }
