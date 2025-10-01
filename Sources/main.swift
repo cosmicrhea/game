@@ -88,7 +88,6 @@ window.keyInputHandler = { window, key, scancode, state, mods in
     cycleLoops(+1)
 
   case .o:
-    UISound.select()
     if let mainLoop = activeLoop as? MainLoop {
       mainLoop.toggleObjective()
     }

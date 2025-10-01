@@ -13,7 +13,7 @@ final class MainLoop: RenderLoop {
   // Triangle demo
   private let testTriangle = TestTriangle()
 
-  // Assimp mesh (old_key)
+  // Assimp mesh
   private let renderers: [MeshRenderer]
 
   // UI resources
@@ -111,15 +111,16 @@ final class MainLoop: RenderLoop {
 //      fade: .left,
 //    )
 
-    // Input prompts (bottom-right horizontal strip)
-    let groups: [InputPromptsRenderer.Row] = [
-      .init(iconNames: ["mouse_move"], label: "Rotate"),
-      .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
-      .init(iconNames: ["keyboard_r"], label: "Reset"),
-      .init(iconNames: ["keyboard_tab_icon"], label: "Close"),
-    ]
+//    // Input prompts (bottom-right horizontal strip)
+//    let groups: [InputPromptsRenderer.Row] = [
+//      .init(iconNames: ["mouse_move"], label: "Rotate"),
+//      .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
+//      .init(iconNames: ["keyboard_r"], label: "Reset"),
+//      .init(iconNames: ["keyboard_tab_icon"], label: "Close"),
+//    ]
     inputPrompts.drawHorizontal(
-      groups: groups,
+      prompts: InputPromptsRenderer.groups["Item Viewer"]!,
+      inputSource: .keyboardMouse,
       windowSize: (Int32(WIDTH), Int32(HEIGHT)),
       origin: (Float(WIDTH) - 32, 24),
       anchor: .bottomRight
