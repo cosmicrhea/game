@@ -31,9 +31,9 @@ final class CalloutRenderer {
   var icon: ImageRenderer?
   var iconSize: (w: Float, h: Float) = (24, 24)
   var iconPaddingX: Float = 12
-  var iconTextGap: Float = 10
+  var iconTextGap: Float = 2
   var label: String?
-  var labelRenderer: TextRenderer? = TextRenderer("Determination", 24)
+  var labelRenderer: TextRenderer? = TextRenderer("Dream Orphans Bd", 24)
   var labelColor: (Float, Float, Float, Float) = (1, 1, 1, 1)
 
   // Internals
@@ -75,7 +75,7 @@ final class CalloutRenderer {
 
     // Content layout (left-aligned inside the box)
     let left = center.x - w * 0.5
-    let top = center.y + h * 0.5
+//    let top = center.y + h * 0.5
 
     var contentX = left + iconPaddingX
 

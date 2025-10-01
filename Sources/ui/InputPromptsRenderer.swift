@@ -12,6 +12,13 @@ final class InputPromptsRenderer {
     let label: String
   }
 
+  enum Anchor {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+  }
+
   private let atlas: AtlasImageRenderer
   private let text: TextRenderer
 
@@ -40,7 +47,7 @@ final class InputPromptsRenderer {
   /// Render rows aligned to bottom-right of the window.
   func draw(rows: [Row], windowSize: (w: Int32, h: Int32)) {
     let W = Float(windowSize.w)
-//    let H = Float(windowSize.h)
+    //    let H = Float(windowSize.h)
 
     // Compute total block height to start from bottom with padding
     var totalHeight: Float = 0
@@ -94,10 +101,93 @@ final class InputPromptsRenderer {
     }
   }
 
+  /// Render rows with explicit origin/anchor.
+  /// `origin` is interpreted as:
+  ///   - topLeft/topRight: top edge Y
+  ///   - bottomLeft/bottomRight: bottom edge Y
+  ///   - left anchors: x is left edge; right anchors: x is right edge
+  func draw(
+    rows: [Row],
+    windowSize: (w: Int32, h: Int32),
+    origin: (x: Float, y: Float),
+    anchor: Anchor
+  ) {
+    // Pre-measure rows
+    struct RowMetrics {
+      let totalWidth: Float
+      let height: Float
+      let iconsWidth: Float
+      let maxIconHeight: Float
+    }
+    var metrics: [RowMetrics] = []
+    var totalHeight: Float = 0
+    for row in rows {
+      var iconsWidth: Float = 0
+      var maxIconHeight: Float = 0
+      for (i, name) in row.iconNames.enumerated() {
+        if let sz = iconDrawSize(name) {
+          iconsWidth += sz.w
+          maxIconHeight = max(maxIconHeight, sz.h)
+          if i + 1 < row.iconNames.count { iconsWidth += iconSpacing }
+        }
+      }
+      let labelWidth = text.measureWidth(row.label)
+      let rowHeight = max(maxIconHeight, text.scaledLineHeight)
+      metrics.append(
+        RowMetrics(
+          totalWidth: iconsWidth + gapBetweenIconsAndLabel + labelWidth, height: rowHeight, iconsWidth: iconsWidth,
+          maxIconHeight: maxIconHeight))
+      totalHeight += rowHeight
+    }
+    if !rows.isEmpty { totalHeight += rowSpacing * Float(max(0, rows.count - 1)) }
+
+    // Compute starting y from anchor
+    var y: Float = origin.y
+    switch anchor {
+    case .topLeft, .topRight:
+      y = origin.y - totalHeight
+    case .bottomLeft, .bottomRight:
+      y = origin.y
+    }
+
+    for (idx, row) in rows.enumerated() {
+      let m = metrics[idx]
+      // Determine x based on anchor (left vs right)
+      var x: Float = origin.x
+      switch anchor {
+      case .topRight, .bottomRight:
+        x = origin.x - m.totalWidth
+      case .topLeft, .bottomLeft:
+        x = origin.x
+      }
+
+      // Vertical alignment within this row
+      let iconYOffset = (m.height - m.maxIconHeight) * 0.5
+      let labelBaselineY = y + (m.height - text.scaledLineHeight) * 0.5 + text.baselineFromTop + labelBaselineOffset
+
+      // Draw icons left-to-right
+      var iconX = x
+      for (i, name) in row.iconNames.enumerated() {
+        if let drawSize = iconDrawSize(name) {
+          let dy = y + iconYOffset + (m.maxIconHeight - drawSize.h) * 0.5
+          atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          iconX += drawSize.w
+          if i + 1 < row.iconNames.count { iconX += iconSpacing }
+        }
+      }
+
+      // Draw label
+      x += m.iconsWidth + gapBetweenIconsAndLabel
+      text.draw(row.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
+
+      y += m.height + rowSpacing
+    }
+  }
+
   /// Render a single horizontal strip of groups aligned to bottom-right.
   func drawHorizontal(groups: [Row], windowSize: (w: Int32, h: Int32)) {
     let W = Float(windowSize.w)
-//    let H = Float(windowSize.h)
+    //    let H = Float(windowSize.h)
 
     // Measure total width and max height
     var totalWidth: Float = 0
@@ -154,6 +244,87 @@ final class InputPromptsRenderer {
       text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
 
       x += text.measureWidth(g.label)
+      if gi + 1 < groups.count { x += groupSpacing }
+    }
+  }
+
+  /// Render a horizontal strip at an explicit origin/anchor.
+  /// For left anchors, `origin.x` is the left edge; for right, it's the right edge.
+  /// For top anchors, `origin.y` is the top edge; for bottom, it's the bottom edge.
+  func drawHorizontal(
+    groups: [Row],
+    windowSize: (w: Int32, h: Int32),
+    origin: (x: Float, y: Float),
+    anchor: Anchor
+  ) {
+    // Measure total width and max height
+    var totalWidth: Float = 0
+    var maxHeight: Float = 0
+    struct GroupMetrics {
+      let iconsWidth: Float
+      let maxIconHeight: Float
+      let labelWidth: Float
+      let height: Float
+    }
+    var metrics: [GroupMetrics] = []
+    for g in groups {
+      var iconsWidth: Float = 0
+      var maxIconHeight: Float = 0
+      for (i, name) in g.iconNames.enumerated() {
+        if let sz = iconDrawSize(name) {
+          iconsWidth += sz.w
+          maxIconHeight = max(maxIconHeight, sz.h)
+          if i + 1 < g.iconNames.count { iconsWidth += iconSpacing }
+        }
+      }
+      let labelWidth = text.measureWidth(g.label)
+      let height = max(maxIconHeight, text.scaledLineHeight)
+      maxHeight = max(maxHeight, height)
+      totalWidth += iconsWidth + gapBetweenIconsAndLabel + labelWidth
+      metrics.append(
+        GroupMetrics(iconsWidth: iconsWidth, maxIconHeight: maxIconHeight, labelWidth: labelWidth, height: height))
+    }
+    if !groups.isEmpty { totalWidth += groupSpacing * Float(max(0, groups.count - 1)) }
+
+    // Determine starting x based on anchor
+    var x: Float = origin.x
+    switch anchor {
+    case .topLeft, .bottomLeft:
+      x = origin.x
+    case .topRight, .bottomRight:
+      x = origin.x - totalWidth
+    }
+
+    // Determine base y based on anchor
+    let y: Float = {
+      switch anchor {
+      case .bottomLeft, .bottomRight:
+        return origin.y
+      case .topLeft, .topRight:
+        return origin.y - maxHeight
+      }
+    }()
+
+    for (gi, g) in groups.enumerated() {
+      let m = metrics[gi]
+      let groupTop = y + (maxHeight - m.height) * 0.5
+      let iconY = groupTop + (m.height - m.maxIconHeight) * 0.5
+      let labelBaselineY =
+        groupTop + (m.height - text.scaledLineHeight) * 0.5 + text.baselineFromTop + labelBaselineOffset
+
+      var iconX = x
+      for (i, name) in g.iconNames.enumerated() {
+        if let drawSize = iconDrawSize(name) {
+          let dy = iconY + (m.maxIconHeight - drawSize.h) * 0.5
+          atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          iconX += drawSize.w
+          if i + 1 < g.iconNames.count { iconX += iconSpacing }
+        }
+      }
+
+      x += m.iconsWidth + gapBetweenIconsAndLabel
+      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
+      x += m.labelWidth
       if gi + 1 < groups.count { x += groupSpacing }
     }
   }

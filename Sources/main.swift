@@ -37,6 +37,8 @@ window.mouse.cursorMode = .disabled
 var polygonMode = GL_FILL
 var showDebugText = true
 var requestScreenshot = false
+var currentDemoIndex = 0
+var demoCount = 0
 
 // timing
 var deltaTime: Float = 0.0
@@ -45,18 +47,31 @@ var numberOfFrames: Int64 = 0
 var lastTitleUpdate: Double = GLFWSession.currentTime
 
 window.keyInputHandler = { _, key, _, state, _ in
-  if key == .comma && state == .pressed {
-    UISound.select()
+  guard state == .pressed else { return }
+
+  switch key {
+  case .comma:
     polygonMode = polygonMode == GL_FILL ? GL_LINE : GL_FILL
-  }
-  if key == .backspace && state == .pressed {
-    UISound.select()
+
+  case .backspace:
     showDebugText.toggle()
-  }
-  if key == .p && state == .pressed {
-    UISound.shutter()
+
+  case .p:
     requestScreenshot = true
+    UISound.shutter()
+    return
+
+  case .leftBracket:
+    currentDemoIndex = (currentDemoIndex - 1 + demoCount) % demoCount
+
+  case .rightBracket:
+    currentDemoIndex = (currentDemoIndex + 1) % demoCount
+
+  default:
+    return
   }
+
+  UISound.select()
 }
 
 var camera = FreeCamera()
@@ -137,6 +152,10 @@ let arrowRight = ImageRenderer("UI/Arrows/curved-right.png")
 let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/keyboard-mouse.xml")
 let inputPrompts = InputPromptsRenderer(atlas: promptsAtlas, labelFontName: "Creato Display Bold", labelPx: 28)
 inputPrompts.labelBaselineOffset = -16
+
+// Demo scenes are now proper types under `Sources/Demos`
+let demoScenes: [Demo] = [CalloutDemo(), InputPromptsDemo(), FontsDemo()]
+demoCount = demoScenes.count + 1  // include 'no demo' state at index 0
 
 while !window.shouldClose {
   let currentFrame = Float(GLFWSession.currentTime)
@@ -219,27 +238,53 @@ while !window.shouldClose {
   do {
     // First callout
     calloutRenderer.size = (520, 44)
-    calloutRenderer.position = (0, Float(HEIGHT) - 64)
+    calloutRenderer.position = (0, Float(HEIGHT) - 180)
     calloutRenderer.anchor = .topLeft
     calloutRenderer.fade = .right
-    calloutRenderer.label = "Escape the lab"
-    //    calloutRenderer.icon = arrowRight
-    //    calloutRenderer.iconSize = (24, 24)
+    calloutRenderer.label = "Find the triangle and key"
+    calloutRenderer.icon = arrowRight
+    calloutRenderer.iconSize = (24, 24)
     calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
 
-    // Second, taller callout below
-    calloutRenderer.size = (520, 96)
-    calloutRenderer.position = (0, Float(HEIGHT) - 64 - 44 - 12)
-    calloutRenderer.anchor = .topLeft
-    calloutRenderer.fade = .right
-    calloutRenderer.label = "Find the key in the storage room"
-    calloutRenderer.icon = arrowRight
-    calloutRenderer.iconSize = (32, 32)
-    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+    //    // Second, taller callout below
+    //    calloutRenderer.size = (520, 96)
+    //    calloutRenderer.position = (0, Float(HEIGHT) - 180 - 44 - 12)
+    //    calloutRenderer.anchor = .topLeft
+    //    calloutRenderer.fade = .right
+    //    calloutRenderer.label = "Find the key in the storage room"
+    //    calloutRenderer.icon = arrowRight
+    //    calloutRenderer.iconSize = (32, 32)
+    //    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
   }
   //  img.draw(x: 100, y: 100, windowSize: (Int32(WIDTH), Int32(HEIGHT)), opacity: 0.5)
 
-//  arrowRight.drawScaled(x: 24, y: Float(HEIGHT - 96), windowSize: (Int32(WIDTH), Int32(HEIGHT)), targetSize: (32, 32))
+  // Active demo scene if selected (index 1..N)
+  if currentDemoIndex != 0 {
+    demoScenes[currentDemoIndex - 1].draw()
+  }
+
+  // let prompts = [
+  //   "Rotate": [
+  //     ["mouse_move"],
+  //     ["xbox_stick_l"],
+  //     ["playstation_stick_l"],
+  //   ],
+  //   "Zoom": [
+  //     ["mouse_scroll_vertical"],
+  //     ["xbox_stick_r_vertical"],
+  //     ["playstation_stick_r_vertical"],
+  //   ],
+  //   "Reset": [
+  //     ["keyboard_r"],
+  //     ["xbox_button_color_x"],
+  //     ["playstation_button_color_cross"],
+  //   ],
+  //   "Return": [
+  //     ["keyboard_escape"],
+  //     ["xbox_button_color_b"],
+  //     ["playstation_button_color_circle"],
+  //   ],
+  // ]
 
   let groups: [InputPromptsRenderer.Row] = [
     .init(iconNames: ["mouse_move"], label: "Rotate"),
