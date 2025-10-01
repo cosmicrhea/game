@@ -58,6 +58,22 @@ final class TextRenderer {
   /// Distance below the baseline to the deepest descender encountered.
   var descentFromBaseline: Float { maxBelowBaseline }
 
+  /// Rough single-line width measurement at current scale for ASCII text.
+  /// Uses font advances without kerning beyond next-codepoint coupling.
+  func measureWidth(_ text: String) -> Float {
+    var width: Float = 0
+    let s = scale
+    let bytes = Array(text.utf8)
+    var i = 0
+    while i < bytes.count {
+      let cp = Int32(bytes[i])
+      let next: Int32? = (i + 1 < bytes.count) ? Int32(bytes[i + 1]) : nil
+      width += font.getAdvance(for: cp, next: next) * s
+      i += 1
+    }
+    return width
+  }
+
   func draw(
     _ text: String, at origin: (x: Float, y: Float), windowSize: (w: Int32, h: Int32),
     color: (Float, Float, Float, Float) = (1, 1, 1, 1),
@@ -455,8 +471,8 @@ private final class GlyphAtlas {
       GL_RED, GL_UNSIGNED_BYTE,
       pixels
     )
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 

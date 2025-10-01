@@ -37,8 +37,8 @@ struct GLProgram {
       let rawFragmentSource = try loadShaderSource(from: fragmentPath)
       let fragmentSource = wrapShaderToyIfNeeded(rawFragmentSource)
 
-//      print("# \(fragmentName).frag")
-//      print(fragmentSource)
+      //      print("# \(fragmentName).frag")
+      //      print(fragmentSource)
 
       // Compile shaders
       let vertexShader = try compileShader(source: vertexSource, type: GL_VERTEX_SHADER)
@@ -201,6 +201,12 @@ struct GLProgram {
   func setFloat(_ name: String, value: Float) {
     let location = glGetUniformLocation(programID, name)
     glUniform1f(location, value)
+  }
+
+  /// Set a 3-component vector uniform value
+  func setVec2(_ name: String, value: (Float, Float)) {
+    let location = glGetUniformLocation(programID, name)
+    glUniform2f(location, value.0, value.1)
   }
 
   /// Set a 3-component vector uniform value

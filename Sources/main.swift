@@ -127,10 +127,16 @@ let simpleVignette = ScreenEffect("effects/simple_vignette")
 let damageVignette = ScreenEffect("effects/damage_vignette")
 let test = ScreenEffect("effects/liquid_glass")
 let panel = ScreenEffect("effects/panel")
+let callout = ScreenEffect("effects/callout")
+let calloutRenderer = CalloutRenderer()
 //let gaussian_blur = ScreenEffect("effects/gaussian_blur")
 
-let img = ImageRenderer("common/divider-fade-002@2x.png")
-let prompts = InputPromptRenderer("UI/InputPrompts/playstation.xml")
+let arrowRight = ImageRenderer("UI/Arrows/curved-right.png")
+// let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/playstation.xml")
+//let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/xbox.xml")
+let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/keyboard-mouse.xml")
+let inputPrompts = InputPromptsRenderer(atlas: promptsAtlas, labelFontName: "Creato Display Bold", labelPx: 28)
+inputPrompts.labelBaselineOffset = -16
 
 while !window.shouldClose {
   let currentFrame = Float(GLFWSession.currentTime)
@@ -180,6 +186,7 @@ while !window.shouldClose {
   // grapeSoda.draw(
   //   "The quick brown fox jumps over the lazy dog", at: (100, 200),
   //   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+
   // determination.draw(
   //   "The quick brown fox jumps over the lazy dog", at: (0, 0),
   //   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
@@ -187,19 +194,19 @@ while !window.shouldClose {
   //   "Quizdeltagerne spiste jordbær med fløde mens cirkusklovnen Walther spillede på xylofon",
   //   at: (0, 64), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
 
-  var yCursor: Float = 24
-  for (renderer, resolvedFont) in fontRenderers {
-    // Treat yCursor as the baseline position. Move down to the baseline first,
-    // then draw, then add descender + padding for the next line.
-    yCursor += renderer.baselineFromTop
-    renderer.draw(
-      //resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
-      resolvedFont.baseName + ": triangle is the key",
-      at: (24, yCursor),
-      windowSize: (Int32(WIDTH), Int32(HEIGHT))
-    )
-    yCursor += renderer.descentFromBaseline + 8
-  }
+  // var yCursor: Float = 24
+  // for (renderer, resolvedFont) in fontRenderers {
+  //   // Treat yCursor as the baseline position. Move down to the baseline first,
+  //   // then draw, then add descender + padding for the next line.
+  //   yCursor += renderer.baselineFromTop
+  //   renderer.draw(
+  //     //resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
+  //     resolvedFont.baseName + ": triangle is the key",
+  //     at: (24, yCursor),
+  //     windowSize: (Int32(WIDTH), Int32(HEIGHT))
+  //   )
+  //   yCursor += renderer.descentFromBaseline + 8
+  // }
 
   //  damageVignette.draw()
   //  frostedVignette.draw()
@@ -207,13 +214,52 @@ while !window.shouldClose {
   // test.draw()
 
   //  panel.draw()
-  img.draw(x: 100, y: 100, windowSize: (Int32(WIDTH), Int32(HEIGHT)), opacity: 0.5)
-  prompts.draw(
-    name: "playstation_button_circle",
-    x: 300,
-    y: 100,
-    windowSize: (Int32(WIDTH), Int32(HEIGHT))
-  )
+
+  // Callouts via renderer
+  do {
+    // First callout
+    calloutRenderer.size = (520, 44)
+    calloutRenderer.position = (0, Float(HEIGHT) - 64)
+    calloutRenderer.anchor = .topLeft
+    calloutRenderer.fade = .right
+    calloutRenderer.label = "Escape the lab"
+    //    calloutRenderer.icon = arrowRight
+    //    calloutRenderer.iconSize = (24, 24)
+    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+
+    // Second, taller callout below
+    calloutRenderer.size = (520, 96)
+    calloutRenderer.position = (0, Float(HEIGHT) - 64 - 44 - 12)
+    calloutRenderer.anchor = .topLeft
+    calloutRenderer.fade = .right
+    calloutRenderer.label = "Find the key in the storage room"
+    calloutRenderer.icon = arrowRight
+    calloutRenderer.iconSize = (32, 32)
+    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+  }
+  //  img.draw(x: 100, y: 100, windowSize: (Int32(WIDTH), Int32(HEIGHT)), opacity: 0.5)
+
+//  arrowRight.drawScaled(x: 24, y: Float(HEIGHT - 96), windowSize: (Int32(WIDTH), Int32(HEIGHT)), targetSize: (32, 32))
+
+  let groups: [InputPromptsRenderer.Row] = [
+    .init(iconNames: ["mouse_move"], label: "Rotate"),
+    .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
+    .init(iconNames: ["keyboard_r"], label: "Reset"),
+    .init(iconNames: ["keyboard_escape"], label: "Return"),
+  ]
+  //  let groups: [InputPromptsRenderer.Row] = [
+  //    .init(iconNames: ["xbox_stick_l"], label: "Rotate"),
+  //    .init(iconNames: ["xbox_stick_r_vertical"], label: "Zoom"),
+  //    .init(iconNames: ["xbox_button_color_x"], label: "Reset"),
+  //    .init(iconNames: ["xbox_button_color_b"], label: "Return"),
+  //  ]
+  // let groups: [InputPromptsRenderer.Row] = [
+  //   .init(iconNames: ["playstation_stick_l"], label: "Rotate"),
+  //   .init(iconNames: ["playstation_stick_r_vertical"], label: "Zoom"),
+  //   .init(iconNames: ["playstation_button_color_cross"], label: "Reset"),
+  //   .init(iconNames: ["playstation_button_color_circle"], label: "Return"),
+  // ]
+  inputPrompts.drawHorizontal(groups: groups, windowSize: (Int32(WIDTH), Int32(HEIGHT)))
 
   if showDebugText {
     let debugText = """
