@@ -4,6 +4,8 @@ import GLFW
 final class CalloutDemo: RenderLoop {
 
   private let calloutRenderer = CalloutRenderer()
+  private var isVisible: Bool = true
+  private var animationTimer: Float = 0.0
 
   private var iconEntries: [(name: String, image: ImageRenderer)] = []
   private let leftMargin: Float = 0
@@ -25,6 +27,18 @@ final class CalloutDemo: RenderLoop {
     }
   }
 
+  @MainActor func update(deltaTime: Float) {
+    // Update the callout renderer animation
+    calloutRenderer.update(deltaTime: deltaTime)
+    
+    // Auto-toggle visibility every 3 seconds for demo
+    animationTimer += deltaTime
+    if animationTimer >= 3.0 {
+      isVisible.toggle()
+      animationTimer = 0.0
+    }
+  }
+
   @MainActor func draw() {
     let windowSize = (Int32(WIDTH), Int32(HEIGHT))
     var currentTop = Float(HEIGHT) - topMargin
@@ -39,7 +53,8 @@ final class CalloutDemo: RenderLoop {
         fade: .right,
         icon: entry.image,
         iconName: entry.name,
-        label: "Make your way to Kastellet (\(entry.name))"
+        label: "Make your way to Kastellet (\(entry.name))",
+        visible: isVisible
       )
 
       currentTop -= (44 + verticalGap)  // Use fixed height since we know it's 44

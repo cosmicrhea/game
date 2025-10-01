@@ -12,6 +12,7 @@ uniform float uBorderThickness;  // pixels
 uniform float uBorderSoftness;   // pixels
 uniform float uRightFadeWidth;   // pixels
 uniform float uLeftFadeWidth;    // pixels
+uniform float uAnimationAlpha;    // animation progress [0,1]
 
 // SDF for an axis-aligned box with sharp corners
 float boxSDF(vec2 position, vec2 halfSize)
@@ -28,6 +29,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec2  u_rectCenter  = (uRectCenter.x > 0.0 || uRectCenter.y > 0.0)
                           ? uRectCenter
                           : vec2(u_rectSize.x * 0.5, iResolution.y - 17.0 - u_rectSize.y * 0.5);
+    
+    // Debug: hardcode the center to see if that fixes the movement
+    u_rectCenter = vec2(260.0, 518.0);
 
     // Visuals (defaults with uniform overrides)
     vec4  u_fillColor   = (uFillColor.a > 0.0)  ? uFillColor  : vec4(0.10, 0.10, 0.10, 0.60);
@@ -63,8 +67,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 
     float lateralFade = rightFade * leftFade;
 
-    // Fill final alpha (with color alpha and right fade)
-    float fillAlpha = min(u_fillColor.a, boxAlpha) * lateralFade;
+    // Animation alpha (default to 1.0 if not set)
+    float animationAlpha = (uAnimationAlpha > 0.0) ? uAnimationAlpha : 1.0;
+
+    // Fill final alpha (with color alpha, right fade, and animation)
+    float fillAlpha = min(u_fillColor.a, boxAlpha) * lateralFade * animationAlpha;
 
     // Only top and bottom borders
     // Distance to the horizontal edges (top/bottom) regardless of sign
@@ -80,7 +87,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
         distToHorizontalEdge
     );
 
-    float borderAlpha = min(u_borderColor.a, borderBand * insideX) * lateralFade;
+    float borderAlpha = min(u_borderColor.a, borderBand * insideX) * lateralFade * animationAlpha;
 
     // Layer: background -> fill -> borders
     vec4 withFill    = mix(baseColor, u_fillColor, fillAlpha);

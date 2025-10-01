@@ -34,8 +34,15 @@ window.mouse.cursorMode = .disabled
 var polygonMode = GL_FILL
 var showDebugText = true
 var requestScreenshot = false
+
 // Render loop selection (no null state)
-let loops: [RenderLoop] = [MainLoop(), CalloutDemo(), InputPromptsDemo(), FontsDemo()]
+let loops: [RenderLoop] = [
+  //
+  MainLoop(),
+  //CalloutDemo(),
+  InputPromptsDemo(),
+  FontsDemo()
+]
 var loopCount = loops.count
 var currentLoopIndex = 0
 var activeLoop: RenderLoop = loops[currentLoopIndex]
@@ -79,6 +86,12 @@ window.keyInputHandler = { window, key, scancode, state, mods in
   case .rightBracket:
     UISound.select()
     cycleLoops(+1)
+
+  case .o:
+    UISound.select()
+    if let mainLoop = activeLoop as? MainLoop {
+      mainLoop.toggleObjective()
+    }
 
   default:
     break

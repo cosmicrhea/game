@@ -13,7 +13,7 @@ final class FontsDemo: RenderLoop {
     for (renderer, resolvedFont) in fontRenderers {
       yCursor += renderer.baselineFromTop
       renderer.draw(
-        resolvedFont.baseName + ": triangle is the key",
+        resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
         at: (24, yCursor),
         windowSize: (Int32(WIDTH), Int32(HEIGHT))
       )

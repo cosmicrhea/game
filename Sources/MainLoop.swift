@@ -22,6 +22,9 @@ final class MainLoop: RenderLoop {
   private let calloutRenderer2 = CalloutRenderer()
   private let inputPrompts: InputPromptsRenderer
   private let chevron = ImageRenderer("UI/Icons/chevron.png")
+  
+  // Objective visibility state
+  private var objectiveVisible: Bool = true
 
   private let program = try! GLProgram("Common/basic 2")
 
@@ -63,6 +66,12 @@ final class MainLoop: RenderLoop {
 
   @MainActor func update(deltaTime: Float) {
     if let w = window { camera.processKeyboardState(w.keyboard, deltaTime) }
+    // Update callout animation
+    calloutRenderer.update(deltaTime: deltaTime)
+  }
+
+  @MainActor func toggleObjective() {
+    objectiveVisible.toggle()
   }
 
   @MainActor func draw() {
@@ -89,7 +98,8 @@ final class MainLoop: RenderLoop {
       anchor: .topLeft,
       fade: .right,
       icon: chevron,
-      label: "Find the triangle and key"
+      label: "Find the triangle and key",
+      visible: objectiveVisible
     )
 
 //    // Input prompts callout

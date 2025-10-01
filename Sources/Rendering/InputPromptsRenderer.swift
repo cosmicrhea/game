@@ -42,6 +42,10 @@ final class InputPromptsRenderer {
   var labelBaselineOffset: Float = -14
   /// Target icon height in pixels. If set, icons are scaled to this height preserving aspect.
   var targetIconHeight: Float? = 32
+  /// Icon opacity (0.0 = transparent, 1.0 = opaque)
+  var iconOpacity: Float = 0.75
+  /// Label color (R, G, B, A)
+  var labelColor: (Float, Float, Float, Float) = (1, 1, 1, 0.95)
 
   @inline(__always) private func atlasForIconName(_ name: String) -> AtlasImageRenderer? {
     if name.hasPrefix("keyboard") || name.hasPrefix("mouse") { return kmAtlas }
@@ -127,7 +131,9 @@ final class InputPromptsRenderer {
         if let drawSize = iconDrawSize(name) {
           let dy = y + iconYOffset + (maxIconHeight - drawSize.h) * 0.5
           if let atlas = atlasForIconName(name) {
-            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+            atlas.drawScaled(
+              name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h),
+              opacity: iconOpacity)
           }
           iconX += drawSize.w
           if i + 1 < row.iconNames.count { iconX += iconSpacing }
@@ -136,7 +142,8 @@ final class InputPromptsRenderer {
 
       // Draw label to the right
       x += iconsWidth + gapBetweenIconsAndLabel
-      text.draw(row.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
+      text.draw(
+        row.label, at: (x, labelBaselineY), windowSize: windowSize, color: labelColor, anchor: .baselineLeft)
 
       y += rowHeight + rowSpacing
     }
@@ -212,7 +219,9 @@ final class InputPromptsRenderer {
         if let drawSize = iconDrawSize(name) {
           let dy = y + iconYOffset + (m.maxIconHeight - drawSize.h) * 0.5
           if let atlas = atlasForIconName(name) {
-            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+            atlas.drawScaled(
+              name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h),
+              opacity: iconOpacity)
           }
           iconX += drawSize.w
           if i + 1 < row.iconNames.count { iconX += iconSpacing }
@@ -221,7 +230,8 @@ final class InputPromptsRenderer {
 
       // Draw label
       x += m.iconsWidth + gapBetweenIconsAndLabel
-      text.draw(row.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
+      text.draw(
+        row.label, at: (x, labelBaselineY), windowSize: windowSize, color: labelColor, anchor: .baselineLeft)
 
       y += m.height + rowSpacing
     }
@@ -278,7 +288,9 @@ final class InputPromptsRenderer {
         if let drawSize = iconDrawSize(name) {
           let dy = iconY + (maxIconHeight - drawSize.h) * 0.5
           if let atlas = atlasForIconName(name) {
-            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+            atlas.drawScaled(
+              name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h),
+              opacity: iconOpacity)
           }
           iconX += drawSize.w
           if i + 1 < g.iconNames.count { iconX += iconSpacing }
@@ -286,7 +298,7 @@ final class InputPromptsRenderer {
       }
 
       x += iconsWidth + gapBetweenIconsAndLabel
-      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
+      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, color: labelColor, anchor: .baselineLeft)
 
       x += text.measureWidth(g.label)
       if gi + 1 < groups.count { x += groupSpacing }
@@ -362,7 +374,9 @@ final class InputPromptsRenderer {
         if let drawSize = iconDrawSize(name) {
           let dy = iconY + (m.maxIconHeight - drawSize.h) * 0.5
           if let atlas = atlasForIconName(name) {
-            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+            atlas.drawScaled(
+              name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h),
+              opacity: iconOpacity)
           }
           iconX += drawSize.w
           if i + 1 < g.iconNames.count { iconX += iconSpacing }
@@ -370,7 +384,7 @@ final class InputPromptsRenderer {
       }
 
       x += m.iconsWidth + gapBetweenIconsAndLabel
-      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, anchor: .baselineLeft)
+      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, color: labelColor, anchor: .baselineLeft)
       x += m.labelWidth
       if gi + 1 < groups.count { x += groupSpacing }
     }

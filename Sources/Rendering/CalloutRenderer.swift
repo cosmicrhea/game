@@ -1,5 +1,6 @@
 import Foundation
 import GL
+import GLFW
 
 /// Renders a translucent callout box using the `effects/callout` shader and can
 /// optionally draw an icon and a single-line label inside.
@@ -17,12 +18,25 @@ final class CalloutRenderer {
     case both
   }
 
+  // Animation state
+  private var isVisible: Bool = true
+  private var targetVisible: Bool = true
+  private var animationProgress: Float = 0.0
+  private var animationVelocity: Float = 0.0
+  private var lastUpdateTime: Double = 0.0
+
+  // Spring animation parameters
+  private let springStiffness: Float = 2.5
+  private let springDamping: Float = 0.8
+  private let animationSpeed: Float = 7.0
+
   // Immutable configuration
   private let effect = ScreenEffect("effects/callout")
   private let defaultLabelRenderer: TextRenderer
 
   init(labelFontName: String = "Dream Orphans Bd", labelSize: Float = 24) {
     self.defaultLabelRenderer = TextRenderer(labelFontName, labelSize)!
+    self.lastUpdateTime = GLFWSession.currentTime
   }
 
   /// Determines the appropriate icon size based on the icon name
@@ -34,6 +48,41 @@ final class CalloutRenderer {
     default:
       return (24, 24)
     }
+  }
+
+  /// Update animation state. Call this every frame.
+  @MainActor func update(deltaTime: Float) {
+    let currentTime = GLFWSession.currentTime
+    let dt = Float(currentTime - lastUpdateTime)
+    lastUpdateTime = currentTime
+
+    // Update target visibility
+    if targetVisible != isVisible {
+      isVisible = targetVisible
+    }
+
+    // Spring animation for progress
+    let targetProgress: Float = isVisible ? 1.0 : 0.0
+    let springForce = (targetProgress - animationProgress) * springStiffness
+    let dampingForce = -animationVelocity * springDamping
+    let acceleration = springForce + dampingForce
+
+    animationVelocity += acceleration * dt * animationSpeed
+    animationProgress += animationVelocity * dt * animationSpeed
+
+    // Clamp progress to [0, 1]
+    animationProgress = max(0.0, min(1.0, animationProgress))
+
+    // Stop animation when close to target
+    if abs(targetProgress - animationProgress) < 0.001 && abs(animationVelocity) < 0.001 {
+      animationProgress = targetProgress
+      animationVelocity = 0.0
+    }
+  }
+
+  /// Set the visibility of the callout with animation
+  func setVisible(_ visible: Bool) {
+    targetVisible = visible
   }
 
   /// Draw the callout and its optional contents.
@@ -58,15 +107,26 @@ final class CalloutRenderer {
 
     label: String? = nil,
     labelRenderer: TextRenderer? = nil,
-    labelColor: (Float, Float, Float, Float) = (0.9, 0.9, 0.9, 1)
+    labelColor: (Float, Float, Float, Float) = (0.9, 0.9, 0.9, 1),
+
+    // Animation
+    visible: Bool = true
   ) {
+    // Update target visibility
+    setVisible(visible)
+
+    // Early return if not visible and animation is complete
+    if !visible && animationProgress <= 0.0 {
+      return
+    }
+
     // Compute callout center from anchor and position
     let px = position.x
     let py = position.y
     let w = size.w
     let h = size.h
 
-    let center: (x: Float, y: Float) = {
+    let baseCenter: (x: Float, y: Float) = {
       switch anchor {
       case .topLeft:
         return (px + w * 0.5, py - h * 0.5)
@@ -76,6 +136,9 @@ final class CalloutRenderer {
         return (px, py)
       }
     }()
+
+    // Apply animation: only the callout background fades, content slides
+    let center = baseCenter  // Background callout stays in place
 
     // Configure fades
     let fadeWidth = max(0, fadeWidthRatio) * w
@@ -98,24 +161,29 @@ final class CalloutRenderer {
     }
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-    // Draw the background callout
+    // Draw the background callout (use original center, no translation)
     effect.draw { program in
       program.setVec2("uRectSize", value: (w, h))
-      program.setVec2("uRectCenter", value: (center.x, center.y))
+      program.setVec2("uRectCenter", value: (baseCenter.x, baseCenter.y))
       if leftWidth > 0 { program.setFloat("uLeftFadeWidth", value: leftWidth) }
       if rightWidth > 0 { program.setFloat("uRightFadeWidth", value: rightWidth) }
+      // Pass animation alpha to shader
+      program.setFloat("uAnimationAlpha", value: animationProgress)
     }
 
-    // Content layout (left-aligned inside the box)
-    let left = center.x - w * 0.5
+    // Content layout with slide animation (left-aligned inside the box)
+    let left = baseCenter.x - w * 0.5
+    let slideDistance: Float = w * 0.1  // Slide distance for content
+    let animatedContentX = left + iconPaddingX - slideDistance * (1.0 - animationProgress)
 
-    var contentX = left + iconPaddingX
+    var contentX = animatedContentX
 
     // Draw icon if provided
     if let icon = icon {
       let iconSize = iconName.map { self.iconSize(for: $0) } ?? (w: 24, h: 24)
-      let iconY = center.y - iconSize.h * 0.5
-      icon.drawScaled(x: contentX, y: iconY, windowSize: windowSize, targetSize: iconSize, color: iconColor)
+      let iconY = baseCenter.y - iconSize.h * 0.5
+      let animatedIconColor = (iconColor.0, iconColor.1, iconColor.2, iconColor.3 * animationProgress)
+      icon.drawScaled(x: contentX, y: iconY, windowSize: windowSize, targetSize: iconSize, color: animatedIconColor)
       //      contentX += iconSize.w + iconTextGap
       contentX += 24 + iconTextGap  // FIXME
     }
@@ -123,12 +191,13 @@ final class CalloutRenderer {
     // Draw label if present
     if let text = label {
       let renderer = labelRenderer ?? defaultLabelRenderer
-      let lineTopY = center.y + renderer.scaledLineHeight * 0.5
+      let lineTopY = baseCenter.y + renderer.scaledLineHeight * 0.5
+      let animatedLabelColor = (labelColor.0, labelColor.1, labelColor.2, labelColor.3 * animationProgress)
       renderer.draw(
         text,
         at: (contentX, lineTopY),
         windowSize: windowSize,
-        color: labelColor,
+        color: animatedLabelColor,
         anchor: .topLeft
       )
     }
