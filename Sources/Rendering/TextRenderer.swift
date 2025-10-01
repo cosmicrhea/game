@@ -13,6 +13,12 @@ final class TextRenderer {
   /// Global scale factor applied at draw time (acts like em scale)
   var scale: Float = 1.0
 
+  enum Anchor {
+    case topLeft
+    case bottomLeft
+    case baselineLeft
+  }
+
   init?(_ name: String, _ pixelHeight: Float? = nil) {
     guard let entry = FontLibrary.resolve(name: name) else { return nil }
     let resolvedPixelHeight = pixelHeight ?? entry.pixelSize.map(Float.init) ?? 16
@@ -20,7 +26,7 @@ final class TextRenderer {
       return nil
     }
     self.font = font
-    self.program = try! GLProgram("ui/text")
+    self.program = try! GLProgram("UI/text")
 
     // Precompute conservative line metrics by scanning a representative ASCII range.
     var above: Float = 0
@@ -55,7 +61,9 @@ final class TextRenderer {
   func draw(
     _ text: String, at origin: (x: Float, y: Float), windowSize: (w: Int32, h: Int32),
     color: (Float, Float, Float, Float) = (1, 1, 1, 1),
-    scale overrideScale: Float? = nil
+    scale overrideScale: Float? = nil,
+    wrapWidth: Float? = nil,
+    anchor: Anchor = .topLeft
   ) {
     let neededCodepoints = Set(text.utf8.map { Int32($0) })
     let haveCodepoints: Set<Int32> =
@@ -74,40 +82,266 @@ final class TextRenderer {
     let s = overrideScale ?? self.scale
     var verts: [Float] = []
     var indices: [UInt32] = []
+
+    // Layout state
     var penX = origin.x
+    var lineIndex: Int = 0
     let baseline = font.getBaseline() * s
+    let scaledLineHeight =
+      self.scaledLineHeight * (overrideScale != nil ? (overrideScale! / self.scale) : 1)
+
+    // Helpers
+    @inline(__always) func remainingWidth() -> Float? {
+      guard let wrap = wrapWidth else { return nil }
+      return wrap - (penX - origin.x)
+    }
+    @inline(__always) func advanceFor(_ cp: Int32, _ next: Int32?) -> Float {
+      return font.getAdvance(for: cp, next: next) * s
+    }
 
     let bytes = Array(text.utf8)
-    for (idx, u8) in bytes.enumerated() {
-      let cp = Int32(u8)
 
-      // Compute advance up-front so that whitespace (e.g. space) still advances the pen
-      let next = (idx + 1 < bytes.count) ? Int32(bytes[idx + 1]) : nil
-      let glyphAdvance = font.getAdvance(for: cp, next: next)
+    enum TokKind { case word, space, newline }
+    struct Tok {
+      let kind: TokKind
+      let start: Int
+      let end: Int
+    }
 
-      if let g = atlas.glyphs[cp] {
-        let x0 = penX + Float(g.xoff) * s
-        // Convert STBTT y-down offsets to our y-up coordinate system, then scale
-        let y1 = origin.y + baseline - Float(g.yoff) * s  // top
-        let y0 = y1 - Float(g.h) * s  // bottom
-        let x1 = x0 + Float(g.w) * s
+    // Tokenize into words, spaces/tabs, and newlines (handling CRLF)
+    var tokens: [Tok] = []
+    var i = 0
+    while i < bytes.count {
+      let b = bytes[i]
+      if b == 10 || b == 13 {  // \n or \r
+        // Coalesce CRLF into a single newline
+        if b == 13 && i + 1 < bytes.count && bytes[i + 1] == 10 { i += 1 }
+        tokens.append(Tok(kind: .newline, start: i, end: i + 1))
+        i += 1
+        continue
+      }
+      let isSpace = (b == 32) || (b == 9)  // space or tab
+      let kind: TokKind = isSpace ? .space : .word
+      let start = i
+      while i < bytes.count {
+        let bb = bytes[i]
+        if bb == 10 || bb == 13 { break }
+        let ws = (bb == 32) || (bb == 9)
+        if ws != isSpace { break }
+        i += 1
+      }
+      tokens.append(Tok(kind: kind, start: start, end: i))
+    }
 
-        let u0 = g.u0
-        let v0 = g.v0
-        let u1 = g.u1
-        let v1 = g.v1
+    func tokenWidth(_ tok: Tok) -> Float {
+      switch tok.kind {
+      case .newline:
+        return 0
+      case .space:
+        var width: Float = 0
+        var j = tok.start
+        while j < tok.end {
+          let b = bytes[j]
+          if b == 9 {  // tab -> 4 spaces
+            let sp: Int32 = 32
+            let adv = advanceFor(sp, sp)
+            width += adv * 4
+          } else {
+            let cp = Int32(b)
+            let next: Int32? = (j + 1 < tok.end) ? Int32(bytes[j + 1]) : nil
+            width += advanceFor(cp, next)
+          }
+          j += 1
+        }
+        return width
+      case .word:
+        var width: Float = 0
+        var j = tok.start
+        while j < tok.end {
+          let cp = Int32(bytes[j])
+          let next: Int32? = (j + 1 < tok.end) ? Int32(bytes[j + 1]) : nil
+          width += advanceFor(cp, next)
+          j += 1
+        }
+        return width
+      }
+    }
 
-        let base = UInt32(verts.count / 4)
-        verts += [
-          x0, y0, u0, v0,
-          x1, y0, u1, v0,
-          x1, y1, u1, v1,
-          x0, y1, u0, v1,
-        ]
-        indices += [base, base + 1, base + 2, base + 2, base + 3, base]
+    // Measurement pre-pass to compute line count and max width for anchoring
+    func measureLines() -> (Int, Float) {
+      var localPenX = origin.x
+      var localLineIndex = 0
+      var maxWidth: Float = 0
+      var t = 0
+      while t < tokens.count {
+        let tok = tokens[t]
+        if tok.kind == .newline {
+          maxWidth = max(maxWidth, localPenX - origin.x)
+          localLineIndex += 1
+          localPenX = origin.x
+          t += 1
+          continue
+        }
+        let tWidth = tokenWidth(tok)
+        if let wrap = wrapWidth {
+          let remain = wrap - (localPenX - origin.x)
+          if tWidth > remain && localPenX > origin.x && tok.kind != .space {
+            maxWidth = max(maxWidth, localPenX - origin.x)
+            localLineIndex += 1
+            localPenX = origin.x
+            continue
+          }
+        }
+        switch tok.kind {
+        case .space:
+          var j = tok.start
+          while j < tok.end {
+            let b = bytes[j]
+            let adv: Float
+            if b == 9 {
+              let sp: Int32 = 32
+              adv = advanceFor(sp, sp) * 4
+            } else {
+              let cp = Int32(b)
+              let next: Int32? = (j + 1 < tok.end) ? Int32(bytes[j + 1]) : nil
+              adv = advanceFor(cp, next)
+            }
+            if let wrap = wrapWidth {
+              let remain = wrap - (localPenX - origin.x)
+              if adv > remain && localPenX > origin.x {
+                maxWidth = max(maxWidth, localPenX - origin.x)
+                localLineIndex += 1
+                localPenX = origin.x
+              }
+            }
+            localPenX += adv
+            j += 1
+          }
+        case .word:
+          var j = tok.start
+          while j < tok.end {
+            let cp = Int32(bytes[j])
+            let next: Int32? = (j + 1 < tok.end) ? Int32(bytes[j + 1]) : nil
+            let adv = advanceFor(cp, next)
+            if let wrap = wrapWidth {
+              let remain = wrap - (localPenX - origin.x)
+              if adv > remain && localPenX > origin.x {
+                maxWidth = max(maxWidth, localPenX - origin.x)
+                localLineIndex += 1
+                localPenX = origin.x
+              }
+            }
+            localPenX += adv
+            j += 1
+          }
+        case .newline:
+          break
+        }
+        t += 1
+      }
+      maxWidth = max(maxWidth, localPenX - origin.x)
+      return (localLineIndex + 1, maxWidth)
+    }
+
+    let (measuredLineCount, _) = measureLines()
+    let totalHeight = Float(measuredLineCount) * scaledLineHeight
+    let firstBaselineY: Float = {
+      switch anchor {
+      case .topLeft:
+        return origin.y - baseline
+      case .bottomLeft:
+        return origin.y + totalHeight - scaledLineHeight - baseline
+      case .baselineLeft:
+        return origin.y
+      }
+    }()
+
+    // (emit helper removed; emission happens inline using baseline maths)
+
+    // Layout and draw
+    var t = 0
+    while t < tokens.count {
+      let tok = tokens[t]
+      if tok.kind == .newline {
+        lineIndex += 1
+        penX = origin.x
+        t += 1
+        continue
       }
 
-      penX += glyphAdvance * s
+      let tWidth = tokenWidth(tok)
+      if let remain = remainingWidth() {
+        if tWidth > remain && penX > origin.x && tok.kind != .space {
+          // Move to next line and retry this token
+          lineIndex += 1
+          penX = origin.x
+          continue
+        }
+      }
+
+      switch tok.kind {
+      case .space:
+        var j = tok.start
+        while j < tok.end {
+          let b = bytes[j]
+          if b == 9 {  // tab -> 4 spaces (advance only)
+            let sp: Int32 = 32
+            let adv = advanceFor(sp, sp) * 4
+            if let remain = remainingWidth(), adv > remain && penX > origin.x {
+              lineIndex += 1
+              penX = origin.x
+              continue
+            }
+            penX += adv
+          } else {
+            let cp = Int32(b)
+            let next: Int32? = (j + 1 < tok.end) ? Int32(bytes[j + 1]) : nil
+            let adv = advanceFor(cp, next)
+            if let remain = remainingWidth(), adv > remain && penX > origin.x {
+              lineIndex += 1
+              penX = origin.x
+              continue
+            }
+            // Do not emit geometry for plain spaces; just advance
+            penX += adv
+          }
+          j += 1
+        }
+      case .word:
+        var j = tok.start
+        while j < tok.end {
+          let cp = Int32(bytes[j])
+          let next: Int32? = (j + 1 < tok.end) ? Int32(bytes[j + 1]) : nil
+          let adv = advanceFor(cp, next)
+          if let remain = remainingWidth(), adv > remain && penX > origin.x {
+            // Hard wrap inside a long word
+            lineIndex += 1
+            penX = origin.x
+          }
+          // Emit a single codepoint quad at current pen and baseline of this line
+          if let g = atlas.glyphs[cp] {
+            let lineBaselineY = firstBaselineY - Float(lineIndex) * scaledLineHeight
+            let x0 = penX + Float(g.xoff) * s
+            let y1 = lineBaselineY - Float(g.yoff) * s
+            let y0 = y1 - Float(g.h) * s
+            let x1 = x0 + Float(g.w) * s
+            let base = UInt32(verts.count / 4)
+            verts += [
+              x0, y0, g.u0, g.v0,
+              x1, y0, g.u1, g.v0,
+              x1, y1, g.u1, g.v1,
+              x0, y1, g.u0, g.v1,
+            ]
+            indices += [base, base + 1, base + 2, base + 2, base + 3, base]
+          }
+          penX += adv
+          j += 1
+        }
+      case .newline:
+        break
+      }
+
+      t += 1
     }
 
     var vao: GLuint = 0

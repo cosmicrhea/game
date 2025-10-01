@@ -1,13 +1,13 @@
 import GL
-import GLMath
 import GLFW
+import GLMath
 
 // Default camera values
 private let defaultYaw: Float = -90.0
 private let defaultPitch: Float = 0.0
 private let defaultSpeed: Float = 2.5
 private let defaultSensitivity: Float = 0.1
-private let defaultZoom: Float = 0.001
+private let defaultZoom: Float = 1.8
 
 /// A free camera that processes input and calculates the corresponding euler angles,
 /// vectors and matrices for use in OpenGL
@@ -46,7 +46,7 @@ class FreeCamera {
 
   /// Initialize camera with vector parameters
   init(
-    position: vec3 = vec3(0.0, 0.0, 0.0),
+    position: vec3 = vec3(0.0, 0.0, 2.0),
     up: vec3 = vec3(0.0, 1.0, 0.0),
     yaw: Float = defaultYaw,
     pitch: Float = defaultPitch
@@ -74,8 +74,8 @@ class FreeCamera {
 
   /// Processes input received from any keyboard-like input system.
   /// Accepts input parameter in the form of camera defined enum (to abstract it from windowing systems)
-  func processMovement(_ direction: Movement, _ deltaTime: Float) {
-    let velocity = movementSpeed * deltaTime
+  func processMovement(_ direction: Movement, _ deltaTime: Float, _ speedMultiplier: Float = 1) {
+    let velocity = movementSpeed * speedMultiplier * deltaTime
 
     switch direction {
     case .forward:
@@ -95,12 +95,17 @@ class FreeCamera {
 
   /// Processes GLFW keyboard state.
   @MainActor func processKeyboardState(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
-    if keyboard.state(of: .w) == .pressed { processMovement(.forward, deltaTime) }
-    if keyboard.state(of: .s) == .pressed { processMovement(.backward, deltaTime) }
-    if keyboard.state(of: .a) == .pressed { processMovement(.left, deltaTime) }
-    if keyboard.state(of: .d) == .pressed { processMovement(.right, deltaTime) }
-    if keyboard.state(of: .q) == .pressed { processMovement(.up, deltaTime) }
-    if keyboard.state(of: .e) == .pressed { processMovement(.down, deltaTime) }
+    var speed: Float = 1
+
+    if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed { speed = 3 }
+    if keyboard.state(of: .leftAlt) == .pressed || keyboard.state(of: .rightAlt) == .pressed { speed = 1 / 3 }
+
+    if keyboard.state(of: .w) == .pressed { processMovement(.forward, deltaTime, speed) }
+    if keyboard.state(of: .s) == .pressed { processMovement(.backward, deltaTime, speed) }
+    if keyboard.state(of: .a) == .pressed { processMovement(.left, deltaTime, speed) }
+    if keyboard.state(of: .d) == .pressed { processMovement(.right, deltaTime, speed) }
+    if keyboard.state(of: .q) == .pressed { processMovement(.up, deltaTime, speed) }
+    if keyboard.state(of: .e) == .pressed { processMovement(.down, deltaTime, speed) }
   }
 
   /// Processes input received from a mouse input system.

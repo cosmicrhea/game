@@ -1,7 +1,7 @@
 import Foundation
 
 enum FontLibrary {
-  private static let defaultFontsPath = "fonts"
+  private static let defaultFontsPath = "Fonts"
 
   struct ResolvedFont {
     let url: URL  // e.g. file:///Users/AlexCrawford/Applications/Glass.app/Contents/Resources/UI/Fonts/Orange%20Kid%20(13px).ttf

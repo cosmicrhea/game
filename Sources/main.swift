@@ -26,15 +26,16 @@ GLFWWindow.hints.openGLProfile = .core
 GLFWWindow.hints.openGLCompatibility = .forward
 
 let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
-window.nsWindow?.styleMask.insert(.fullSizeContentView)
+//window.nsWindow?.styleMask.insert(.fullSizeContentView)
 //window.nsWindow?.titlebarAppearsTransparent = true
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
-window.setIcon(Image("icon~squircle.png"))
+window.setIcon(Image("icon~squircle.webp"))
 window.mouse.cursorMode = .disabled
 
 var polygonMode = GL_FILL
+var showDebugText = true
 var requestScreenshot = false
 
 // timing
@@ -47,6 +48,10 @@ window.keyInputHandler = { _, key, _, state, _ in
   if key == .comma && state == .pressed {
     UISound.select()
     polygonMode = polygonMode == GL_FILL ? GL_LINE : GL_FILL
+  }
+  if key == .backspace && state == .pressed {
+    UISound.select()
+    showDebugText.toggle()
   }
   if key == .p && state == .pressed {
     UISound.shutter()
@@ -63,6 +68,7 @@ var camera = FreeCamera()
 window.cursorPositionHandler = { window, x, y in
   guard window.isFocused else { return }
   camera.processMousePosition(Float(x), Float(y))
+  ScreenEffect.mousePosition = (Float(x), Float(y))
 }
 
 window.scrollInputHandler = { _, _, yOffset in
@@ -71,7 +77,7 @@ window.scrollInputHandler = { _, _, yOffset in
 
 glEnable(GL_DEPTH_TEST)
 
-let basicShading = try! GLProgram("common/basic 2")
+let basicShading = try! GLProgram("Common/basic 2")
 
 let vertices: [Float] = [
   -0.5, -0.5, 0.0,
@@ -95,7 +101,7 @@ glVertexAttribPointer(
 //glVertexAttribPointer(0, 3, GL_FLOAT, false, GLsizei(3 * MemoryLayout<Float>.stride), nil)
 glEnableVertexAttribArray(0)
 
-let scenePath = Bundle.module.path(forResource: "inventory/old_key", ofType: "glb")!
+let scenePath = Bundle.module.path(forResource: "Items/old_key", ofType: "glb")!
 
 let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
 print("\(scene.rootNode)")
@@ -105,13 +111,26 @@ let renderers = scene.meshes
   .map { MeshRenderer(scene: scene, mesh: $0) }
 
 let grapeSoda = TextRenderer("Grape Soda")!
-let determination = TextRenderer("Determination", 64)!
+//let determination = TextRenderer("Determination", 64)!
+let determination = TextRenderer("Determination", 32)!
+let ari = TextRenderer("Ari-W9500 Bold", 32)!
 
 let fontRenderers: [(TextRenderer, FontLibrary.ResolvedFont)] = FontLibrary.availableFonts
   .compactMap { resolvedFont -> (TextRenderer, FontLibrary.ResolvedFont)? in
     guard let renderer = TextRenderer(resolvedFont.displayName) else { return nil }
     return (renderer, resolvedFont)
   }
+
+let gaussianBlur = ScreenEffect("effects/gaussian_blur")
+let frostedVignette = ScreenEffect("effects/frosted_vignette")
+let simpleVignette = ScreenEffect("effects/simple_vignette")
+let damageVignette = ScreenEffect("effects/damage_vignette")
+let test = ScreenEffect("effects/liquid_glass")
+let panel = ScreenEffect("effects/panel")
+//let gaussian_blur = ScreenEffect("effects/gaussian_blur")
+
+let img = ImageRenderer("common/divider-fade-002@2x.png")
+let prompts = InputPromptRenderer("UI/InputPrompts/playstation.xml")
 
 while !window.shouldClose {
   let currentFrame = Float(GLFWSession.currentTime)
@@ -148,22 +167,15 @@ while !window.shouldClose {
 
   // pass projection matrix to shader (note that in this case it could change every frame)
   let projection = GLMath.perspective(camera.zoom, 1, 0.001, 1000.0)
-  basicShading.setMat4("projection", value: projection)
 
   // camera/view transformation
   let view = camera.getViewMatrix()
-  basicShading.setMat4("view", value: view)
 
+  basicShading.setMat4("projection", value: projection)
+  basicShading.setMat4("view", value: view)
   basicShading.setMat4("model", value: mat4(1))
 
   renderers.forEach { $0.draw() }
-
-  let debugText = """
-    Camera Zoom: \(camera.zoom)\n
-    Camera Position: \(camera.position)\n
-    """
-
-  determination.draw(debugText, at: (0, Float(HEIGHT) - 100), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
 
   // grapeSoda.draw(
   //   "The quick brown fox jumps over the lazy dog", at: (100, 200),
@@ -175,17 +187,45 @@ while !window.shouldClose {
   //   "Quizdeltagerne spiste jordbær med fløde mens cirkusklovnen Walther spillede på xylofon",
   //   at: (0, 64), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
 
-  var yCursor: Float = 0
+  var yCursor: Float = 24
   for (renderer, resolvedFont) in fontRenderers {
     // Treat yCursor as the baseline position. Move down to the baseline first,
     // then draw, then add descender + padding for the next line.
     yCursor += renderer.baselineFromTop
     renderer.draw(
-      resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
-      at: (8, yCursor),
+      //resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
+      resolvedFont.baseName + ": triangle is the key",
+      at: (24, yCursor),
       windowSize: (Int32(WIDTH), Int32(HEIGHT))
     )
-    yCursor += renderer.descentFromBaseline + 6
+    yCursor += renderer.descentFromBaseline + 8
+  }
+
+  //  damageVignette.draw()
+  //  frostedVignette.draw()
+  //  gaussianBlur.draw()
+  // test.draw()
+
+  //  panel.draw()
+  img.draw(x: 100, y: 100, windowSize: (Int32(WIDTH), Int32(HEIGHT)), opacity: 0.5)
+  prompts.draw(
+    name: "playstation_button_circle",
+    x: 300,
+    y: 100,
+    windowSize: (Int32(WIDTH), Int32(HEIGHT))
+  )
+
+  if showDebugText {
+    let debugText = """
+      \(String(format: "%.1f", camera.zoom))x @ \(camera.position); \(String(format: "%.1f", camera.yaw)); \(String(format: "%.1f", camera.pitch))
+      """
+
+    determination.draw(
+      debugText,
+      at: (24, Float(HEIGHT) - 24),
+      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+      anchor: .topLeft
+    )
   }
 
   if requestScreenshot {

@@ -20,15 +20,25 @@ struct GLProgram {
   /// Initialize shader program from shader base name
   /// Looks for vertex shader as "name.vert" and fragment shader as "name.frag"
   init(_ name: String) throws {
+    try self.init(name, name)
+  }
+
+  /// Initialize shader program from separate vertex and fragment base names
+  /// Looks for vertex shader as "vertexName.vert" and fragment shader as "fragmentName.frag"
+  init(_ vertexName: String, _ fragmentName: String) throws {
     programID = glCreateProgram()
 
     do {
       // Resolve shader names to file paths and load source code
-      let vertexPath = try resolveShaderPath(name: name, type: "vertex")
-      let fragmentPath = try resolveShaderPath(name: name, type: "fragment")
+      let vertexPath = try resolveShaderPath(name: vertexName, type: "vertex")
+      let fragmentPath = try resolveShaderPath(name: fragmentName, type: "fragment")
 
       let vertexSource = try loadShaderSource(from: vertexPath)
-      let fragmentSource = try loadShaderSource(from: fragmentPath)
+      let rawFragmentSource = try loadShaderSource(from: fragmentPath)
+      let fragmentSource = wrapShaderToyIfNeeded(rawFragmentSource)
+
+//      print("# \(fragmentName).frag")
+//      print(fragmentSource)
 
       // Compile shaders
       let vertexShader = try compileShader(source: vertexSource, type: GL_VERTEX_SHADER)
@@ -59,6 +69,44 @@ struct GLProgram {
       }
       throw error
     }
+  }
+
+  /// If the fragment source looks like a ShaderToy shader (defines mainImage but no main),
+  /// wrap it with uniforms and a main() entry point compatible with GLSL 330 core.
+  private func wrapShaderToyIfNeeded(_ source: String) -> String {
+    let hasMainImage = source.contains("mainImage(")
+    let hasMain = source.contains("void main(")
+    guard hasMainImage && !hasMain else { return source }
+
+    let hasVersion = source.contains("#version")
+    let versionLine = hasVersion ? "" : "#version 330 core\n"
+
+    let prelude = """
+      \(versionLine)out vec4 FragColor;
+      uniform vec3 iResolution;
+      uniform float iTime;
+      uniform float iTimeDelta;
+      uniform int iFrame;
+      uniform vec4 iMouse;
+      uniform vec4 iDate;
+      uniform float iSampleRate;
+      uniform float iChannelTime[4];
+      uniform vec3 iChannelResolution[4];
+      uniform sampler2D iChannel0;
+      uniform sampler2D iChannel1;
+      uniform sampler2D iChannel2;
+      uniform sampler2D iChannel3;
+      """
+
+    let mainBody = """
+      void main() {
+        vec4 color = vec4(0.0);
+        mainImage(color, gl_FragCoord.xy);
+        FragColor = color;
+      }
+      """
+
+    return prelude + "\n" + source + "\n" + mainBody
   }
 
   /// Load shader source code from file

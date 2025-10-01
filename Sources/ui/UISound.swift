@@ -4,7 +4,7 @@ import class Foundation.Bundle
 enum UISound {
 #if os(macOS)
   static func play(_ name: String) {
-    guard let file = Bundle.module.path(forResource: "ui/\(name)", ofType: "wav") else {
+    guard let file = Bundle.module.path(forResource: "UI/\(name)", ofType: "wav") else {
       logger.error("failed to load \(name)")
       return
     }
