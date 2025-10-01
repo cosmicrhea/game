@@ -1,6 +1,15 @@
 {
-  "originHash" : "16d7867a745416bff2f9323c9a915f98d3d4f250871f9706a439ada9e99a8b4c",
+  "originHash" : "984fa17475e559dec370dea212a8007cdc994ea7d590c056da0492211f1c5ab6",
   "pins" : [
+    {
+      "identity" : "inject",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krzysztofzablocki/Inject.git",
+      "state" : {
+        "revision" : "728c56639ecb3df441d51d5bc6747329afabcfc9",
+        "version" : "1.5.2"
+      }
+    },
     {
       "identity" : "jpeg",
       "kind" : "remoteSourceControl",
@@ -62,24 +71,6 @@
       "state" : {
         "revision" : "176d41d46429e79c806333025b226e0c50a0c602",
         "version" : "0.2.2"
-      }
-    },
-    {
-      "identity" : "swift-macro-toolkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/stackotter/swift-macro-toolkit",
-      "state" : {
-        "revision" : "569627091e1fbb8745d691aeeb008e7247dedb7c",
-        "version" : "0.6.1"
-      }
-    },
-    {
-      "identity" : "swift-syntax",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-syntax.git",
-      "state" : {
-        "revision" : "0687f71944021d616d34d922343dcef086855920",
-        "version" : "600.0.1"
       }
     },
     {

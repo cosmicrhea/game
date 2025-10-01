@@ -22,7 +22,7 @@ final class MainLoop: RenderLoop {
   private let calloutRenderer2 = CalloutRenderer()
   private let inputPrompts: InputPromptsRenderer
   private let chevron = ImageRenderer("UI/Icons/chevron.png")
-  
+
   // Objective visibility state
   private var objectiveVisible: Bool = true
 
@@ -102,22 +102,22 @@ final class MainLoop: RenderLoop {
       visible: objectiveVisible
     )
 
-//    // Input prompts callout
-//    calloutRenderer2.draw(
-//      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-//      size: (Float(WIDTH), 80),
-//      position: (Float(WIDTH) - 520, -2),
-//      anchor: .bottomLeft,
-//      fade: .left,
-//    )
+    //    // Input prompts callout
+    //    calloutRenderer2.draw(
+    //      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+    //      size: (Float(WIDTH), 80),
+    //      position: (Float(WIDTH) - 520, -2),
+    //      anchor: .bottomLeft,
+    //      fade: .left,
+    //    )
 
-//    // Input prompts (bottom-right horizontal strip)
-//    let groups: [InputPromptsRenderer.Row] = [
-//      .init(iconNames: ["mouse_move"], label: "Rotate"),
-//      .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
-//      .init(iconNames: ["keyboard_r"], label: "Reset"),
-//      .init(iconNames: ["keyboard_tab_icon"], label: "Close"),
-//    ]
+    //    // Input prompts (bottom-right horizontal strip)
+    //    let groups: [InputPromptsRenderer.Row] = [
+    //      .init(iconNames: ["mouse_move"], label: "Rotate"),
+    //      .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
+    //      .init(iconNames: ["keyboard_r"], label: "Reset"),
+    //      .init(iconNames: ["keyboard_tab_icon"], label: "Close"),
+    //    ]
     inputPrompts.drawHorizontal(
       prompts: InputPromptsRenderer.groups["Item Viewer"]!,
       inputSource: .keyboardMouse,

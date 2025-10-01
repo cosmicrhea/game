@@ -1,6 +1,4 @@
-import Foundation
-
-public struct Color : Sendable {
+public struct Color: Sendable {
   public var red: Float
   public var green: Float
   public var blue: Float

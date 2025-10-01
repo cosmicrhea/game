@@ -1,4 +1,5 @@
-import Foundation
+import struct Foundation.URL
+import class Foundation.Bundle
 
 enum FontLibrary {
   private static let defaultFontsPath = "Fonts"

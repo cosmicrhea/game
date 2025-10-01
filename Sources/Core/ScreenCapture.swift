@@ -36,7 +36,7 @@ func saveScreenshot(width: Int32, height: Int32) {
     timestamp = timestamp.replacingOccurrences(of: " AM", with: "\u{202F}AM")
       .replacingOccurrences(of: " PM", with: "\u{202F}PM")
 
-    let filePath = "/tmp/Glass Screenshot \(timestamp).png"
+    let filePath = "/Users/FA/Pictures/Screenshots/Glass Screenshot \(timestamp).png"
     try Data(pngBytes).write(to: URL(fileURLWithPath: filePath))
     logger.info("Saved screenshot to \(filePath)")
   } catch {

@@ -31,7 +31,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
                           : vec2(u_rectSize.x * 0.5, iResolution.y - 17.0 - u_rectSize.y * 0.5);
     
     // Debug: hardcode the center to see if that fixes the movement
-    u_rectCenter = vec2(260.0, 518.0);
+    // u_rectCenter = vec2(260.0, 518.0);
 
     // Visuals (defaults with uniform overrides)
     vec4  u_fillColor   = (uFillColor.a > 0.0)  ? uFillColor  : vec4(0.10, 0.10, 0.10, 0.60);

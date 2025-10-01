@@ -79,7 +79,9 @@ final class TextRenderer {
     color: (Float, Float, Float, Float) = (1, 1, 1, 1),
     scale overrideScale: Float? = nil,
     wrapWidth: Float? = nil,
-    anchor: Anchor = .topLeft
+    anchor: Anchor = .topLeft,
+    outlineColor: (Float, Float, Float, Float)? = nil,
+    outlineThickness: Float = 0.0
   ) {
     let neededCodepoints = Set(text.utf8.map { Int32($0) })
     let haveCodepoints: Set<Int32> =
@@ -412,6 +414,36 @@ final class TextRenderer {
     mvp.withUnsafeBufferPointer { buffer in
       program.setMat4("uMVP", value: buffer.baseAddress!)
     }
+    // Draw outline first if enabled
+    if let outlineColor = outlineColor, outlineThickness > 0 {
+      program.setVec4("uColor", value: (outlineColor.0, outlineColor.1, outlineColor.2, outlineColor.3))
+
+      // Create outline by drawing text with 4 directional offsets
+      let offsets: [(Float, Float)] = [
+        (-outlineThickness, 0), (outlineThickness, 0),  // left, right
+        (0, -outlineThickness), (0, outlineThickness),  // bottom, top
+      ]
+
+      for (offsetX, offsetY) in offsets {
+        var offsetVerts = verts
+        for i in stride(from: 0, to: offsetVerts.count, by: 4) {
+          offsetVerts[i] += offsetX  // x
+          offsetVerts[i + 1] += offsetY  // y
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glBufferData(GL_ARRAY_BUFFER, offsetVerts.count * MemoryLayout<Float>.stride, offsetVerts, GL_DYNAMIC_DRAW)
+
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, atlas.texture)
+        program.setInt("uAtlas", value: 0)
+
+        glBindVertexArray(vao)
+        glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+      }
+    }
+
+    // Draw fill on top
     program.setVec4("uColor", value: (color.0, color.1, color.2, color.3))
 
     glActiveTexture(GL_TEXTURE0)
@@ -424,6 +456,10 @@ final class TextRenderer {
       glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
     }
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+    // Draw fill with original vertices
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, verts.count * MemoryLayout<Float>.stride, verts, GL_DYNAMIC_DRAW)
 
     glBindVertexArray(vao)
     glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
