@@ -11,9 +11,7 @@ final class MainLoop: RenderLoop {
   private var camera = FreeCamera()
 
   // Triangle demo
-  private let basicShading = try! GLProgram("Common/basic 2")
-  private var vertexBuffer: GLuint = 0
-  private var vertexArray: GLuint = 0
+  private let testTriangle = TestTriangle()
 
   // Assimp mesh (old_key)
   private let renderers: [MeshRenderer]
@@ -21,38 +19,25 @@ final class MainLoop: RenderLoop {
   // UI resources
   private let determination = TextRenderer("Determination", 32)!
   private let calloutRenderer = CalloutRenderer()
-  private let promptsAtlas = AtlasImageRenderer("UI/InputPrompts/keyboard-mouse.xml")
   private let inputPrompts: InputPromptsRenderer
-  private let arrowRight = ImageRenderer("UI/Arrows/curved-right.png")
+  private let chevron = ImageRenderer("UI/Icons/chevron.png")
+
+  private let program = try! GLProgram("Common/basic 2")
 
   init() {
-    // Triangle geometry
-    let vertices: [Float] = [
-      -0.5, -0.5, 0.0,
-      0.5, -0.5, 0.0,
-      0.0, 0.5, 0.0,
-    ]
-    glGenBuffers(1, &vertexBuffer)
-    glGenVertexArrays(1, &vertexArray)
-    glBindVertexArray(vertexArray)
-    glBindBuffer(GL_ARRAY_BUFFER, vertexArray)
-    glBufferData(GL_ARRAY_BUFFER, vertices.count * MemoryLayout<Float>.stride, vertices, GL_STATIC_DRAW)
-    glVertexAttribPointer(
-      index: 0, size: 3, type: GL_FLOAT, normalized: false,
-      stride: GLsizei(3 * MemoryLayout<Float>.stride), pointer: nil
-    )
-    glEnableVertexAttribArray(0)
+    // Triangle geometry moved into TestTriangle
 
     // Load Assimp mesh
     let scenePath = Bundle.module.path(forResource: "Items/old_key", ofType: "glb")!
     let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
+    print("\(scene.rootNode)")
+
     self.renderers = scene.meshes
       .filter { $0.numberOfVertices > 0 }
       .map { MeshRenderer(scene: scene, mesh: $0) }
 
     // Input prompts
-    inputPrompts = InputPromptsRenderer(atlas: promptsAtlas, labelFontName: "Creato Display Bold", labelPx: 28)
-    inputPrompts.labelBaselineOffset = -16
+    inputPrompts = InputPromptsRenderer()
   }
 
   @MainActor func onAttach(window: GLFWWindow) {
@@ -80,39 +65,45 @@ final class MainLoop: RenderLoop {
   }
 
   @MainActor func draw() {
-    // Triangle
-    glBindVertexArray(vertexArray)
-    basicShading.use()
-    glDrawArrays(GL_TRIANGLES, 0, 3)
-
     // Matrices
     let projection = GLMath.perspective(camera.zoom, 1, 0.001, 1000.0)
     let view = camera.getViewMatrix()
-    basicShading.setMat4("projection", value: projection)
-    basicShading.setMat4("view", value: view)
-    basicShading.setMat4("model", value: mat4(1))
 
-    // Objective callout
-    calloutRenderer.size = (520, 44)
-    calloutRenderer.position = (0, Float(HEIGHT) - 180)
-    calloutRenderer.anchor = .topLeft
-    calloutRenderer.fade = .right
-    calloutRenderer.label = "Find the triangle and key"
-    calloutRenderer.icon = arrowRight
-    calloutRenderer.iconSize = (24, 24)
-    calloutRenderer.draw(windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+    program.use()
+    program.setMat4("projection", value: projection)
+    program.setMat4("view", value: view)
+    program.setMat4("model", value: mat4(1))
+
+    // Triangle
+    testTriangle.draw()
 
     // Meshes
     renderers.forEach { $0.draw() }
+
+    // Objective callout
+    calloutRenderer.draw(
+      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+      size: (520, 44),
+      position: (0, Float(HEIGHT) - 180),
+      anchor: .topLeft,
+      fade: .right,
+      icon: chevron,
+      label: "Find the triangle and key"
+    )
 
     // Input prompts (bottom-right horizontal strip)
     let groups: [InputPromptsRenderer.Row] = [
       .init(iconNames: ["mouse_move"], label: "Rotate"),
       .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
       .init(iconNames: ["keyboard_r"], label: "Reset"),
-      .init(iconNames: ["keyboard_tab_icon"], label: "Return"),
+      .init(iconNames: ["keyboard_tab_icon"], label: "Close"),
     ]
-    inputPrompts.drawHorizontal(groups: groups, windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+    inputPrompts.drawHorizontal(
+      groups: groups,
+      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+      origin: (Float(WIDTH) - 32, 24),
+      anchor: .bottomRight
+    )
 
     // Debug label (top-left)
     let debugText = String(
@@ -127,3 +118,21 @@ final class MainLoop: RenderLoop {
     )
   }
 }
+
+// grapeSoda.draw(
+//   "The quick brown fox jumps over the lazy dog", at: (100, 200),
+//   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+
+// determination.draw(
+//   "The quick brown fox jumps over the lazy dog", at: (0, 0),
+//   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+// determination.draw(
+//   "Quizdeltagerne spiste jordbær med fløde mens cirkusklovnen Walther spillede på xylofon",
+//   at: (0, 64), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
+
+//  damageVignette.draw()
+//  frostedVignette.draw()
+//  gaussianBlur.draw()
+// test.draw()
+
+//  panel.draw()

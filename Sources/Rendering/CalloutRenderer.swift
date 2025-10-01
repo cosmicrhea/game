@@ -17,32 +17,49 @@ final class CalloutRenderer {
     case both
   }
 
-  // Geometry
-  var size: (w: Float, h: Float) = (520, 44)
-  var position: (x: Float, y: Float) = (24, 24)  // Interpreted by `anchor`
-  var anchor: Anchor = .topLeft
-
-  // Visuals
-  var fade: Fade = .right
-  /// Fade width as a fraction of the callout width (e.g. 0.33 for one-third)
-  var fadeWidthRatio: Float = 1.0 / 3.0
-
-  // Content
-  var icon: ImageRenderer?
-  var iconSize: (w: Float, h: Float) = (24, 24)
-  var iconPaddingX: Float = 12
-  var iconTextGap: Float = 2
-  var label: String?
-  var labelRenderer: TextRenderer? = TextRenderer("Dream Orphans Bd", 24)
-  var labelColor: (Float, Float, Float, Float) = (1, 1, 1, 1)
-
-  // Internals
+  // Immutable configuration
   private let effect = ScreenEffect("effects/callout")
+  private let defaultLabelRenderer: TextRenderer
 
-  init() {}
+  init(labelFontName: String = "Dream Orphans Bd", labelSize: Float = 24) {
+    self.defaultLabelRenderer = TextRenderer(labelFontName, labelSize)!
+  }
+
+  /// Determines the appropriate icon size based on the icon name
+  private func iconSize(for iconName: String) -> (w: Float, h: Float) {
+    switch iconName {
+    //    case "bubble-right", "curved-right", "swoosh-right":
+    case "curved-right":
+      return (32, 32)
+    default:
+      return (24, 24)
+    }
+  }
 
   /// Draw the callout and its optional contents.
-  @MainActor func draw(windowSize: (w: Int32, h: Int32)) {
+  @MainActor func draw(
+    windowSize: (w: Int32, h: Int32),
+
+    // Geometry
+    size: (w: Float, h: Float) = (520, 44),
+    position: (x: Float, y: Float) = (24, 24),
+    anchor: Anchor = .topLeft,
+
+    // Visuals
+    fade: Fade = .right,
+    fadeWidthRatio: Float = 1.0 / 3.0,
+
+    // Content
+    icon: ImageRenderer? = nil,
+    iconName: String? = nil,
+    iconPaddingX: Float = 12,
+    iconTextGap: Float = 8,
+    iconColor: (Float, Float, Float, Float) = (0.6, 0.6, 0.6, 1),
+
+    label: String? = nil,
+    labelRenderer: TextRenderer? = nil,
+    labelColor: (Float, Float, Float, Float) = (0.9, 0.9, 0.9, 1)
+  ) {
     // Compute callout center from anchor and position
     let px = position.x
     let py = position.y
@@ -91,19 +108,21 @@ final class CalloutRenderer {
 
     // Content layout (left-aligned inside the box)
     let left = center.x - w * 0.5
-    //    let top = center.y + h * 0.5
 
     var contentX = left + iconPaddingX
 
     // Draw icon if provided
     if let icon = icon {
+      let iconSize = iconName.map { self.iconSize(for: $0) } ?? (w: 24, h: 24)
       let iconY = center.y - iconSize.h * 0.5
-      icon.drawScaled(x: contentX, y: iconY, windowSize: windowSize, targetSize: iconSize)
-      contentX += iconSize.w + iconTextGap
+      icon.drawScaled(x: contentX, y: iconY, windowSize: windowSize, targetSize: iconSize, color: iconColor)
+      //      contentX += iconSize.w + iconTextGap
+      contentX += 24 + iconTextGap  // FIXME
     }
 
     // Draw label if present
-    if let text = label, let renderer = labelRenderer {
+    if let text = label {
+      let renderer = labelRenderer ?? defaultLabelRenderer
       let lineTopY = center.y + renderer.scaledLineHeight * 0.5
       renderer.draw(
         text,

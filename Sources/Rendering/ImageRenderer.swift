@@ -176,7 +176,8 @@ final class ImageRenderer {
     windowSize: (w: Int32, h: Int32),
     targetSize: (w: Float, h: Float),
     tint: Color? = nil,
-    opacity: Float = 1.0
+    opacity: Float = 1.0,
+    color: (Float, Float, Float, Float)? = nil
   ) {
     guard texture != 0 else { return }
 
@@ -240,14 +241,17 @@ final class ImageRenderer {
     mvp.withUnsafeBufferPointer { buf in
       program.setMat4("uMVP", value: buf.baseAddress!)
     }
-    let tintColor = tint ?? .white
-    program.setVec4(
-      "uTint",
-      value: (
+    let finalColor: (Float, Float, Float, Float)
+    if let color = color {
+      finalColor = (color.0, color.1, color.2, color.3 * opacity)
+    } else {
+      let tintColor = tint ?? .white
+      finalColor = (
         Float(tintColor.red), Float(tintColor.green), Float(tintColor.blue),
         Float(tintColor.alpha) * opacity
       )
-    )
+    }
+    program.setVec4("uTint", value: finalColor)
 
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, texture)

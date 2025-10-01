@@ -1,7 +1,7 @@
 import Foundation
 import OrderedCollections
 
-enum InputSource: String {
+enum InputSource: String, CaseIterable {
   case keyboardMouse
   case playstation
   case xbox
@@ -26,22 +26,32 @@ final class InputPromptsRenderer {
     case bottomRight
   }
 
-  private let atlas: AtlasImageRenderer
   private let text: TextRenderer
+  // Atlases are selected per-icon by name prefix and loaded lazily
+  private lazy var kmAtlas: AtlasImageRenderer = AtlasImageRenderer("UI/InputPrompts/keyboard-mouse.xml")
+  private lazy var psAtlas: AtlasImageRenderer = AtlasImageRenderer("UI/InputPrompts/playstation.xml")
+  private lazy var xbAtlas: AtlasImageRenderer = AtlasImageRenderer("UI/InputPrompts/xbox.xml")
 
   /// Layout options
-  var iconSpacing: Float = 8
+  var iconSpacing: Float = 0
   var rowSpacing: Float = 8
   var groupSpacing: Float = 24
   var padding: Float = 16
-  var gapBetweenIconsAndLabel: Float = 12
+  var gapBetweenIconsAndLabel: Float = 8
   /// Fine-tune vertical alignment of labels (positive moves down)
-  var labelBaselineOffset: Float = 0
+  var labelBaselineOffset: Float = -14
   /// Target icon height in pixels. If set, icons are scaled to this height preserving aspect.
   var targetIconHeight: Float? = 32
 
+  @inline(__always) private func atlasForIconName(_ name: String) -> AtlasImageRenderer? {
+    if name.hasPrefix("keyboard") || name.hasPrefix("mouse") { return kmAtlas }
+    if name.hasPrefix("playstation") { return psAtlas }
+    if name.hasPrefix("xbox") { return xbAtlas }
+    return nil
+  }
+
   @inline(__always) private func iconDrawSize(_ name: String) -> (w: Float, h: Float)? {
-    guard let sz = atlas.scaledSpriteSize(name: name) else { return nil }
+    guard let sz = atlasForIconName(name)?.scaledSpriteSize(name: name) else { return nil }
     if let h = targetIconHeight { return (sz.w * (h / sz.h), h) }
     return (sz.w, sz.h)
   }
@@ -49,10 +59,8 @@ final class InputPromptsRenderer {
   /// Does a single icon name match the given input source by prefix?
   @inline(__always) private func iconMatches(_ iconName: String, source: InputSource) -> Bool {
     switch source {
-    case .keyboardMouse:
-      return iconName.hasPrefix("keyboard_") || iconName.hasPrefix("mouse_")
-    case .playstation, .xbox:
-      return iconName.hasPrefix("\(source.rawValue)_")
+    case .keyboardMouse: iconName.hasPrefix("keyboard") || iconName.hasPrefix("mouse")
+    case .playstation, .xbox: iconName.hasPrefix(source.rawValue)
     }
   }
 
@@ -71,10 +79,7 @@ final class InputPromptsRenderer {
     return nil
   }
 
-  init(
-    atlas: AtlasImageRenderer, labelFontName: String = "Determination", labelPx: Float = 24
-  ) {
-    self.atlas = atlas
+  init(labelFontName: String = "Creato Display Bold", labelPx: Float = 24) {
     self.text = TextRenderer(labelFontName, labelPx)!
   }
 
@@ -121,7 +126,9 @@ final class InputPromptsRenderer {
       for (i, name) in row.iconNames.enumerated() {
         if let drawSize = iconDrawSize(name) {
           let dy = y + iconYOffset + (maxIconHeight - drawSize.h) * 0.5
-          atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          if let atlas = atlasForIconName(name) {
+            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          }
           iconX += drawSize.w
           if i + 1 < row.iconNames.count { iconX += iconSpacing }
         }
@@ -204,7 +211,9 @@ final class InputPromptsRenderer {
       for (i, name) in row.iconNames.enumerated() {
         if let drawSize = iconDrawSize(name) {
           let dy = y + iconYOffset + (m.maxIconHeight - drawSize.h) * 0.5
-          atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          if let atlas = atlasForIconName(name) {
+            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          }
           iconX += drawSize.w
           if i + 1 < row.iconNames.count { iconX += iconSpacing }
         }
@@ -268,7 +277,9 @@ final class InputPromptsRenderer {
       for (i, name) in g.iconNames.enumerated() {
         if let drawSize = iconDrawSize(name) {
           let dy = iconY + (maxIconHeight - drawSize.h) * 0.5
-          atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          if let atlas = atlasForIconName(name) {
+            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          }
           iconX += drawSize.w
           if i + 1 < g.iconNames.count { iconX += iconSpacing }
         }
@@ -350,7 +361,9 @@ final class InputPromptsRenderer {
       for (i, name) in g.iconNames.enumerated() {
         if let drawSize = iconDrawSize(name) {
           let dy = iconY + (m.maxIconHeight - drawSize.h) * 0.5
-          atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          if let atlas = atlasForIconName(name) {
+            atlas.drawScaled(name: name, x: iconX, y: dy, windowSize: windowSize, targetSize: (drawSize.w, drawSize.h))
+          }
           iconX += drawSize.w
           if i + 1 < g.iconNames.count { iconX += iconSpacing }
         }
