@@ -13,9 +13,9 @@ let HEIGHT = 720
 
 //YourApp.main()
 
-#if DEBUG
-Bundle(path: "/Applications/InjectionIII.app/Contents/Resources/macOSInjection.bundle")?.load()
-#endif
+//#if DEBUG
+//Bundle(path: "/Applications/InjectionIII.app/Contents/Resources/macOSInjection.bundle")?.load()
+//#endif
 
 LoggingSystem.bootstrap { LoggingOSLog(label: $0) }
 sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
@@ -42,14 +42,16 @@ var requestScreenshot = false
 
 var config: Config { .current }
 
-// Render loop selection (no null state)
 let loops: [RenderLoop] = [
   //
   MainLoop(),
-  //CalloutDemo(),
+  TextDemo(),
+  DocumentDemo(),
+  CalloutDemo(),
   InputPromptsDemo(),
   FontsDemo()
 ]
+
 var loopCount = loops.count
 //var currentLoopIndex = 0
 var activeLoop: RenderLoop = loops[config.currentLoopIndex]

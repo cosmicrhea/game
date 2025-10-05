@@ -2,8 +2,8 @@ import Foundation
 
 final class FontsDemo: RenderLoop {
 
-  private let fontRenderers: [(TextRenderer, FontLibrary.ResolvedFont)] = FontLibrary.availableFonts
-    .compactMap { resolvedFont -> (TextRenderer, FontLibrary.ResolvedFont)? in
+  private let fontRenderers: [(TextRenderer, Font.ResolvedFont)] = Font.availableFonts
+    .compactMap { resolvedFont -> (TextRenderer, Font.ResolvedFont)? in
       guard let renderer = TextRenderer(resolvedFont.displayName) else { return nil }
       return (renderer, resolvedFont)
     }
@@ -51,6 +51,3 @@ final class FontsDemo: RenderLoop {
     }
   }
 }
-
-// Color(0.863, 0.863, 0.808)
-// Color(0.278, 0.247, 0.341)

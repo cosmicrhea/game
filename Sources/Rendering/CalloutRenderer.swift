@@ -138,7 +138,7 @@ final class CalloutRenderer {
     }()
 
     // Apply animation: only the callout background fades, content slides
-    let center = baseCenter  // Background callout stays in place
+//    let center = baseCenter  // Background callout stays in place
 
     // Configure fades
     let fadeWidth = max(0, fadeWidthRatio) * w

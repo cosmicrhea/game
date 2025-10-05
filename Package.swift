@@ -20,7 +20,9 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
     .package(url: "https://github.com/chrisaljoudi/swift-log-oslog", from: "0.2.1"),
     .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
-    .package(url: "https://github.com/krzysztofzablocki/Inject.git", from: "1.2.4"),
+    .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
+    //    .package(url: "https://github.com/AdaEngine/msdf-atlas-gen", branch: "master"),
+    //    .package(url: "https://github.com/EvgenijLutz/HarfBuzz", branch: "main"),
 
     .package(path: "../glass-deps/assimp"),
     .package(path: "../glass-deps/gl"),
@@ -28,9 +30,6 @@ let package = Package(
     .package(path: "../glass-deps/glfw-swift"),
     .package(path: "../glass-deps/stb-truetype"),
     // .package(path: "../glass-deps/swift-cross-ui"),
-
-    // .package(path: "../glass-deps/pango"),
-    // .package(url: "https://github.com/rhx/SwiftPango", branch: "main"),
   ],
 
   targets: [
@@ -50,9 +49,8 @@ let package = Package(
         .product(name: "GLFW", package: "glfw-swift"),
         .product(name: "Assimp", package: "assimp"),
         .product(name: "STBTrueType", package: "stb-truetype"),
-
-        //        .product(name: "Pango", package: "pango"),
-        //        .product(name: "Pango", package: "SwiftPango"),
+        //.product(name: "MSDFAtlasGen", package: "msdf-atlas-gen"),
+        //.product(name: "HarfBuzz", package: "HarfBuzz"),
       ],
 
       path: "./",
@@ -70,19 +68,17 @@ let package = Package(
         .copy("Assets/icon~masked.webp"),
       ],
 
-      
       cSettings: [
         .define("GL_SILENCE_DEPRECATION", .when(platforms: [.macOS])),
         .define("GLES_SILENCE_DEPRECATION", .when(platforms: [.iOS, .tvOS])),
-        .define("EMIT_FRONTEND_COMMAND_LINES", .when(platforms: [.macOS], configuration: .debug)),
       ],
 
       swiftSettings: [
-        .define("EMIT_FRONTEND_COMMAND_LINES", .when(platforms: [.macOS], configuration: .debug)),
+        .define("EMIT_FRONTEND_COMMAND_LINES", .when(platforms: [.macOS], configuration: .debug))
       ],
 
       linkerSettings: [
-        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug)),
+        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
       ]
     )
   ]

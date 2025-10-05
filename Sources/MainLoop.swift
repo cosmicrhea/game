@@ -21,7 +21,7 @@ final class MainLoop: RenderLoop {
   private let calloutRenderer = CalloutRenderer()
   private let calloutRenderer2 = CalloutRenderer()
   private let inputPrompts: InputPromptsRenderer
-  private let chevron = ImageRenderer("UI/Icons/chevron.png")
+  private let chevron = ImageRenderer("UI/Icons/Callouts/chevron.png")
 
   // Objective visibility state
   private var objectiveVisible: Bool = true

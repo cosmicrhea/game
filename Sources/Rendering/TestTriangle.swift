@@ -35,11 +35,6 @@ final class TestTriangle {
     glEnableVertexAttribArray(0)
   }
 
-  func draw() {
-    glBindVertexArray(vertexArray)
-    glDrawArrays(GL_TRIANGLES, 0, 3)
-  }
-
   deinit {
     if vertexBuffer != 0 {
       var b = vertexBuffer
@@ -49,5 +44,10 @@ final class TestTriangle {
       var a = vertexArray
       glDeleteVertexArrays(1, &a)
     }
+  }
+
+  func draw() {
+    glBindVertexArray(vertexArray)
+    glDrawArrays(GL_TRIANGLES, 0, 3)
   }
 }

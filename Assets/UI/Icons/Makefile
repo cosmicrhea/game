@@ -2,7 +2,8 @@
 SHELL := /bin/zsh
 
 SIZE := 64
-SVG := $(wildcard *.svg)
+# Find all SVG files recursively in subdirectories
+SVG := $(shell find . -name "*.svg" -type f)
 PNG := $(SVG:.svg=.png)
 
 .PHONY: all clean
@@ -14,4 +15,4 @@ all: $(PNG)
 	magick "$@" -filter Lanczos -resize $(SIZE)x$(SIZE) -fill white -opaque black "$@"
 
 clean:
-	rm -f $(PNG)
+	find . -name "*.png" -type f -delete

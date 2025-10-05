@@ -13,16 +13,16 @@ final class CalloutDemo: RenderLoop {
   private let verticalGap: Float = 16
 
   @MainActor func onAttach(window: GLFWWindow) {
-    // Discover all PNG icons in the bundled resources under UI/Icons
+    // Discover all PNG icons in the bundled resources under UI/Icons/Callouts
     let fm = FileManager.default
-    if let baseURL = Bundle.module.resourceURL?.appendingPathComponent("UI/Icons", isDirectory: true),
+    if let baseURL = Bundle.module.resourceURL?.appendingPathComponent("UI/Icons/Callouts", isDirectory: true),
       let contents = try? fm.contentsOfDirectory(at: baseURL, includingPropertiesForKeys: nil)
     {
       let pngs = contents.filter { $0.pathExtension.lowercased() == "png" }
       let names = pngs.map { $0.lastPathComponent }.sorted()
       iconEntries = names.map { filename in
         let nameWithoutExt = filename.replacingOccurrences(of: ".png", with: "")
-        return (name: nameWithoutExt, image: ImageRenderer("UI/Icons/\(filename)"))
+        return (name: nameWithoutExt, image: ImageRenderer("UI/Icons/Callouts/\(filename)"))
       }
     }
   }
