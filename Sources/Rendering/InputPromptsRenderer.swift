@@ -425,4 +425,40 @@ final class InputPromptsRenderer {
     }
     drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, anchor: anchor)
   }
+
+  /// Measure the actual size of a horizontal strip for the given prompts and input source
+  func measureHorizontal(
+    prompts: OrderedDictionary<String, [[String]]>,
+    inputSource: InputSource
+  ) -> (width: Float, height: Float) {
+    var groups: [Row] = []
+    for (label, options) in prompts {
+      if let icons = chooseIcons(for: inputSource, from: options) {
+        groups.append(Row(iconNames: icons, label: label))
+      }
+    }
+
+    // Measure total width and max height
+    var totalWidth: Float = 0
+    var maxHeight: Float = 0
+
+    for (gi, g) in groups.enumerated() {
+      var iconsWidth: Float = 0
+      var maxIconHeight: Float = 0
+      for (i, name) in g.iconNames.enumerated() {
+        if let sz = iconDrawSize(name) {
+          iconsWidth += sz.w
+          maxIconHeight = max(maxIconHeight, sz.h)
+          if i + 1 < g.iconNames.count { iconsWidth += iconSpacing }
+        }
+      }
+      let labelWidth = text.measureWidth(g.label)
+      let height = max(maxIconHeight, text.scaledLineHeight)
+      maxHeight = max(maxHeight, height)
+      totalWidth += iconsWidth + gapBetweenIconsAndLabel + labelWidth
+      if gi + 1 < groups.count { totalWidth += groupSpacing }
+    }
+
+    return (width: totalWidth, height: maxHeight)
+  }
 }

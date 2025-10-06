@@ -21,17 +21,17 @@ extension InputPromptsRenderer {
       "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],
 
-    "Document Viewer": [
-      "Flip Pages": [["keyboard_arrows_horizontal"], ["xbox_dpad_horizontal"], ["playstation_dpad_horizontal"]],
-      // "Continue": [["keyboard_tab_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
-      "Continue": [["mouse_left"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
-    ],
+//    "Document Viewer": [
+//      "Flip Pages": [["keyboard_arrows_horizontal"], ["xbox_dpad_horizontal"], ["playstation_dpad_horizontal"]],
+//      // "Continue": [["keyboard_tab_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+//      "Continue": [["mouse_left"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+//    ],
 
-    "Model Viewer": [
-      "Hide Controls": [["keyboard_z"], ["xbox_button_menu"], ["playstation5_button_options"]],
-      // "Close": [["keyboard_tab_icon"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
-      "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
-    ],
+//    "Model Viewer": [
+//      "Hide Controls": [["keyboard_z"], ["xbox_button_menu"], ["playstation5_button_options"]],
+//      // "Close": [["keyboard_tab_icon"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
+//      "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
+//    ],
 
     "Item Viewer": [
       "Rotate": [["mouse_move"], ["xbox_stick_l"], ["playstation_stick_l"]],
