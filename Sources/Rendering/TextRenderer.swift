@@ -67,4 +67,35 @@ public final class TextRenderer {
       outlineThickness: outlineThickness
     )
   }
+
+  /// Draw attributed text with color support
+  public func draw(
+    _ attributedText: AttributedText, at origin: (x: Float, y: Float), windowSize: (w: Int32, h: Int32),
+    defaultColor: (Float, Float, Float, Float) = (1, 1, 1, 1),
+    scale overrideScale: Float? = nil,
+    wrapWidth: Float? = nil,
+    anchor: Anchor = .topLeft,
+    outlineColor: (Float, Float, Float, Float)? = nil,
+    outlineThickness: Float = 0.0
+  ) {
+    let modularAnchor: ModularTextRenderer.Anchor = {
+      switch anchor {
+      case .topLeft: return .topLeft
+      case .bottomLeft: return .bottomLeft
+      case .baselineLeft: return .baselineLeft
+      }
+    }()
+
+    newRenderer.draw(
+      attributedText,
+      at: origin,
+      windowSize: windowSize,
+      defaultColor: defaultColor,
+      scale: overrideScale,
+      wrapWidth: wrapWidth,
+      anchor: modularAnchor,
+      outlineColor: outlineColor,
+      outlineThickness: outlineThickness
+    )
+  }
 }

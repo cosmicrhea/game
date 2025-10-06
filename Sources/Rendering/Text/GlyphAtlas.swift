@@ -55,11 +55,11 @@ public final class GlyphAtlas {
 
   /// Build a new glyph atlas for the given text and font
   static func build(for text: String, font: TrueTypeFont, padding: Int32 = 2) -> GlyphAtlas? {
-    // Collect unique codepoints from the text
+    // Collect unique codepoints from the text using Unicode scalars
     var codepoints: [Int32] = []
     var seen = Set<Int32>()
-    for byte in text.utf8 {
-      let codepoint = Int32(byte)
+    for scalar in text.unicodeScalars {
+      let codepoint = Int32(scalar.value)
       if seen.insert(codepoint).inserted {
         codepoints.append(codepoint)
       }

@@ -15,7 +15,7 @@ final class FontsDemo: RenderLoop {
     for (renderer, resolvedFont) in fontRenderers {
       yCursor += renderer.baselineFromTop
       renderer.draw(
-        resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog",
+        resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog  — ° æøå",
         at: (24, yCursor),
         windowSize: (Int32(WIDTH), Int32(HEIGHT))
       )

@@ -26,6 +26,7 @@ GLFWSession.onReceiveError = { error in logger.error("GLFW: \(error)") }
 GLFWWindow.hints.contextVersion = (4, 1)
 GLFWWindow.hints.openGLProfile = .core
 GLFWWindow.hints.openGLCompatibility = .forward
+GLFWWindow.hints.retinaFramebuffer = false
 
 let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 //window.nsWindow?.styleMask.insert(.fullSizeContentView)
@@ -45,6 +46,7 @@ var config: Config { .current }
 let loops: [RenderLoop] = [
   //
   MainLoop(),
+  AttributedTextDemo(),
   TextDemo(),
   DocumentDemo(),
   CalloutDemo(),

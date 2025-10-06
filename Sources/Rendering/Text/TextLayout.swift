@@ -49,12 +49,12 @@ public final class TextLayout {
   /// Measure the width of a string
   func measureWidth(_ text: String) -> Float {
     var width: Float = 0
-    let bytes = Array(text.utf8)
+    let scalars = Array(text.unicodeScalars)
     var i = 0
 
-    while i < bytes.count {
-      let codepoint = Int32(bytes[i])
-      let next: Int32? = (i + 1 < bytes.count) ? Int32(bytes[i + 1]) : nil
+    while i < scalars.count {
+      let codepoint = Int32(scalars[i].value)
+      let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
       width += font.getAdvance(for: codepoint, next: next) * scale
       i += 1
     }
