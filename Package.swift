@@ -18,9 +18,10 @@ let package = Package(
   dependencies: [
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
-    .package(url: "https://github.com/chrisaljoudi/swift-log-oslog", from: "0.2.1"),
     .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
-    .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
+
+//      .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
+
     //    .package(url: "https://github.com/AdaEngine/msdf-atlas-gen", branch: "master"),
     //    .package(url: "https://github.com/EvgenijLutz/HarfBuzz", branch: "main"),
 
@@ -39,16 +40,17 @@ let package = Package(
       dependencies: [
         .product(name: "Logging", package: "swift-log"),
         .product(name: "Collections", package: "swift-collections"),
-        .product(name: "LoggingOSLog", package: "swift-log-oslog"),
         .product(name: "ImageFormats", package: "swift-image-formats"),
         // .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
         // .product(name: "DefaultBackend", package: "swift-cross-ui"),
-        .product(name: "Inject", package: "Inject"),
+//        .product(name: "Inject", package: "Inject"),
+
         .product(name: "GL", package: "gl"),
         .product(name: "GLMath", package: "gl-math"),
         .product(name: "GLFW", package: "glfw-swift"),
         .product(name: "Assimp", package: "assimp"),
         .product(name: "STBTrueType", package: "stb-truetype"),
+
         //.product(name: "MSDFAtlasGen", package: "msdf-atlas-gen"),
         //.product(name: "HarfBuzz", package: "HarfBuzz"),
       ],

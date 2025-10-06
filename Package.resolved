@@ -1,15 +1,6 @@
 {
-  "originHash" : "e60c2f87619933169ac068f93f4171557aff794ad2a6552cf52a4d7d8d6b00dc",
+  "originHash" : "b6b6ba2426493360c0bab2669b57b0c564b28f07f2c2d5d694a5f9741ced3d54",
   "pins" : [
-    {
-      "identity" : "inject",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/krzysztofzablocki/Inject.git",
-      "state" : {
-        "revision" : "728c56639ecb3df441d51d5bc6747329afabcfc9",
-        "version" : "1.5.2"
-      }
-    },
     {
       "identity" : "jpeg",
       "kind" : "remoteSourceControl",
@@ -62,15 +53,6 @@
       "state" : {
         "revision" : "3d8596ed08bd13520157f0355e35caed215ffbfa",
         "version" : "1.6.3"
-      }
-    },
-    {
-      "identity" : "swift-log-oslog",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/chrisaljoudi/swift-log-oslog.git",
-      "state" : {
-        "revision" : "176d41d46429e79c806333025b226e0c50a0c602",
-        "version" : "0.2.2"
       }
     },
     {

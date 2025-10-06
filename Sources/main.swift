@@ -17,7 +17,7 @@ let HEIGHT = 720
 //Bundle(path: "/Applications/InjectionIII.app/Contents/Resources/macOSInjection.bundle")?.load()
 //#endif
 
-LoggingSystem.bootstrap { LoggingOSLog(label: $0) }
+LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
 try! GLFWSession.initialize()
