@@ -29,18 +29,14 @@ final class MainLoop: RenderLoop {
   private let program = try! GLProgram("Common/basic 2")
 
   init() {
-    // Triangle geometry moved into TestTriangle
-
-    // Load Assimp mesh
-    let scenePath = Bundle.module.path(forResource: "Items/old_key", ofType: "glb")!
+    let scenePath = Bundle.module.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
     let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
     print("\(scene.rootNode)")
 
-    self.renderers = scene.meshes
+    renderers = scene.meshes
       .filter { $0.numberOfVertices > 0 }
       .map { MeshRenderer(scene: scene, mesh: $0) }
 
-    // Input prompts
     inputPrompts = InputPromptsRenderer()
   }
 
@@ -75,13 +71,9 @@ final class MainLoop: RenderLoop {
   }
 
   @MainActor func draw() {
-    // Matrices
-    let projection = GLMath.perspective(camera.zoom, 1, 0.001, 1000.0)
-    let view = camera.getViewMatrix()
-
     program.use()
-    program.setMat4("projection", value: projection)
-    program.setMat4("view", value: view)
+    program.setMat4("projection", value: GLMath.perspective(camera.zoom, 1, 0.001, 1000.0))
+    program.setMat4("view", value: camera.getViewMatrix())
     program.setMat4("model", value: mat4(1))
 
     // Triangle
@@ -90,7 +82,12 @@ final class MainLoop: RenderLoop {
     // Meshes
     renderers.forEach { $0.draw() }
 
-    // Objective callout
+    //drawObjectiveCallout()
+    //drawDebugInputPrompts()
+    drawDebugText()
+  }
+
+  @MainActor func drawObjectiveCallout() {
     calloutRenderer.draw(
       windowSize: (Int32(WIDTH), Int32(HEIGHT)),
       size: (520, 44),
@@ -101,23 +98,9 @@ final class MainLoop: RenderLoop {
       label: "Find the triangle and key",
       visible: objectiveVisible
     )
+  }
 
-    //    // Input prompts callout
-    //    calloutRenderer2.draw(
-    //      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-    //      size: (Float(WIDTH), 80),
-    //      position: (Float(WIDTH) - 520, -2),
-    //      anchor: .bottomLeft,
-    //      fade: .left,
-    //    )
-
-    //    // Input prompts (bottom-right horizontal strip)
-    //    let groups: [InputPromptsRenderer.Row] = [
-    //      .init(iconNames: ["mouse_move"], label: "Rotate"),
-    //      .init(iconNames: ["mouse_scroll_vertical"], label: "Zoom"),
-    //      .init(iconNames: ["keyboard_r"], label: "Reset"),
-    //      .init(iconNames: ["keyboard_tab_icon"], label: "Close"),
-    //    ]
+  @MainActor func drawDebugInputPrompts() {
     inputPrompts.drawHorizontal(
       prompts: InputPromptsRenderer.groups["Item Viewer"]!,
       inputSource: .keyboardMouse,
@@ -125,12 +108,14 @@ final class MainLoop: RenderLoop {
       origin: (Float(WIDTH) - 32, 24),
       anchor: .bottomRight
     )
+  }
 
-    // Debug label (top-left)
+  @MainActor func drawDebugText() {
     let debugText = String(
       format: "%.1fx @ %@; %.1f; %.1f",
       camera.zoom, StringFromGLMathVec3(camera.position), camera.yaw, camera.pitch
     )
+
     determination.draw(
       debugText,
       at: (24, Float(HEIGHT) - 24),

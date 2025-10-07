@@ -1,14 +1,41 @@
+import ArgumentParser
 import Foundation
 import GL
 import GLFW
 import GLMath
-import ImageFormats
 import Logging
 import unistd
+
 //@_exported import Inject
 
 let WIDTH = 1280
 let HEIGHT = 720
+
+print(
+  """
+    
+      ▄▀  █    ██      ▄▄▄▄▄    ▄▄▄▄▄         ▄▀  ██   █▀▄▀█ ▄███▄  
+    ▄▀    █    █ █    █     ▀▄ █     ▀▄     ▄▀    █ █  █ █ █ █▀   ▀ 
+    █ ▀▄  █    █▄▄█ ▄  ▀▀▀▀▄ ▄  ▀▀▀▀▄       █ ▀▄  █▄▄█ █ ▄ █ ██▄▄   
+    █   █ ███▄ █  █  ▀▄▄▄▄▀   ▀▄▄▄▄▀        █   █ █  █ █   █ █▄   ▄▀
+     ███      ▀   █                          ███     █    █  ▀███▀  
+                 █                                  █    ▀          
+                ▀                                  ▀                
+  """
+)
+
+struct CLIOptions: ParsableArguments {
+  @Option(help: "Select demo by name, e.g. fonts, physics.")
+  var demo: String?
+
+  @Flag(help: "Take a screenshot after 1 second.")
+  var screenshot: Bool = false
+
+  @Flag(help: "Exit after 2 second.")
+  var exit: Bool = false
+}
+
+let cli = CLIOptions.parseOrExit()
 
 //YourApp.main()
 
@@ -42,6 +69,8 @@ window.mouse.setCursor(to: dotCursor)
 var polygonMode = GL_FILL
 var showDebugText = true
 var requestScreenshot = false
+var scheduleScreenshotAt: Double? = nil
+var scheduleExitAt: Double? = nil
 
 var config: Config { .current }
 
@@ -59,8 +88,21 @@ let loops: [RenderLoop] = [
 
 var loopCount = loops.count
 //var currentLoopIndex = 0
+if let demoArg = cli.demo?.lowercased() {
+  if let found = loops.enumerated().first(where: { index, loop in
+    let typeName = String(describing: type(of: loop)).lowercased()
+    let normalized = typeName.replacingOccurrences(of: "demo", with: "")
+    return typeName == demoArg || normalized == demoArg || typeName.contains(demoArg) || normalized.contains(demoArg)
+  })?.offset {
+    config.currentLoopIndex = found
+  }
+}
 var activeLoop: RenderLoop = loops[config.currentLoopIndex]
 activeLoop.onAttach(window: window)
+
+// Schedule CLI actions relative to current time
+if cli.screenshot { scheduleScreenshotAt = GLFWSession.currentTime + 1.0 }
+if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
 
 @MainActor func cycleLoops(_ step: Int) {
   config.currentLoopIndex = (config.currentLoopIndex + step + loopCount) % loopCount
@@ -151,9 +193,18 @@ while !window.shouldClose {
   activeLoop.update(deltaTime: deltaTime)
   activeLoop.draw()
 
+  if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
+    requestScreenshot = true
+    scheduleScreenshotAt = nil
+  }
+
   if requestScreenshot {
     saveScreenshot(width: Int32(WIDTH), height: Int32(HEIGHT))
     requestScreenshot = false
+  }
+
+  if let t = scheduleExitAt, GLFWSession.currentTime >= t {
+    break
   }
 
   window.swapBuffers()

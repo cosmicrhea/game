@@ -39,8 +39,8 @@ final class InputPromptsDemo: RenderLoop {
     }
 
     // Pack rectangles using STBRectPack
-    let marginX: Float = 32
-    let marginY: Float = 24
+    let marginX: Float = 56
+    let marginY: Float = 12
     let spacing: Float = 16  // Spacing between rectangles
     let binWidth = WIDTH - Int(marginX * 2)  // Leave margin on both sides
     let binHeight = HEIGHT - Int(marginY * 2)

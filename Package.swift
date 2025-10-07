@@ -67,12 +67,18 @@ let package = Package(
 
       path: "./",
 
+      exclude: [
+        "Sources/Assets",
+        "NOTES.md",
+      ],
+
       resources: [
         .copy("Assets/Actors"),
         .copy("Assets/Common"),
         .copy("Assets/Effects"),
         .copy("Assets/Fonts"),
         .copy("Assets/Items"),
+        .copy("Assets/Scenes"),
         .copy("Assets/UI"),
       ],
 
