@@ -22,14 +22,11 @@ final class InputPromptsDemo: RenderLoop {
   @MainActor func draw() {
     let ws = (Int32(WIDTH), Int32(HEIGHT))
 
-    // Test rectangle in top-left corner to verify debug drawing works
-    Debug.drawRect(x: 10, y: 10, width: 100, height: 50, windowSize: ws)
-
     // Layout constants
     let rowStep: Float = 40
     let rowsPerGroup = Float(InputSource.allCases.count)
     let groupHeight = rowStep * rowsPerGroup
-    let titleAboveOffset: Float = 4
+    let titleAboveOffset: Float = -12
     let padding: Float = 16
 
     // Collect all groups and measure their sizes
@@ -42,15 +39,16 @@ final class InputPromptsDemo: RenderLoop {
     }
 
     // Pack rectangles using STBRectPack
-    let margin: Float = 16
-    let spacing: Float = 8  // Spacing between rectangles
-    let binWidth = WIDTH - Int(margin * 2)  // Leave margin on both sides
-    let binHeight = HEIGHT - Int(margin * 2)
+    let marginX: Float = 32
+    let marginY: Float = 24
+    let spacing: Float = 16  // Spacing between rectangles
+    let binWidth = WIDTH - Int(marginX * 2)  // Leave margin on both sides
+    let binHeight = HEIGHT - Int(marginY * 2)
 
     // Add spacing to each rectangle size for packing
     let rectSizes = groupData.map { (width: Int($0.width + spacing), height: Int($0.height + spacing)) }
 
-    let (packedRects, allPacked) = RectPacking.pack(
+    let (packedRects, _) = RectPacking.pack(
       binWidth: binWidth,
       binHeight: binHeight,
       sizes: rectSizes,
@@ -58,8 +56,8 @@ final class InputPromptsDemo: RenderLoop {
     )
 
     // Find the total height of the packed block to position it from bottom
-    let maxPackedY = packedRects.map { $0.y + Int(groupData[$0.id].height) }.max() ?? 0
-    let totalPackedHeight = maxPackedY
+    //    let maxPackedY = packedRects.map { $0.y + Int(groupData[$0.id].height) }.max() ?? 0
+    let translateY = marginY
 
     // Draw each group at its packed position
     for (index, group) in groupData.enumerated() {
@@ -68,9 +66,9 @@ final class InputPromptsDemo: RenderLoop {
       guard packed.wasPacked else { continue }
 
       // Convert packed coordinates to screen coordinates (bottom-right aligned)
-      // Position the entire packed block at the bottom-right of the screen
-      let screenX = Float(WIDTH) - margin - Float(packed.x + Int(group.width))
-      let screenY = Float(HEIGHT) - margin - Float(totalPackedHeight - packed.y)
+      // Translate the entire packed block to bottom-right
+      let screenX = Float(WIDTH) - marginX - Float(packed.x + Int(group.width))
+      let screenY = translateY + Float(packed.y)
 
       // Draw title
       let titleWidth = titleText.measureWidth(group.title)
@@ -80,7 +78,7 @@ final class InputPromptsDemo: RenderLoop {
         group.title, at: (titleX, titleBaselineY), windowSize: ws, color: (0.75, 0.75, 0.75, 1), anchor: .baselineLeft)
 
       // Draw input prompts for each source
-      for (i, source) in InputSource.allCases.reversed().enumerated() {
+      for (i, source) in InputSource.allCases.enumerated() {
         let y = screenY + Float(i) * rowStep
         let rightX = screenX + Float(group.width)
         promptRenderer.drawHorizontal(

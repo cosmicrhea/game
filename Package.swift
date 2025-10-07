@@ -16,19 +16,22 @@ let package = Package(
   ],
 
   dependencies: [
-    .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
+    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
+    .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
+
     .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
 
-    //      .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
+    // .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
 
-    //    .package(url: "https://github.com/AdaEngine/msdf-atlas-gen", branch: "master"),
-    //    .package(url: "https://github.com/EvgenijLutz/HarfBuzz", branch: "main"),
+    // .package(url: "https://github.com/AdaEngine/msdf-atlas-gen", branch: "master"),
+    // .package(url: "https://github.com/EvgenijLutz/HarfBuzz", branch: "main"),
 
     .package(path: "../glass-deps/assimp"),
     .package(path: "../glass-deps/gl"),
     .package(path: "../glass-deps/gl-math"),
     .package(path: "../glass-deps/glfw-swift"),
+    .package(path: "../glass-deps/jolt"),
     .package(path: "../glass-deps/stb-rect-pack"),
     .package(path: "../glass-deps/stb-truetype"),
     // .package(path: "../glass-deps/swift-cross-ui"),
@@ -39,22 +42,27 @@ let package = Package(
       name: "Glass",
 
       dependencies: [
-        .product(name: "Logging", package: "swift-log"),
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "Collections", package: "swift-collections"),
-        .product(name: "ImageFormats", package: "swift-image-formats"),
-        // .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
-        // .product(name: "DefaultBackend", package: "swift-cross-ui"),
-        //        .product(name: "Inject", package: "Inject"),
+        .product(name: "Logging", package: "swift-log"),
 
+        .product(name: "ImageFormats", package: "swift-image-formats"),
+
+        // .product(name: "Inject", package: "Inject"),
+
+        // .product(name: "MSDFAtlasGen", package: "msdf-atlas-gen"),
+        // .product(name: "HarfBuzz", package: "HarfBuzz"),
+
+        .product(name: "Assimp", package: "assimp"),
         .product(name: "GL", package: "gl"),
         .product(name: "GLMath", package: "gl-math"),
         .product(name: "GLFW", package: "glfw-swift"),
-        .product(name: "Assimp", package: "assimp"),
+        .product(name: "Jolt", package: "jolt"),
         .product(name: "STBRectPack", package: "stb-rect-pack"),
         .product(name: "STBTrueType", package: "stb-truetype"),
 
-        //.product(name: "MSDFAtlasGen", package: "msdf-atlas-gen"),
-        //.product(name: "HarfBuzz", package: "HarfBuzz"),
+        // .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
+        // .product(name: "DefaultBackend", package: "swift-cross-ui"),
       ],
 
       path: "./",
@@ -66,10 +74,6 @@ let package = Package(
         .copy("Assets/Fonts"),
         .copy("Assets/Items"),
         .copy("Assets/UI"),
-        .copy("Assets/icon.png"),
-        .copy("Assets/icon~masked.png"),
-        .copy("Assets/icon.webp"),
-        .copy("Assets/icon~masked.webp"),
       ],
 
       cSettings: [

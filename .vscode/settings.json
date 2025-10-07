@@ -1,14 +1,23 @@
 {
   "cSpell.words": [
+    "assimp",
     "Assimp",
     "Creato",
     "dpad",
     "gaussian",
+    "GLES",
+    "glfw",
     "GLFW",
+    "Harf",
     "Lsizei",
+    "msdf",
+    "MSDF",
     "playstation",
+    "rect",
+    "rects",
     "squircle",
     "unistd",
-    "xbox"
+    "xbox",
+    "Xlinker"
   ]
 }

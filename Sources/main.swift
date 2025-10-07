@@ -4,9 +4,8 @@ import GLFW
 import GLMath
 import ImageFormats
 import Logging
-import LoggingOSLog
 import unistd
-@_exported import Inject
+//@_exported import Inject
 
 let WIDTH = 1280
 let HEIGHT = 720
@@ -34,8 +33,11 @@ let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
-window.setIcon(Image("icon~masked.webp"))
-window.mouse.cursorMode = .disabled
+window.setIcon(Image("UI/AppIcon/icon~masked.webp"))
+//window.mouse.cursorMode = .disabled
+let dotCursorImage = Image("UI/Cursors/dot_large.png")
+let dotCursor = Mouse.Cursor.custom(dotCursorImage, center: Point(dotCursorImage.width, dotCursorImage.height) / 2)
+window.mouse.setCursor(to: dotCursor)
 
 var polygonMode = GL_FILL
 var showDebugText = true
@@ -46,12 +48,13 @@ var config: Config { .current }
 let loops: [RenderLoop] = [
   //
   MainLoop(),
+  InputPromptsDemo(),
   AttributedTextDemo(),
   TextDemo(),
   DocumentDemo(),
   CalloutDemo(),
-  InputPromptsDemo(),
-  FontsDemo()
+  FontsDemo(),
+  PhysicsDemo(),
 ]
 
 var loopCount = loops.count
