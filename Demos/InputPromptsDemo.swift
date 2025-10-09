@@ -4,7 +4,7 @@ import STBRectPack
 
 final class InputPromptsDemo: RenderLoop {
   private lazy var promptRenderer = InputPrompts()
-  private lazy var titleText = TextRenderer("Creato Display Bold", 18)!
+  private let titleStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 18, color: .white)
 
   // Helper function to measure the actual width of a group
   private func measureGroupWidth(prompts: OrderedDictionary<String, [[String]]>) -> Float {
@@ -34,7 +34,7 @@ final class InputPromptsDemo: RenderLoop {
 
     for (title, prompts) in InputPromptGroups.groups.reversed() {
       let measuredWidth = measureGroupWidth(prompts: prompts)
-      let totalHeight = groupHeight + titleAboveOffset + titleText.scaledLineHeight + padding
+      let totalHeight = groupHeight + titleAboveOffset + titleStyle.fontSize * 1.2 + padding
       groupData.append((title: title, prompts: prompts, width: measuredWidth, height: totalHeight))
     }
 
@@ -71,11 +71,14 @@ final class InputPromptsDemo: RenderLoop {
       let screenY = translateY + Float(packed.y)
 
       // Draw title
-      let titleWidth = titleText.measureWidth(group.title)
+      let titleWidth = Float(group.title.count) * titleStyle.fontSize * 0.6  // Approximate width
       let titleX = screenX + Float(group.width) - titleWidth
       let titleBaselineY = screenY + Float(group.height) - padding
-      titleText.draw(
-        group.title, at: (titleX, titleBaselineY), windowSize: ws, color: (0.75, 0.75, 0.75, 1), anchor: .baselineLeft)
+      let titleColor = Color(red: 0.75, green: 0.75, blue: 0.75, alpha: 1.0)
+      let titleStyleWithColor = TextStyle(
+        fontName: titleStyle.fontName, fontSize: titleStyle.fontSize, color: titleColor)
+      group.title.draw(
+        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, anchor: .baselineLeft)
 
       // Draw input prompts for each source
       for (i, source) in InputSource.allCases.enumerated() {

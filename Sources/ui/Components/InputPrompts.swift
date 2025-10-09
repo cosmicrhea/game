@@ -20,10 +20,20 @@ public final class InputPrompts {
   /// Label color (R, G, B, A)
   public var labelColor: (Float, Float, Float, Float) = (1, 1, 1, 0.95)
 
-  private let text: TextRenderer
+  private let textStyle: TextStyle
 
   public init(labelFontName: String = "Creato Display Bold", labelPx: Float = 24) {
-    self.text = TextRenderer(labelFontName, labelPx)!
+    self.textStyle = TextStyle(fontName: labelFontName, fontSize: labelPx, color: .white)
+  }
+
+  private func measureTextWidth(_ text: String) -> Float {
+    // TODO: Implement proper text measurement
+    // For now, return an approximation based on character count
+    return Float(text.count) * textStyle.fontSize * 0.6
+  }
+
+  private var lineHeight: Float {
+    return textStyle.fontSize * 1.2
   }
 
   /// Does a single icon name match the given input source by prefix?
@@ -77,8 +87,8 @@ public final class InputPrompts {
           if i + 1 < g.iconNames.count { iconsWidth += iconSpacing }
         }
       }
-      let labelWidth = text.measureWidth(g.label)
-      let height = max(maxIconHeight, text.scaledLineHeight)
+      let labelWidth = measureTextWidth(g.label)
+      let height = max(maxIconHeight, lineHeight)
       maxHeight = max(maxHeight, height)
       totalWidth += iconsWidth + gapBetweenIconsAndLabel + labelWidth
       if gi + 1 < groups.count { totalWidth += groupSpacing }
@@ -100,12 +110,12 @@ public final class InputPrompts {
           if i + 1 < g.iconNames.count { iconsWidth += iconSpacing }
         }
       }
-      let groupHeight = max(maxIconHeight, text.scaledLineHeight)
+      let groupHeight = max(maxIconHeight, lineHeight)
       // Per-group vertical centering inside the strip
       let groupTop = y + (maxHeight - groupHeight) * 0.5
       let iconY = groupTop + (groupHeight - maxIconHeight) * 0.5
       let labelBaselineY =
-        groupTop + (groupHeight - text.scaledLineHeight) * 0.5 + text.baselineFromTop + labelBaselineOffset
+        groupTop + (groupHeight - lineHeight) * 0.5 + textStyle.fontSize * 0.8 + labelBaselineOffset
 
       var iconX = x
       for (i, name) in g.iconNames.enumerated() {
@@ -124,9 +134,12 @@ public final class InputPrompts {
       }
 
       x += iconsWidth + gapBetweenIconsAndLabel
-      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, color: labelColor, anchor: .baselineLeft)
+      let labelStyle = TextStyle(
+        fontName: textStyle.fontName, fontSize: textStyle.fontSize,
+        color: Color(red: labelColor.0, green: labelColor.1, blue: labelColor.2, alpha: labelColor.3))
+      g.label.draw(at: Point(x, labelBaselineY), style: labelStyle, anchor: .baselineLeft)
 
-      x += text.measureWidth(g.label)
+      x += measureTextWidth(g.label)
       if gi + 1 < groups.count { x += groupSpacing }
     }
   }
@@ -162,8 +175,8 @@ public final class InputPrompts {
           if i + 1 < g.iconNames.count { iconsWidth += iconSpacing }
         }
       }
-      let labelWidth = text.measureWidth(g.label)
-      let height = max(maxIconHeight, text.scaledLineHeight)
+      let labelWidth = measureTextWidth(g.label)
+      let height = max(maxIconHeight, lineHeight)
       maxHeight = max(maxHeight, height)
       totalWidth += iconsWidth + gapBetweenIconsAndLabel + labelWidth
       metrics.append(
@@ -195,7 +208,7 @@ public final class InputPrompts {
       let groupTop = y + (maxHeight - m.height) * 0.5
       let iconY = groupTop + (m.height - m.maxIconHeight) * 0.5
       let labelBaselineY =
-        groupTop + (m.height - text.scaledLineHeight) * 0.5 + text.baselineFromTop + labelBaselineOffset
+        groupTop + (m.height - lineHeight) * 0.5 + textStyle.fontSize * 0.8 + labelBaselineOffset
 
       var iconX = x
       for (i, name) in g.iconNames.enumerated() {
@@ -214,7 +227,10 @@ public final class InputPrompts {
       }
 
       x += m.iconsWidth + gapBetweenIconsAndLabel
-      text.draw(g.label, at: (x, labelBaselineY), windowSize: windowSize, color: labelColor, anchor: .baselineLeft)
+      let labelStyle = TextStyle(
+        fontName: textStyle.fontName, fontSize: textStyle.fontSize,
+        color: Color(red: labelColor.0, green: labelColor.1, blue: labelColor.2, alpha: labelColor.3))
+      g.label.draw(at: Point(x, labelBaselineY), style: labelStyle, anchor: .baselineLeft)
       x += m.labelWidth
       if gi + 1 < groups.count { x += groupSpacing }
     }
@@ -284,8 +300,8 @@ public final class InputPrompts {
           if i + 1 < g.iconNames.count { iconsWidth += iconSpacing }
         }
       }
-      let labelWidth = text.measureWidth(g.label)
-      let height = max(maxIconHeight, text.scaledLineHeight)
+      let labelWidth = measureTextWidth(g.label)
+      let height = max(maxIconHeight, lineHeight)
       maxHeight = max(maxHeight, height)
       totalWidth += iconsWidth + gapBetweenIconsAndLabel + labelWidth
       if gi + 1 < groups.count { totalWidth += groupSpacing }

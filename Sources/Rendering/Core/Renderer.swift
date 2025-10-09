@@ -38,7 +38,7 @@ public protocol Renderer {
   ///   - tint: Optional color tint to apply to the image.
   func drawImageRegion(textureID: UInt64, in rect: Rect, uv: Rect, tint: Color?)
 
-  // MARK: - Text (stub for now)
+  // MARK: - Text
 
   /// Draws glyphs from a font atlas.
   /// - Parameters:
@@ -46,6 +46,21 @@ public protocol Renderer {
   ///   - vertices: Buffer of vertex data for the glyphs.
   ///   - color: The color to apply to the glyphs.
   func drawGlyphs(atlasID: UInt64, vertices: UnsafeBufferPointer<Float>, color: Color)
+
+  /// Draws attributed text at the specified location.
+  /// - Parameters:
+  ///   - attributedString: The attributed string to draw.
+  ///   - origin: The point to draw the text at.
+  ///   - defaultStyle: The default text style to use for unformatted text.
+  ///   - wrapWidth: Optional width to wrap text at.
+  ///   - anchor: The anchor point for positioning.
+  func drawText(
+    _ attributedString: AttributedString,
+    at origin: Point,
+    defaultStyle: TextStyle,
+    wrapWidth: Float?,
+    anchor: TextAnchor
+  )
 
   // MARK: - Paths
 

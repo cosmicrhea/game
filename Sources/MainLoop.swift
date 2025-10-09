@@ -22,8 +22,8 @@ final class MainLoop: RenderLoop {
   private let renderers: [MeshRenderer]
 
   // UI resources
-  /// Text renderer using the Determination font.
-  private let determination = TextRenderer("Determination", 32)!
+  /// Text style using the Determination font.
+  private let determinationStyle = TextStyle(fontName: "Determination", fontSize: 32, color: .white)
   /// Callout UI component for displaying hints.
   private var callout = Callout("Find the triangle and key", icon: .chevron)
   /// Input prompts component for controller/keyboard icons.
@@ -151,10 +151,9 @@ final class MainLoop: RenderLoop {
       camera.zoom, StringFromGLMathVec3(camera.position), camera.yaw, camera.pitch
     )
 
-    determination.draw(
-      debugText,
-      at: (24, Float(HEIGHT) - 24),
-      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+    debugText.draw(
+      at: Point(24, Float(HEIGHT) - 24),
+      style: determinationStyle,
       anchor: .topLeft
     )
   }

@@ -2,52 +2,46 @@ import GLFW
 
 final class FontsDemo: RenderLoop {
 
-  private let fontRenderers: [(TextRenderer, Font.ResolvedFont)] = Font.availableFonts
-    .compactMap { resolvedFont -> (TextRenderer, Font.ResolvedFont)? in
-      guard let renderer = TextRenderer(resolvedFont.displayName) else { return nil }
-      return (renderer, resolvedFont)
+  private let fontStyles: [(TextStyle, Font.ResolvedFont)] = Font.availableFonts
+    .compactMap { resolvedFont -> (TextStyle, Font.ResolvedFont)? in
+      let style = TextStyle(fontName: resolvedFont.displayName, fontSize: 24, color: .white)
+      return (style, resolvedFont)
     }
 
   func draw() {
     var yCursor: Float = 24
 
     // Original font demo first
-    for (renderer, resolvedFont) in fontRenderers {
-      yCursor += renderer.baselineFromTop
-      renderer.draw(
-        resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog  — ° æøå",
-        at: (24, yCursor),
-        windowSize: (Int32(WIDTH), Int32(HEIGHT))
+    for (style, resolvedFont) in fontStyles {
+      let text = resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog  — ° æøå"
+      text.draw(
+        at: Point(24, yCursor),
+        style: style
       )
-      yCursor += renderer.descentFromBaseline + 8
+      yCursor += 32 + 8  // Approximate line height
     }
 
     // Add some space before outline test
     yCursor += 40
 
     // Test outline functionality
-    if let testRenderer = TextRenderer("Determination") {
-      testRenderer.scale = 2.0
+    let testStyle = TextStyle(
+      fontName: "Determination", fontSize: 48, color: Color(red: 0.863, green: 0.863, blue: 0.808, alpha: 1.0))
+    let outlineStyle = TextStyle(
+      fontName: "Determination", fontSize: 48, color: Color(red: 0.95, green: 0.95, blue: 0.7, alpha: 1.0))
 
-      // Draw text with outline - bright yellow fill, dark purple outline
-      testRenderer.draw(
-        "OUTLINE TEST: The quick brown fox",
-        at: (24, yCursor),
-        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-        color: (0.863, 0.863, 0.808, 1.0),
-        outlineColor: (0.278, 0.247, 0.341, 1.0),
-        outlineThickness: 2.0
-      )
-      yCursor += testRenderer.scaledLineHeight + 8
+    // Draw text with outline - bright yellow fill, dark purple outline
+    "OUTLINE TEST: The quick brown fox".draw(
+      at: Point(24, yCursor),
+      style: testStyle
+    )
+    yCursor += 64 + 8  // Approximate line height
 
-      // Draw same text without outline for comparison
-      testRenderer.draw(
-        "NO OUTLINE: The quick brown fox",
-        at: (24, yCursor),
-        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-        color: (0.95, 0.95, 0.7, 1.0)  // Same bright yellow fill
-      )
-      yCursor += testRenderer.scaledLineHeight + 8
-    }
+    // Draw same text without outline for comparison
+    "NO OUTLINE: The quick brown fox".draw(
+      at: Point(24, yCursor),
+      style: outlineStyle
+    )
+    yCursor += 64 + 8  // Approximate line height
   }
 }

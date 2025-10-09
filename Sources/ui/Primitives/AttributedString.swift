@@ -1,4 +1,26 @@
 import Foundation
+import GL
+
+/// Style configuration for text rendering.
+public struct TextStyle: Sendable {
+  /// Name of the font to use.
+  public var fontName: String
+  /// Size of the font in points.
+  public var fontSize: Float
+  /// Color of the text.
+  public var color: Color
+
+  /// Creates a new text style with the specified properties.
+  /// - Parameters:
+  ///   - fontName: Name of the font to use.
+  ///   - fontSize: Size of the font in points.
+  ///   - color: Color of the text.
+  public init(fontName: String, fontSize: Float, color: Color) {
+    self.fontName = fontName
+    self.fontSize = fontSize
+    self.color = color
+  }
+}
 
 /// Stroke configuration for text rendering.
 public struct TextStroke: Equatable {
@@ -160,5 +182,97 @@ extension AttributedString {
       if let sh = a.shadow { resolved.shadow = sh }
     }
     return resolved
+  }
+}
+
+// MARK: - Drawing Extensions
+
+/// Text anchor options for positioning text
+public enum TextAnchor {
+  case topLeft
+  case bottomLeft
+  case baselineLeft
+}
+
+extension AttributedString {
+  /// Draws the attributed string at the specified point.
+  /// - Parameters:
+  ///   - point: The point to draw the text at.
+  ///   - defaultStyle: The default text style to use for unformatted text.
+  ///   - wrapWidth: Optional width to wrap text at.
+  ///   - anchor: The anchor point for positioning.
+  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
+  public func draw(
+    at point: Point,
+    defaultStyle: TextStyle,
+    wrapWidth: Float? = nil,
+    anchor: TextAnchor = .topLeft,
+    context: GraphicsContext? = nil
+  ) {
+    let ctx = context ?? GraphicsContext.current
+    guard let ctx else { return }
+
+    ctx.renderer.drawText(
+      self,
+      at: point,
+      defaultStyle: defaultStyle,
+      wrapWidth: wrapWidth,
+      anchor: anchor
+    )
+  }
+
+  /// Draws the attributed string within the specified rectangle.
+  /// - Parameters:
+  ///   - rect: The rectangle to draw the text within.
+  ///   - defaultStyle: The default text style to use for unformatted text.
+  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
+  public func draw(
+    in rect: Rect,
+    defaultStyle: TextStyle,
+    context: GraphicsContext? = nil
+  ) {
+    draw(at: rect.origin, defaultStyle: defaultStyle, context: context)
+  }
+}
+
+extension String {
+  /// Draws the string at the specified point with the given style.
+  /// - Parameters:
+  ///   - point: The point to draw the text at.
+  ///   - style: The text style to apply.
+  ///   - wrapWidth: Optional width to wrap text at.
+  ///   - anchor: The anchor point for positioning.
+  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
+  public func draw(
+    at point: Point,
+    style: TextStyle,
+    wrapWidth: Float? = nil,
+    anchor: TextAnchor = .topLeft,
+    context: GraphicsContext? = nil
+  ) {
+    let attributed = AttributedString(
+      string: self,
+      attributes: [
+        TextAttribute(
+          range: startIndex..<endIndex,
+          color: style.color,
+          fontName: style.fontName,
+          fontSize: style.fontSize
+        )
+      ])
+    attributed.draw(at: point, defaultStyle: style, wrapWidth: wrapWidth, anchor: anchor, context: context)
+  }
+
+  /// Draws the string within the specified rectangle with the given style.
+  /// - Parameters:
+  ///   - rect: The rectangle to draw the text within.
+  ///   - style: The text style to apply.
+  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
+  public func draw(
+    in rect: Rect,
+    style: TextStyle,
+    context: GraphicsContext? = nil
+  ) {
+    draw(at: rect.origin, style: style, context: context)
   }
 }

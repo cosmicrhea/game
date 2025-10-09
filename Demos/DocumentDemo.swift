@@ -62,9 +62,18 @@ let keepersDiary = [
 
 let green = Color(red: 0.1, green: 0.8, blue: 0.3)
 
-class CaretRenderer {
-  private let imageRenderer: ImageRenderer
-  private let direction: Direction
+class Caret {
+  private var image: Image
+  public var direction: Direction {
+    didSet {
+      switch direction {
+      case .left:
+        self.image = Image(resourcePath: "UI/Icons/Carets/caret-left.png")
+      case .right:
+        self.image = Image(resourcePath: "UI/Icons/Carets/caret-right.png")
+      }
+    }
+  }
   private var animationTime: Float = 0
 
   enum Direction {
@@ -74,31 +83,44 @@ class CaretRenderer {
 
   init(direction: Direction) {
     self.direction = direction
-    switch direction {
-    case .left:
-      self.imageRenderer = ImageRenderer("UI/Icons/Carets/caret-left.png")
-    case .right:
-      self.imageRenderer = ImageRenderer("UI/Icons/Carets/caret-right.png")
-    }
+    // Image will be set by didSet
+    self.image = Image(resourcePath: "UI/Icons/Carets/caret-left.png")  // temporary
   }
 
-  func draw(x: Float, y: Float, windowSize: (Int32, Int32), tint: Color) {
-    // Update animation time
-    animationTime += 0.016  // Assuming ~60fps
+  func draw(x: Float, y: Float, windowSize: (Int32, Int32), tint: Color, deltaTime: Float) {
+    // Update animation time with proper delta time
+    animationTime += deltaTime
 
     // Animate with slow back-and-forth movement
     let animationOffset: Float = GLMath.sin(animationTime * 0.8) * 8  // 8px amplitude, slow speed
     let animatedX: Float = direction == .left ? x - animationOffset : x + animationOffset
 
-    imageRenderer.draw(x: animatedX, y: y, windowSize: windowSize, tint: tint)
+    // Use the new Image API with custom tinting
+    let point = Point(animatedX, y)
+    let rect = Rect(origin: point, size: image.naturalSize)
+
+    // Draw with tint by directly calling the renderer
+    if let context = GraphicsContext.current {
+      context.renderer.drawImage(
+        textureID: image.textureID,
+        in: rect,
+        tint: tint
+      )
+    }
   }
 }
 
 class DocumentDemo: RenderLoop {
-  let caretLeft = CaretRenderer(direction: .left)
-  let caretRight = CaretRenderer(direction: .right)
+  let caretLeft = Caret(direction: .left)
+  let caretRight = Caret(direction: .right)
 
-  let textRenderer = TextRenderer("Creato Display Medium", 24)
+  let textStyle = TextStyle(fontName: "Creato Display Medium", fontSize: 24, color: .white)
+
+  private var deltaTime: Float = 0.0
+
+  func update(deltaTime: Float) {
+    self.deltaTime = deltaTime
+  }
 
   func draw() {
     // Center text horizontally with 640px width
@@ -110,17 +132,17 @@ class DocumentDemo: RenderLoop {
     let leftArrowX: Float = textX - 40
     let rightArrowX: Float = textX + 640 + 20
 
-    caretLeft.draw(x: leftArrowX, y: arrowY, windowSize: (Int32(WIDTH), Int32(HEIGHT)), tint: green)
+    caretLeft.draw(
+      x: leftArrowX, y: arrowY, windowSize: (Int32(WIDTH), Int32(HEIGHT)), tint: green, deltaTime: deltaTime)
 
-    textRenderer?.draw(
-      keepersDiary[1],
-      at: (textX, textY),
-      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-      scale: 2,
+    keepersDiary[1].draw(
+      at: Point(textX, textY),
+      style: textStyle,
       wrapWidth: 640,
       anchor: .topLeft
     )
 
-    caretRight.draw(x: rightArrowX, y: arrowY, windowSize: (Int32(WIDTH), Int32(HEIGHT)), tint: green)
+    caretRight.draw(
+      x: rightArrowX, y: arrowY, windowSize: (Int32(WIDTH), Int32(HEIGHT)), tint: green, deltaTime: deltaTime)
   }
 }

@@ -5,6 +5,91 @@ public final class GLRenderer: Renderer {
   private let imageProgram: GLProgram
   private let pathProgram: GLProgram
 
+  // MARK: - State Management
+
+  struct GLState {
+    let depthTestEnabled: Bool
+    let cullFaceEnabled: Bool
+    let depthMaskEnabled: GLboolean
+    let polygonMode: GLenum
+  }
+
+  private func saveGLState() -> GLState {
+    let depthTestEnabled = glIsEnabled(GL_DEPTH_TEST)
+    let cullFaceEnabled = glIsEnabled(GL_CULL_FACE)
+
+    var depthMaskEnabled: GLboolean = false
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskEnabled)
+
+    var polygonMode: [GLint] = [0, 0]
+    polygonMode.withUnsafeMutableBufferPointer { buf in
+      glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
+    }
+
+    return GLState(
+      depthTestEnabled: depthTestEnabled,
+      cullFaceEnabled: cullFaceEnabled,
+      depthMaskEnabled: depthMaskEnabled,
+      polygonMode: GLenum(polygonMode[0])
+    )
+  }
+
+  private func restoreGLState(_ state: GLState) {
+    glDepthMask(state.depthMaskEnabled)
+    if state.depthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+    if state.cullFaceEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
+    glPolygonMode(GL_FRONT_AND_BACK, state.polygonMode)
+  }
+
+  private func configureUIState() {
+    glDepthMask(false)
+    glDisable(GL_DEPTH_TEST)
+    glDisable(GL_CULL_FACE)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+  }
+
+  // MARK: - Public State Management API
+
+  /// Saves current OpenGL state and configures it for UI rendering (no depth testing, blending enabled)
+  /// Returns a state object that should be passed to restoreUIState when done
+  static func saveAndConfigureUIState() -> GLState {
+    let depthTestEnabled = glIsEnabled(GL_DEPTH_TEST)
+    let cullFaceEnabled = glIsEnabled(GL_CULL_FACE)
+
+    var depthMaskEnabled: GLboolean = false
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskEnabled)
+
+    var polygonMode: [GLint] = [0, 0]
+    polygonMode.withUnsafeMutableBufferPointer { buf in
+      glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
+    }
+
+    // Configure for UI rendering
+    glDepthMask(false)
+    glDisable(GL_DEPTH_TEST)
+    glDisable(GL_CULL_FACE)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+    return GLState(
+      depthTestEnabled: depthTestEnabled,
+      cullFaceEnabled: cullFaceEnabled,
+      depthMaskEnabled: depthMaskEnabled,
+      polygonMode: GLenum(polygonMode[0])
+    )
+  }
+
+  /// Restores OpenGL state from a previously saved state
+  static func restoreUIState(_ state: GLState) {
+    glDepthMask(state.depthMaskEnabled)
+    if state.depthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+    if state.cullFaceEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
+    glPolygonMode(GL_FRONT_AND_BACK, state.polygonMode)
+  }
+
   public init() {
     self.imageProgram = try! GLProgram("UI/text", "UI/image")
     self.pathProgram = try! GLProgram("Common/path", "Common/path")
@@ -22,7 +107,7 @@ public final class GLRenderer: Renderer {
     // Clear the screen and set up OpenGL state
     glClearColor(0.2, 0.1, 0.1, 1)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-//    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)  // Default to filled polygons
+    //    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)  // Default to filled polygons
   }
 
   public func setWireframeMode(_ enabled: Bool) {
@@ -85,13 +170,7 @@ public final class GLRenderer: Renderer {
     // NOTE: For a real impl, pass viewport size into GLRenderer to compute MVP.
 
     // Save state and configure blending
-    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST)
-    let cullWasEnabled = glIsEnabled(GL_CULL_FACE)
-    glDisable(GL_DEPTH_TEST)
-    glDisable(GL_CULL_FACE)
-    glDepthMask(false)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    let savedState = Self.saveAndConfigureUIState()
 
     imageProgram.use()
     // The shader expects uMVP; use an orthographic matrix using current viewport
@@ -116,21 +195,12 @@ public final class GLRenderer: Renderer {
     glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
     imageProgram.setInt("uTexture", value: 0)
 
-    var prevPoly: [GLint] = [0, 0]
-    prevPoly.withUnsafeMutableBufferPointer { buf in
-      glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
-    }
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
     glBindVertexArray(vao)
     glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
     glBindVertexArray(0)
 
     // Restore state
-    glPolygonMode(GL_FRONT_AND_BACK, GLenum(prevPoly[0]))
-    glDepthMask(true)
-    if depthWasEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-    if cullWasEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
+    restoreGLState(savedState)
 
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
@@ -181,13 +251,8 @@ public final class GLRenderer: Renderer {
     glEnableVertexAttribArray(1)
     glVertexAttribPointer(1, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), uvOff)
 
-    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST)
-    let cullWasEnabled = glIsEnabled(GL_CULL_FACE)
-    glDisable(GL_DEPTH_TEST)
-    glDisable(GL_CULL_FACE)
-    glDepthMask(false)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    let savedState = saveGLState()
+    configureUIState()
 
     imageProgram.use()
     var viewport: [GLint] = [0, 0, 0, 0]
@@ -211,20 +276,11 @@ public final class GLRenderer: Renderer {
     glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
     imageProgram.setInt("uTexture", value: 0)
 
-    var prevPoly: [GLint] = [0, 0]
-    prevPoly.withUnsafeMutableBufferPointer { buf in
-      glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
-    }
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
     glBindVertexArray(vao)
     glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
     glBindVertexArray(0)
 
-    glPolygonMode(GL_FRONT_AND_BACK, GLenum(prevPoly[0]))
-    glDepthMask(true)
-    if depthWasEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-    if cullWasEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
+    restoreGLState(savedState)
 
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
@@ -237,6 +293,55 @@ public final class GLRenderer: Renderer {
     color: Color
   ) {
     // TODO: Wire to ModularTextRenderer or a minimal glyph pipeline.
+  }
+
+  public func drawText(
+    _ attributedString: AttributedString,
+    at origin: Point,
+    defaultStyle: TextStyle,
+    wrapWidth: Float? = nil,
+    anchor: TextAnchor = .topLeft
+  ) {
+    // Create a ModularTextRenderer for the default style
+    guard let textRenderer = ModularTextRenderer(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize)
+    else {
+      return
+    }
+
+    // Get current viewport size from OpenGL
+    var viewport: [GLint] = [0, 0, 0, 0]
+    glGetIntegerv(GL_VIEWPORT, &viewport)
+    let windowSize = (w: Int32(viewport[2]), h: Int32(viewport[3]))
+
+    // TODO: Implement proper attributed text rendering with per-character colors
+    // For now, we just render the plain text with the default style
+
+    // Convert TextAnchor to ModularTextRenderer.Anchor
+    let modularAnchor: ModularTextRenderer.Anchor = {
+      switch anchor {
+      case .topLeft: return .topLeft
+      case .bottomLeft: return .bottomLeft
+      case .baselineLeft: return .baselineLeft
+      }
+    }()
+
+    // Get outline color and thickness from stroke attributes
+    let outlineColor = attributedString.attributes.compactMap { $0.stroke?.color }.first
+    let outlineThickness = attributedString.attributes.compactMap { $0.stroke?.width }.first ?? 0
+
+    // Draw using ModularTextRenderer (simplified to plain text for now)
+    // TODO: Implement proper attributed text rendering
+    textRenderer.draw(
+      attributedString.string,
+      at: (origin.x, origin.y),
+      windowSize: windowSize,
+      color: (defaultStyle.color.red, defaultStyle.color.green, defaultStyle.color.blue, defaultStyle.color.alpha),
+      scale: 1.0,
+      wrapWidth: wrapWidth,
+      anchor: modularAnchor,
+      outlineColor: outlineColor.map { ($0.red, $0.green, $0.blue, $0.alpha) },
+      outlineThickness: outlineThickness
+    )
   }
 
   public func setClipRect(_ rect: Rect?) {
@@ -310,8 +415,7 @@ public final class GLRenderer: Renderer {
     pathProgram.setVec4("uColor", value: (color.red, color.green, color.blue, color.alpha))
 
     // Save current state
-    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST)
-    let cullWasEnabled = glIsEnabled(GL_CULL_FACE)
+    let savedState = saveGLState()
     glDepthMask(false)
     glDisable(GL_DEPTH_TEST)
     glDisable(GL_CULL_FACE)
@@ -322,9 +426,7 @@ public final class GLRenderer: Renderer {
     glBindVertexArray(0)
 
     // Restore state
-    glDepthMask(true)
-    if depthWasEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-    if cullWasEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
+    restoreGLState(savedState)
 
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)

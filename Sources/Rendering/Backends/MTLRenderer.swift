@@ -557,6 +557,21 @@ public final class MTLRenderer: Renderer {
     )
   }
 
+  public func drawText(
+    _ attributedString: AttributedString,
+    at origin: Point,
+    defaultStyle: TextStyle,
+    wrapWidth: Float?,
+    anchor: TextAnchor
+  ) {
+    // TODO: Implement Metal text rendering
+    // For now, this is a stub that does nothing
+    // In a full implementation, this would:
+    // 1. Create a ModularTextRenderer for the default style
+    // 2. Convert AttributedString to legacy AttributedText
+    // 3. Use Metal shaders to render the text
+  }
+
 }
 
 // MARK: - Uniform Structures
