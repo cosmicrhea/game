@@ -11,18 +11,7 @@ import unistd
 let WIDTH = 1280
 let HEIGHT = 720
 
-print(
-  """
-    
-      ▄▀  █    ██      ▄▄▄▄▄    ▄▄▄▄▄         ▄▀  ██   █▀▄▀█ ▄███▄  
-    ▄▀    █    █ █    █     ▀▄ █     ▀▄     ▄▀    █ █  █ █ █ █▀   ▀ 
-    █ ▀▄  █    █▄▄█ ▄  ▀▀▀▀▄ ▄  ▀▀▀▀▄       █ ▀▄  █▄▄█ █ ▄ █ ██▄▄   
-    █   █ ███▄ █  █  ▀▄▄▄▄▀   ▀▄▄▄▄▀        █   █ █  █ █   █ █▄   ▄▀
-     ███      ▀   █                          ███     █    █  ▀███▀  
-                 █                                  █    ▀          
-                ▀                                  ▀                
-  """
-)
+print(" 🥛 Glass Engine ")
 
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
@@ -31,7 +20,7 @@ struct CLIOptions: ParsableArguments {
   @Flag(help: "Take a screenshot after 1 second.")
   var screenshot: Bool = false
 
-  @Flag(help: "Exit after 2 second.")
+  @Flag(help: "Exit after 2 seconds.")
   var exit: Bool = false
 }
 
@@ -53,6 +42,8 @@ GLFWWindow.hints.contextVersion = (4, 1)
 GLFWWindow.hints.openGLProfile = .core
 GLFWWindow.hints.openGLCompatibility = .forward
 GLFWWindow.hints.retinaFramebuffer = false
+//GLFWWindow.hints.doubleBuffer = false
+//GLFWWindow.hints.openGLDebugMode = true
 
 let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 //window.nsWindow?.styleMask.insert(.fullSizeContentView)
@@ -115,7 +106,6 @@ if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
 var deltaTime: Float = 0.0
 var lastFrame: Float = 0.0
 var numberOfFrames: Int64 = 0
-var lastTitleUpdate: Double = GLFWSession.currentTime
 
 window.keyInputHandler = { window, key, scancode, state, mods in
   guard state == .pressed else { return }
