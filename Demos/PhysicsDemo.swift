@@ -14,7 +14,7 @@
 //  private let program = try! GLProgram("Common/basic 2")
 //  private let sphereRenderer: SphereRenderer
 //  private let planeRenderer: PlaneRenderer
-//  private let determination = TextRenderer("Determination", 32)!
+//  private let determination = … // FIXME
 //  private let inputPrompts: InputPromptsRenderer
 //
 //  // Demo state

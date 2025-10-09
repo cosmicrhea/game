@@ -40,13 +40,6 @@ public protocol Renderer {
 
   // MARK: - Text
 
-  /// Draws glyphs from a font atlas.
-  /// - Parameters:
-  ///   - atlasID: The ID of the font atlas texture.
-  ///   - vertices: Buffer of vertex data for the glyphs.
-  ///   - color: The color to apply to the glyphs.
-  func drawGlyphs(atlasID: UInt64, vertices: UnsafeBufferPointer<Float>, color: Color)
-
   /// Draws attributed text at the specified location.
   /// - Parameters:
   ///   - attributedString: The attributed string to draw.

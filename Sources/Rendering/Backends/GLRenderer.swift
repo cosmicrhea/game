@@ -1,65 +1,22 @@
 import Foundation
 import GL
+import STBTrueType
 
 public final class GLRenderer: Renderer {
   private let imageProgram: GLProgram
   private let pathProgram: GLProgram
+  private let textProgram: GLProgram
 
-  // MARK: - State Management
+  // MARK: - UI State Management
 
-  struct GLState {
-    let depthTestEnabled: Bool
-    let cullFaceEnabled: Bool
-    let depthMaskEnabled: GLboolean
-    let polygonMode: GLenum
-  }
+  /// Execute a block with UI rendering state (no depth testing, blending enabled)
+  static func withUIContext<T>(_ block: () throws -> T) rethrows -> T {
+    // Save current state
+    let depthTest = glIsEnabled(GL_DEPTH_TEST)
+    let cullFace = glIsEnabled(GL_CULL_FACE)
 
-  private func saveGLState() -> GLState {
-    let depthTestEnabled = glIsEnabled(GL_DEPTH_TEST)
-    let cullFaceEnabled = glIsEnabled(GL_CULL_FACE)
-
-    var depthMaskEnabled: GLboolean = false
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskEnabled)
-
-    var polygonMode: [GLint] = [0, 0]
-    polygonMode.withUnsafeMutableBufferPointer { buf in
-      glGetIntegerv(GL_POLYGON_MODE, buf.baseAddress)
-    }
-
-    return GLState(
-      depthTestEnabled: depthTestEnabled,
-      cullFaceEnabled: cullFaceEnabled,
-      depthMaskEnabled: depthMaskEnabled,
-      polygonMode: GLenum(polygonMode[0])
-    )
-  }
-
-  private func restoreGLState(_ state: GLState) {
-    glDepthMask(state.depthMaskEnabled)
-    if state.depthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-    if state.cullFaceEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
-    glPolygonMode(GL_FRONT_AND_BACK, state.polygonMode)
-  }
-
-  private func configureUIState() {
-    glDepthMask(false)
-    glDisable(GL_DEPTH_TEST)
-    glDisable(GL_CULL_FACE)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-  }
-
-  // MARK: - Public State Management API
-
-  /// Saves current OpenGL state and configures it for UI rendering (no depth testing, blending enabled)
-  /// Returns a state object that should be passed to restoreUIState when done
-  static func saveAndConfigureUIState() -> GLState {
-    let depthTestEnabled = glIsEnabled(GL_DEPTH_TEST)
-    let cullFaceEnabled = glIsEnabled(GL_CULL_FACE)
-
-    var depthMaskEnabled: GLboolean = false
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskEnabled)
+    var depthMask: GLboolean = false
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask)
 
     var polygonMode: [GLint] = [0, 0]
     polygonMode.withUnsafeMutableBufferPointer { buf in
@@ -74,25 +31,28 @@ public final class GLRenderer: Renderer {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-    return GLState(
-      depthTestEnabled: depthTestEnabled,
-      cullFaceEnabled: cullFaceEnabled,
-      depthMaskEnabled: depthMaskEnabled,
-      polygonMode: GLenum(polygonMode[0])
-    )
+    defer {
+      // Restore previous state
+      glDepthMask(depthMask)
+      if depthTest { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+      if cullFace { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
+      glPolygonMode(GL_FRONT_AND_BACK, GLenum(polygonMode[0]))
+    }
+
+    return try block()
   }
 
-  /// Restores OpenGL state from a previously saved state
-  static func restoreUIState(_ state: GLState) {
-    glDepthMask(state.depthMaskEnabled)
-    if state.depthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-    if state.cullFaceEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
-    glPolygonMode(GL_FRONT_AND_BACK, state.polygonMode)
+  /// Execute a block with UI rendering state (no depth testing, blending enabled)
+  func withUIContext<T>(_ block: () throws -> T) rethrows -> T {
+    return try Self.withUIContext(block)
   }
+
+  // MARK: - Renderer
 
   public init() {
     self.imageProgram = try! GLProgram("UI/text", "UI/image")
     self.pathProgram = try! GLProgram("Common/path", "Common/path")
+    self.textProgram = try! GLProgram("UI/text")
 
     // Enable depth testing
     glEnable(GL_DEPTH_TEST)
@@ -170,37 +130,34 @@ public final class GLRenderer: Renderer {
     // NOTE: For a real impl, pass viewport size into GLRenderer to compute MVP.
 
     // Save state and configure blending
-    let savedState = Self.saveAndConfigureUIState()
+    Self.withUIContext {
+      imageProgram.use()
+      // The shader expects uMVP; use an orthographic matrix using current viewport
+      var viewport: [GLint] = [0, 0, 0, 0]
+      glGetIntegerv(GL_VIEWPORT, &viewport)
+      let W = Float(viewport[2])
+      let H = Float(viewport[3])
+      let mvp: [Float] = [
+        2 / W, 0, 0, 0,
+        0, 2 / H, 0, 0,
+        0, 0, -1, 0,
+        -1, -1, 0, 1,
+      ]
+      mvp.withUnsafeBufferPointer { buf in
+        imageProgram.setMat4("uMVP", value: buf.baseAddress!)
+      }
 
-    imageProgram.use()
-    // The shader expects uMVP; use an orthographic matrix using current viewport
-    var viewport: [GLint] = [0, 0, 0, 0]
-    glGetIntegerv(GL_VIEWPORT, &viewport)
-    let W = Float(viewport[2])
-    let H = Float(viewport[3])
-    let mvp: [Float] = [
-      2 / W, 0, 0, 0,
-      0, 2 / H, 0, 0,
-      0, 0, -1, 0,
-      -1, -1, 0, 1,
-    ]
-    mvp.withUnsafeBufferPointer { buf in
-      imageProgram.setMat4("uMVP", value: buf.baseAddress!)
+      let tintColor = tint ?? .white
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
+      imageProgram.setInt("uTexture", value: 0)
+
+      glBindVertexArray(vao)
+      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+      glBindVertexArray(0)
     }
-
-    let tintColor = tint ?? .white
-    imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
-
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
-    imageProgram.setInt("uTexture", value: 0)
-
-    glBindVertexArray(vao)
-    glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
-    glBindVertexArray(0)
-
-    // Restore state
-    restoreGLState(savedState)
 
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
@@ -251,48 +208,37 @@ public final class GLRenderer: Renderer {
     glEnableVertexAttribArray(1)
     glVertexAttribPointer(1, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), uvOff)
 
-    let savedState = saveGLState()
-    configureUIState()
+    Self.withUIContext {
+      imageProgram.use()
+      var viewport: [GLint] = [0, 0, 0, 0]
+      glGetIntegerv(GL_VIEWPORT, &viewport)
+      let W = Float(viewport[2])
+      let H = Float(viewport[3])
+      let mvp: [Float] = [
+        2 / W, 0, 0, 0,
+        0, 2 / H, 0, 0,
+        0, 0, -1, 0,
+        -1, -1, 0, 1,
+      ]
+      mvp.withUnsafeBufferPointer { buf in
+        imageProgram.setMat4("uMVP", value: buf.baseAddress!)
+      }
 
-    imageProgram.use()
-    var viewport: [GLint] = [0, 0, 0, 0]
-    glGetIntegerv(GL_VIEWPORT, &viewport)
-    let W = Float(viewport[2])
-    let H = Float(viewport[3])
-    let mvp: [Float] = [
-      2 / W, 0, 0, 0,
-      0, 2 / H, 0, 0,
-      0, 0, -1, 0,
-      -1, -1, 0, 1,
-    ]
-    mvp.withUnsafeBufferPointer { buf in
-      imageProgram.setMat4("uMVP", value: buf.baseAddress!)
+      let tintColor = tint ?? .white
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
+      imageProgram.setInt("uTexture", value: 0)
+
+      glBindVertexArray(vao)
+      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+      glBindVertexArray(0)
     }
-
-    let tintColor = tint ?? .white
-    imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
-
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
-    imageProgram.setInt("uTexture", value: 0)
-
-    glBindVertexArray(vao)
-    glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
-    glBindVertexArray(0)
-
-    restoreGLState(savedState)
 
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
     glDeleteVertexArrays(1, &vao)
-  }
-
-  public func drawGlyphs(
-    atlasID: UInt64,
-    vertices: UnsafeBufferPointer<Float>,
-    color: Color
-  ) {
-    // TODO: Wire to ModularTextRenderer or a minimal glyph pipeline.
   }
 
   public func drawText(
@@ -302,46 +248,84 @@ public final class GLRenderer: Renderer {
     wrapWidth: Float? = nil,
     anchor: TextAnchor = .topLeft
   ) {
-    // Create a ModularTextRenderer for the default style
-    guard let textRenderer = ModularTextRenderer(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize)
-    else {
+    // Create font and layout for the default style
+    guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize) else {
       return
     }
+
+    let layout = TextLayout(font: font.getTrueTypeFont(), scale: 1.0)
 
     // Get current viewport size from OpenGL
     var viewport: [GLint] = [0, 0, 0, 0]
     glGetIntegerv(GL_VIEWPORT, &viewport)
     let windowSize = (w: Int32(viewport[2]), h: Int32(viewport[3]))
 
-    // TODO: Implement proper attributed text rendering with per-character colors
-    // For now, we just render the plain text with the default style
+    let text = attributedString.string
+    let currentScale: Float = 1.0
+    let lineHeight = font.lineHeight * currentScale
 
-    // Convert TextAnchor to ModularTextRenderer.Anchor
-    let modularAnchor: ModularTextRenderer.Anchor = {
-      switch anchor {
-      case .topLeft: return .topLeft
-      case .bottomLeft: return .bottomLeft
-      case .baselineLeft: return .baselineLeft
-      }
-    }()
+    // Layout the text
+    let layoutResult = layout.layout(
+      text,
+      wrapWidth: wrapWidth,
+      lineHeight: lineHeight
+    )
+
+    // Ensure we have an atlas for the required glyphs
+    guard let atlas = GlyphAtlas.build(for: text, font: font.getTrueTypeFont()) else { return }
+
+    // Convert TextAnchor to anchor offset
+    let anchorOffset = calculateTextAnchorOffset(
+      layoutResult: layoutResult,
+      origin: origin,
+      anchor: anchor,
+      scale: currentScale,
+      font: font
+    )
+
+    // Generate vertices for all lines
+    var allVertices: [Float] = []
+    var allIndices: [UInt32] = []
+    var indexOffset: UInt32 = 0
+
+    for (lineIndex, line) in layoutResult.lines.enumerated() {
+      // Calculate proper Y position for this line using the working approach
+      let lineBaselineY = origin.y + anchorOffset.y - Float(line.baselineY) * lineHeight
+
+      let lineVertices = generateTextLineVertices(
+        line: line,
+        atlas: atlas,
+        origin: Point(origin.x + anchorOffset.x, lineBaselineY),
+        scale: currentScale,
+        color: defaultStyle.color
+      )
+
+      let lineIndices = generateTextLineIndices(
+        vertexCount: lineVertices.count / 8,  // 8 components: x, y, u, v, r, g, b, a
+        indexOffset: indexOffset
+      )
+
+      allVertices.append(contentsOf: lineVertices)
+      allIndices.append(contentsOf: lineIndices)
+      indexOffset += UInt32(lineVertices.count / 8)
+    }
 
     // Get outline color and thickness from stroke attributes
     let outlineColor = attributedString.attributes.compactMap { $0.stroke?.color }.first
     let outlineThickness = attributedString.attributes.compactMap { $0.stroke?.width }.first ?? 0
 
-    // Draw using ModularTextRenderer (simplified to plain text for now)
-    // TODO: Implement proper attributed text rendering
-    textRenderer.draw(
-      attributedString.string,
-      at: (origin.x, origin.y),
-      windowSize: windowSize,
-      color: (defaultStyle.color.red, defaultStyle.color.green, defaultStyle.color.blue, defaultStyle.color.alpha),
-      scale: 1.0,
-      wrapWidth: wrapWidth,
-      anchor: modularAnchor,
-      outlineColor: outlineColor.map { ($0.red, $0.green, $0.blue, $0.alpha) },
-      outlineThickness: outlineThickness
-    )
+    // Render the text using UI context
+    withUIContext {
+      renderTextVertices(
+        allVertices,
+        allIndices,
+        atlas: atlas,
+        color: defaultStyle.color,
+        outlineColor: outlineColor,
+        outlineThickness: outlineThickness,
+        windowSize: windowSize
+      )
+    }
   }
 
   public func setClipRect(_ rect: Rect?) {
@@ -415,18 +399,202 @@ public final class GLRenderer: Renderer {
     pathProgram.setVec4("uColor", value: (color.red, color.green, color.blue, color.alpha))
 
     // Save current state
-    let savedState = saveGLState()
-    glDepthMask(false)
-    glDisable(GL_DEPTH_TEST)
-    glDisable(GL_CULL_FACE)
+    Self.withUIContext {
+      pathProgram.use()
+      glBindVertexArray(vao)
+      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+      glBindVertexArray(0)
+    }
 
-    pathProgram.use()
+    glDeleteBuffers(1, &vbo)
+    glDeleteBuffers(1, &ebo)
+    glDeleteVertexArrays(1, &vao)
+  }
+
+  // MARK: - Text Rendering Helpers
+
+  private func calculateTextAnchorOffset(
+    layoutResult: TextLayout.LayoutResult,
+    origin: Point,
+    anchor: TextAnchor,
+    scale: Float,
+    font: Font
+  ) -> Point {
+    // Use the same approach as the working ModularTextRenderer
+    let baseline = font.baselineFromTop * scale
+
+    switch anchor {
+    case .topLeft:
+      return Point(0, -baseline)
+    case .bottomLeft:
+      return Point(0, layoutResult.totalHeight - layoutResult.lineHeight - baseline)
+    case .baselineLeft:
+      return Point(0, 0)
+    }
+  }
+
+  private func generateTextLineVertices(
+    line: TextLayout.Line,
+    atlas: GlyphAtlas,
+    origin: Point,
+    scale: Float,
+    color: Color
+  ) -> [Float] {
+    var vertices: [Float] = []
+    var currentX: Float = 0
+
+    // Generate glyphs from the text
+    let scalars = Array(line.text.unicodeScalars)
+    var i = 0
+
+    while i < scalars.count {
+      let codepoint = Int32(scalars[i].value)
+
+      // Handle spaces - they should advance but not render
+      if codepoint == 32 {  // Space character
+        // Use a reasonable space width if not in atlas
+        let spaceWidth = atlas.glyphs[32]?.advance ?? 8  // Default space width
+        currentX += Float(spaceWidth) * scale
+        i += 1
+        continue
+      }
+
+      guard let glyphInfo = atlas.glyphs[codepoint] else {
+        i += 1
+        continue
+      }
+
+      // Position the glyph correctly using the working ModularTextRenderer approach
+      let x0 = origin.x + currentX + Float(glyphInfo.xOffset) * scale
+      let y1 = origin.y - Float(glyphInfo.yOffset) * scale  // NEGATE yOffset like the working code
+      let y0 = y1 - Float(glyphInfo.height) * scale
+      let x1 = x0 + Float(glyphInfo.width) * scale
+
+      // Quad vertices: x, y, u, v, r, g, b, a (using working ModularTextRenderer approach)
+      let quad: [Float] = [
+        x0, y0, glyphInfo.u0, glyphInfo.v0, color.red, color.green, color.blue, color.alpha,  // bottom-left
+        x1, y0, glyphInfo.u1, glyphInfo.v0, color.red, color.green, color.blue, color.alpha,  // bottom-right
+        x1, y1, glyphInfo.u1, glyphInfo.v1, color.red, color.green, color.blue, color.alpha,  // top-right
+        x0, y1, glyphInfo.u0, glyphInfo.v1, color.red, color.green, color.blue, color.alpha,  // top-left
+      ]
+      vertices.append(contentsOf: quad)
+
+      // Advance to next character using proper advance
+      currentX += Float(glyphInfo.advance) * scale
+      i += 1
+    }
+
+    return vertices
+  }
+
+  private func generateTextLineIndices(vertexCount: Int, indexOffset: UInt32) -> [UInt32] {
+    var indices: [UInt32] = []
+    let quadCount = vertexCount / 4
+
+    for i in 0..<quadCount {
+      let base = indexOffset + UInt32(i * 4)
+      let quad: [UInt32] = [
+        base, base + 1, base + 2,
+        base, base + 2, base + 3,
+      ]
+      indices.append(contentsOf: quad)
+    }
+
+    return indices
+  }
+
+  private func renderTextVertices(
+    _ vertices: [Float],
+    _ indices: [UInt32],
+    atlas: GlyphAtlas,
+    color: Color,
+    outlineColor: Color?,
+    outlineThickness: Float,
+    windowSize: (w: Int32, h: Int32)
+  ) {
+    guard !vertices.isEmpty && !indices.isEmpty else { return }
+
+    var vao: GLuint = 0
+    var vbo: GLuint = 0
+    var ebo: GLuint = 0
+    glGenVertexArrays(1, &vao)
+    glGenBuffers(1, &vbo)
+    glGenBuffers(1, &ebo)
+
     glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.count * MemoryLayout<Float>.stride, vertices, GL_DYNAMIC_DRAW)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.count * MemoryLayout<UInt32>.stride, indices, GL_DYNAMIC_DRAW)
+
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(
+      0, 2, GL_FLOAT, false, GLsizei(8 * MemoryLayout<Float>.stride), UnsafeRawPointer(bitPattern: 0))
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(
+      1, 2, GL_FLOAT, false, GLsizei(8 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 2 * MemoryLayout<Float>.stride))
+    glEnableVertexAttribArray(2)
+    glVertexAttribPointer(
+      2, 4, GL_FLOAT, false, GLsizei(8 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 4 * MemoryLayout<Float>.stride))
+
+    // Set up MVP matrix
+    let w = Float(windowSize.w)
+    let h = Float(windowSize.h)
+    let mvp: [Float] = [
+      2 / w, 0, 0, 0,
+      0, 2 / h, 0, 0,
+      0, 0, -1, 0,
+      -1, -1, 0, 1,
+    ]
+
+    textProgram.use()
+    mvp.withUnsafeBufferPointer { buffer in
+      textProgram.setMat4("uMVP", value: buffer.baseAddress!)
+    }
+
+    // Draw outline if specified
+    if let outlineColor = outlineColor, outlineThickness > 0 {
+      textProgram.setVec4(
+        "uColor", value: (outlineColor.red, outlineColor.green, outlineColor.blue, outlineColor.alpha))
+
+      let offsets: [(Float, Float)] = [
+        (-outlineThickness, 0), (outlineThickness, 0),
+        (0, -outlineThickness), (0, outlineThickness),
+      ]
+
+      for (offsetX, offsetY) in offsets {
+        var offsetVertices = vertices
+        for i in stride(from: 0, to: offsetVertices.count, by: 8) {
+          offsetVertices[i] += offsetX
+          offsetVertices[i + 1] += offsetY
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glBufferData(
+          GL_ARRAY_BUFFER, offsetVertices.count * MemoryLayout<Float>.stride, offsetVertices, GL_DYNAMIC_DRAW)
+
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, atlas.texture)
+        textProgram.setInt("uAtlas", value: 0)
+
+        glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+      }
+    }
+
+    // Draw fill
+    textProgram.setVec4("uColor", value: (color.red, color.green, color.blue, color.alpha))
+
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, atlas.texture)
+    textProgram.setInt("uAtlas", value: 0)
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.count * MemoryLayout<Float>.stride, vertices, GL_DYNAMIC_DRAW)
+
     glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
     glBindVertexArray(0)
-
-    // Restore state
-    restoreGLState(savedState)
 
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)

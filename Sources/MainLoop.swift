@@ -121,7 +121,7 @@ final class MainLoop: RenderLoop {
   }
 
   func drawObjectiveCallout() {
-    callout.draw(in: Rect(x: 0, y: Float(HEIGHT) - 180, width: 520, height: 44))
+    callout.draw(in: Rect(x: 0, y: Float(HEIGHT) - 180, width: 520, height: 32))
   }
 
   func drawDebugInputPrompts() {

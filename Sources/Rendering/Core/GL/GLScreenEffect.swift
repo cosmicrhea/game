@@ -56,7 +56,7 @@ class GLScreenEffect {
   }
 
   func draw(texture: GLuint) {
-    let savedState = GLRenderer.saveAndConfigureUIState()
+    GLRenderer.withUIContext {
     shader.use()
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, texture)
@@ -64,13 +64,13 @@ class GLScreenEffect {
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, 6)
     glBindVertexArray(0)
-    GLRenderer.restoreUIState(savedState)
+    }
   }
 
   /// Draw with explicit window size. Sets `uTexture` (sampler2D) to 0 and, if present,
   /// sets `uResolution` to (width, height) in pixels.
   func draw(texture: GLuint, windowSize: (Int32, Int32)) {
-    let savedState = GLRenderer.saveAndConfigureUIState()
+    GLRenderer.withUIContext {
     shader.use()
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, texture)
@@ -84,7 +84,7 @@ class GLScreenEffect {
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, 6)
     glBindVertexArray(0)
-    GLRenderer.restoreUIState(savedState)
+    }
   }
 
   /// Convenience: capture the current back buffer and apply the effect.
@@ -127,7 +127,7 @@ class GLScreenEffect {
     glBindTexture(GL_TEXTURE_2D, 0)
 
     // Bind and draw with uniforms
-    let savedState = GLRenderer.saveAndConfigureUIState()
+    GLRenderer.withUIContext {
     shader.use()
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, captureTexture)
@@ -213,7 +213,7 @@ class GLScreenEffect {
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, 6)
     glBindVertexArray(0)
-    GLRenderer.restoreUIState(savedState)
+    }
   }
 
   /// Draw and allow the caller to set arbitrary uniforms via the underlying shader.
@@ -254,7 +254,7 @@ class GLScreenEffect {
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height)
     glBindTexture(GL_TEXTURE_2D, 0)
 
-    let savedState = GLRenderer.saveAndConfigureUIState()
+    GLRenderer.withUIContext {
     shader.use()
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, captureTexture)
@@ -319,6 +319,6 @@ class GLScreenEffect {
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, 6)
     glBindVertexArray(0)
-    GLRenderer.restoreUIState(savedState)
+    }
   }
 }

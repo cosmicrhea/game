@@ -305,14 +305,6 @@ public final class MTLRenderer: Renderer {
     )
   }
 
-  public func drawGlyphs(
-    atlasID: UInt64,
-    vertices: UnsafeBufferPointer<Float>,
-    color: Color
-  ) {
-    // TODO: Wire to ModularTextRenderer or a minimal glyph pipeline.
-  }
-
   public func setClipRect(_ rect: Rect?) {
     // TODO: Implement Metal scissor rect
     print("MTLRenderer.setClipRect: \(rect != nil ? "Rect" : "nil")")
@@ -567,7 +559,7 @@ public final class MTLRenderer: Renderer {
     // TODO: Implement Metal text rendering
     // For now, this is a stub that does nothing
     // In a full implementation, this would:
-    // 1. Create a ModularTextRenderer for the default style
+    // 1. ~~Create a ModularTextRenderer for the default style~~
     // 2. Convert AttributedString to legacy AttributedText
     // 3. Use Metal shaders to render the text
   }

@@ -73,7 +73,7 @@ public struct Callout {
   // Default style for callouts (hardcoded)
   private static let defaultStyle = TextStyle(
     fontName: "Dream Orphans Bd",
-    fontSize: 24,
+    fontSize: 16,
     color: Color(0.9, 0.9, 0.9, 1)
   )
 
@@ -155,9 +155,13 @@ public struct Callout {
 
     // Icon
     if let iconImage = cachedIcon {
-      let iconSize: Size = Size(24, 24)
+      let iconSize: Size = Size(16, 16)
       let iconRect = Rect(
-        x: contentX, y: baseCenter.y - iconSize.height * 0.5, width: iconSize.width, height: iconSize.height)
+        x: contentX,
+        y: baseCenter.y - iconSize.height * 0.5,
+        width: iconSize.width,
+        height: iconSize.height
+      )
       iconImage.draw(in: iconRect, context: context)
       contentX += iconSize.width + iconTextGap
     }
@@ -176,7 +180,9 @@ public struct Callout {
   ///   - size: The size of the callout area; defaults to `Size(520, 44)`.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   @MainActor public mutating func draw(
-    at position: CalloutPosition, size: Size = Size(520, 44), context: GraphicsContext? = nil
+    at position: CalloutPosition,
+    size: Size = Size(520, 32),
+    context: GraphicsContext? = nil
   ) {
     self.position = position
     let viewportH = Float(HEIGHT)

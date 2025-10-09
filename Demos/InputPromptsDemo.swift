@@ -88,11 +88,13 @@ final class InputPromptsDemo: RenderLoop {
           prompts: group.prompts, inputSource: source, windowSize: ws, origin: (rightX, y), anchor: .bottomRight)
       }
 
-      // Draw debug rectangle around the packed group
-      Debug.drawRect(
-        x: screenX, y: screenY, width: Float(group.width), height: Float(group.height),
-        windowSize: ws, lineWidth: 2.0
-      )
+      if wireframeMode {
+        // Draw debug rectangle around the packed group
+        Debug.drawRect(
+          x: screenX, y: screenY, width: Float(group.width), height: Float(group.height),
+          windowSize: ws, lineWidth: 2.0
+        )
+      }
     }
   }
 }

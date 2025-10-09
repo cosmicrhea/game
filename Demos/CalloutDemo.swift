@@ -38,10 +38,10 @@ final class CalloutDemo: RenderLoop {
     var currentTop = Float(HEIGHT) - topMargin
     for i in 0..<callouts.count {
       if i == callouts.count - 1 { break }  // last is the centered prompt
-      let rect = Rect(x: leftMargin, y: currentTop, width: 520, height: 44)
+      let rect = Rect(x: leftMargin, y: currentTop, width: 520, height: 32)
       callouts[i].draw(in: rect)
-      currentTop -= (44 + verticalGap)
-      if currentTop < 44 { break }
+      currentTop -= (32 + verticalGap)
+      if currentTop < 32 { break }
     }
 
     // Centered prompt

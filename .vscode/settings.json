@@ -5,6 +5,7 @@
     "Assimp",
     "bezier",
     "Bezier",
+    "Booleanv",
     "Creato",
     "dpad",
     "Framebuffer",
@@ -25,6 +26,7 @@
     "squircle",
     "tpxml",
     "unistd",
+    "WRITEMASK",
     "xbox",
     "Xlinker"
   ]

@@ -40,8 +40,8 @@ let cli = CLIOptions.parseOrExit()
 LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
-try! GLFWSession.initialize()
 GLFWSession.onReceiveError = { error in logger.error("GLFW: \(error)") }
+try! GLFWSession.initialize()
 
 GLFWWindow.hints.contextVersion = (4, 1)
 GLFWWindow.hints.openGLProfile = .core
@@ -58,7 +58,7 @@ window.context.makeCurrent()
 //window.context.setSwapInterval(0)
 window.setIcon(Image(resourcePath: "UI/AppIcon/icon~masked.webp").glfwImage)
 //window.mouse.cursorMode = .disabled
-let dotCursorImage = GLFW.Image("UI/Cursors/dot_large.png")
+let dotCursorImage = Image(resourcePath: "UI/Cursors/dot_large.png").glfwImage
 let dotCursor = Mouse.Cursor.custom(dotCursorImage, center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2)
 window.mouse.setCursor(to: dotCursor)
 
