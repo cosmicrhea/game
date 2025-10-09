@@ -78,6 +78,7 @@ let package = Package(
         .copy("Assets/Effects"),
         .copy("Assets/Fonts"),
         .copy("Assets/Items"),
+        .copy("Assets/Metal"),
         .copy("Assets/Scenes"),
         .copy("Assets/UI"),
       ],

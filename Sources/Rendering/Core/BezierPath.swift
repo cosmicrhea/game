@@ -257,3 +257,90 @@ public struct BezierPath {
     return abs(dx1 * dy2 - dy1 * dx2) + abs(dx2 * dy3 - dy2 * dx3)
   }
 }
+
+// MARK: - Stroke Generation
+
+extension BezierPath {
+  /// Generates stroke vertices for the path with the specified line width.
+  /// - Parameter lineWidth: The width of the stroke.
+  /// - Returns: An array of vertices representing the stroke geometry.
+  public func generateStrokeVertices(lineWidth: Float) -> [Float] {
+    var vertices: [Float] = []
+    let halfWidth = lineWidth / 2
+
+    // Get all points from the path
+    var points: [Point] = []
+    var currentPoint = Point(0, 0)
+
+    for element in pathElements {
+      switch element {
+      case .moveTo(let point):
+        currentPoint = point
+        points.append(point)
+      case .lineTo(let point):
+        currentPoint = point
+        points.append(point)
+      case .quadCurveTo(let endPoint, let control):
+        // Tessellate the curve to get points
+        let tessellated = tessellateQuadCurve(from: currentPoint, to: endPoint, control: control, tolerance: 1.0)
+        points.append(contentsOf: tessellated.dropFirst())
+        currentPoint = endPoint
+      case .curveTo(let endPoint, let control1, let control2):
+        // Tessellate the curve to get points
+        let tessellated = tessellateCubicCurve(
+          from: currentPoint, to: endPoint, control1: control1, control2: control2, tolerance: 1.0)
+        points.append(contentsOf: tessellated.dropFirst())
+        currentPoint = endPoint
+      case .closePath:
+        if !points.isEmpty {
+          points.append(points[0])  // Close the path
+        }
+      }
+    }
+
+    // Create stroke geometry for each line segment
+    for i in 0..<(points.count - 1) {
+      let start = points[i]
+      let end = points[i + 1]
+      addLineStroke(from: start, to: end, width: halfWidth, vertices: &vertices)
+    }
+
+    return vertices
+  }
+
+  /// Generates stroke vertices and indices for the path with the specified line width.
+  /// - Parameter lineWidth: The width of the stroke.
+  /// - Returns: A tuple containing vertices and indices for triangle rendering.
+  public func generateStrokeGeometry(lineWidth: Float) -> (vertices: [Float], indices: [UInt32]) {
+    let vertices = generateStrokeVertices(lineWidth: lineWidth)
+
+    // Create triangle indices for stroke
+    var indices: [UInt32] = []
+    let vertexCount = vertices.count / 2
+    for i in stride(from: 0, to: vertexCount - 2, by: 2) {
+      indices.append(contentsOf: [UInt32(i), UInt32(i + 1), UInt32(i + 2)])
+      indices.append(contentsOf: [UInt32(i + 1), UInt32(i + 3), UInt32(i + 2)])
+    }
+
+    return (vertices, indices)
+  }
+
+  private func addLineStroke(from start: Point, to end: Point, width: Float, vertices: inout [Float]) {
+    // Calculate perpendicular vector for stroke width
+    let dx = end.x - start.x
+    let dy = end.y - start.y
+    let length = sqrt(dx * dx + dy * dy)
+    guard length > 0 else { return }
+
+    let perpX = -dy / length * width
+    let perpY = dx / length * width
+
+    // Add stroke quad vertices (two triangles per line segment)
+    vertices.append(contentsOf: [
+      start.x + perpX, start.y + perpY,  // outer start
+      start.x - perpX, start.y - perpY,  // inner start
+      end.x + perpX, end.y + perpY,  // outer end
+      end.x - perpX, end.y - perpY,  // inner end
+    ])
+  }
+}

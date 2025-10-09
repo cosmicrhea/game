@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "antialiasing",
     "assimp",
     "Assimp",
     "bezier",
@@ -14,6 +15,7 @@
     "Harf",
     "Integerv",
     "Lsizei",
+    "MSAA",
     "msdf",
     "MSDF",
     "playstation",

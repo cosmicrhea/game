@@ -28,18 +28,25 @@ final class MainLoop: RenderLoop {
   private var callout = Callout("Find the triangle and key", icon: .chevron)
   /// Input prompts component for controller/keyboard icons.
   private let inputPrompts: InputPrompts
-  /// 2D renderer for UI components.
-  private let gl2DRenderer = GLRenderer()
+  /// Renderer for both 2D and 3D content.
+  private let renderer: Renderer
 
-  // Objective visibility state
-  /// Whether the objective callout is currently visible.
+  // State
   private var objectiveVisible: Bool = true
+  private var showDebugText: Bool = false
 
   /// The main shader program for rendering.
   private let program = try! GLProgram("Common/basic 2")
 
   /// Initializes the main loop with scene data and renderers.
   init() {
+    // Initialize Metal renderer
+    do {
+      self.renderer = try MTLRenderer()
+    } catch {
+      print("Failed to create Metal renderer, falling back to OpenGL: \(error)")
+      self.renderer = GLRenderer()
+    }
     let scenePath = Bundle.module.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
     let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
     print("\(scene.rootNode)")
@@ -69,8 +76,16 @@ final class MainLoop: RenderLoop {
     guard state == .pressed else { return false }
 
     switch key {
-    case .o: toggleObjective()
-    default: return false
+    case .o:
+      UISound.select()
+      toggleObjective()
+
+    case .backspace:
+      UISound.select()
+      showDebugText.toggle()
+
+    default:
+      return false
     }
 
     return true
@@ -110,9 +125,9 @@ final class MainLoop: RenderLoop {
   }
 
   func drawDebugInputPrompts() {
-    // Set up 2D rendering context
-    gl2DRenderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
-    let ctx = GraphicsContext(renderer: gl2DRenderer, scale: 1)
+    // Set up rendering context
+    renderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
+    let ctx = GraphicsContext(renderer: renderer, scale: 1)
     GraphicsContext.withContext(ctx) {
       // Draw input prompts for the current group (Item Pickup as example)
       if let itemPickupPrompts = InputPromptGroups.groups["Item Pickup"] {
@@ -125,10 +140,12 @@ final class MainLoop: RenderLoop {
         )
       }
     }
-    gl2DRenderer.endFrame()
+    renderer.endFrame()
   }
 
   func drawDebugText() {
+    guard showDebugText else { return }
+
     let debugText = String(
       format: "%.1fx @ %@; %.1f; %.1f",
       camera.zoom, StringFromGLMathVec3(camera.position), camera.yaw, camera.pitch

@@ -40,15 +40,17 @@ public final class ImageAtlas {
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   public func draw(name: String, in rect: Rect, tint: Color? = nil, context: GraphicsContext? = nil) {
     guard let entry = entries[name] else {
-      print("ImageAtlas.draw: entry '\(name)' not found")
+      logger.error("ImageAtlas.draw: entry '\(name)' not found")
       return
     }
+
     let ctx = context ?? GraphicsContext.current
     guard let ctx else {
-      print("ImageAtlas.draw: no GraphicsContext")
+      logger.error("ImageAtlas.draw: no GraphicsContext")
       return
     }
-    print("ImageAtlas.draw: drawing '\(name)' at \(rect) with UV \(entry.uv)")
+
+    //logger.trace("ImageAtlas.draw: drawing '\(name)' at \(rect) with UV \(entry.uv)")
     ctx.renderer.drawImageRegion(
       textureID: texture.textureID,
       in: rect,

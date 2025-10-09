@@ -70,8 +70,8 @@ public final class DebugDrawer {
     ]
 
     // UI state: blend, no depth/cull
-    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST) == GLboolean(GL_TRUE)
-    let cullWasEnabled = glIsEnabled(GL_CULL_FACE) == GLboolean(GL_TRUE)
+    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST) == true
+    let cullWasEnabled = glIsEnabled(GL_CULL_FACE) == false
     glDisable(GL_DEPTH_TEST)
     glDisable(GL_CULL_FACE)
     glDepthMask(GLboolean(GL_FALSE))

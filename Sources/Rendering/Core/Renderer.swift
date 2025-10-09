@@ -1,7 +1,7 @@
 /// A protocol defining the interface for rendering operations.
 public protocol Renderer {
   // MARK: - Frame lifecycle
-  
+
   /// Begins a new rendering frame with the specified viewport size and scale.
   /// - Parameters:
   ///   - viewportSize: The size of the viewport in points.
@@ -16,6 +16,10 @@ public protocol Renderer {
   /// Sets the clipping rectangle for subsequent drawing operations.
   /// - Parameter rect: The rectangle to clip drawing to, or `nil` to disable clipping.
   func setClipRect(_ rect: Rect?)
+
+  /// Sets whether to render in wireframe mode.
+  /// - Parameter enabled: `true` for wireframe rendering, `false` for filled polygons.
+  func setWireframeMode(_ enabled: Bool)
 
   // MARK: - Primitives
 

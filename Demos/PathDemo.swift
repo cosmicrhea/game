@@ -17,11 +17,11 @@ public class PathDemo: RenderLoop {
     let centerX = 400.0
     let centerY = 300.0
 
-    // Draw a simple rounded rectangle
+    // Draw a simple rounded rectangle (MSAA antialiasing enabled automatically)
     let roundedRect = Rect(x: 50, y: 50, width: 200, height: 100)
     context.drawRoundedRect(roundedRect, cornerRadius: 20, color: Color(0, 0, 1))
 
-    // Draw a stroked rounded rectangle
+    // Draw a stroked rounded rectangle (MSAA antialiasing enabled automatically)
     let strokedRect = Rect(x: 300, y: 50, width: 200, height: 100)
     context.drawStrokeRoundedRect(strokedRect, cornerRadius: 20, color: Color(1, 0, 0), lineWidth: 3)
 

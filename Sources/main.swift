@@ -12,8 +12,10 @@ let WIDTH = 1280
 /// The height of the game window in pixels.
 let HEIGHT = 720
 
+/// Whether to prefer Metal rendering over OpenGL on Apple platforms.
+let PREFER_METAL = false
+
 print(" 🥛 Glass Engine ")
-logger.info("yeet!")
 
 /// Command-line interface options for the Glass engine.
 struct CLIOptions: ParsableArguments {
@@ -60,8 +62,7 @@ let dotCursorImage = GLFW.Image("UI/Cursors/dot_large.png")
 let dotCursor = Mouse.Cursor.custom(dotCursorImage, center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2)
 window.mouse.setCursor(to: dotCursor)
 
-var polygonMode = GL_FILL
-var showDebugText = true
+var wireframeMode = false
 var requestScreenshot = false
 var scheduleScreenshotAt: Double? = nil
 var scheduleExitAt: Double? = nil
@@ -120,11 +121,8 @@ window.keyInputHandler = { window, key, scancode, state, mods in
   switch key {
   case .comma:
     UISound.select()
-    polygonMode = polygonMode == GL_FILL ? GL_LINE : GL_FILL
-
-  case .backspace:
-    UISound.select()
-    showDebugText.toggle()
+    wireframeMode.toggle()
+    renderer.setWireframeMode(wireframeMode)
 
   case .p:
     UISound.shutter()
@@ -152,37 +150,41 @@ window.scrollInputHandler = { window, xOffset, yOffset in
   if activeLoop.onScroll(window: window, xOffset: xOffset, yOffset: yOffset) { return }
 }
 
-glEnable(GL_DEPTH_TEST)
+let renderer: Renderer = {
+  if PREFER_METAL {
+    do {
+      return try MTLRenderer()
+    } catch {
+      logger.warning("Failed to create Metal renderer, falling back to OpenGL: \(error)")
+      return GLRenderer()
+    }
+  } else {
+    return GLRenderer()
+  }
+}()
 
-let grapeSoda = TextRenderer("Grape Soda")!
-//let determination = TextRenderer("Determination", 64)!
-let determination = TextRenderer("Determination", 32)!
-let ari = TextRenderer("Ari-W9500 Bold", 32)!
+// Global graphics context
+let graphicsContext = GraphicsContext(renderer: renderer, scale: 1)
 
-// Global 2D renderer for UI elements
-let gl2DRenderer = GLRenderer()
+// Attach Metal layer to window if using Metal renderer
+if let metalRenderer = renderer as? MTLRenderer, let nsWindow = window.nsWindow {
+  metalRenderer.attachToWindow(nsWindow)
+}
 
 while !window.shouldClose {
   let currentFrame = Float(GLFWSession.currentTime)
   deltaTime = currentFrame - lastFrame
   lastFrame = currentFrame
 
-  // All per-frame input is handled by the active loop's update(window:deltaTime:)
-
-  glClearColor(0.2, 0.1, 0.1, 1)
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-  glPolygonMode(GL_FRONT_AND_BACK, polygonMode)
-
-  // Active loop
   activeLoop.update(window: window, deltaTime: deltaTime)
 
-  // Set up global GraphicsContext for UI rendering
-  gl2DRenderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
-  let graphicsContext = GraphicsContext(renderer: gl2DRenderer, scale: 1)
+  renderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
+
   GraphicsContext.withContext(graphicsContext) {
     activeLoop.draw()
   }
-  gl2DRenderer.endFrame()
+
+  renderer.endFrame()
 
   if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
     requestScreenshot = true
