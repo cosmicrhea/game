@@ -31,7 +31,7 @@ final class CalloutRenderer {
   private let animationSpeed: Float = 7.0
 
   // Immutable configuration
-  private let effect = ScreenEffect("effects/callout")
+  private let effect = GLScreenEffect("effects/callout")
   private let defaultLabelRenderer: TextRenderer
 
   init(labelFontName: String = "Dream Orphans Bd", labelSize: Float = 24) {

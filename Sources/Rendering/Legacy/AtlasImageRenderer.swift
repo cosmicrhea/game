@@ -13,7 +13,7 @@ final class AtlasImageRenderer {
   private var atlasHeight: Int32 = 0
 
   /// Name -> rect in pixel coordinates within the atlas (top-left origin)
-  private var nameToRect: [String: (x: Int32, y: Int32, w: Int32, h: Int32)] = [:]
+  private var nameToRect: [String: (x: Int, y: Int, w: Int, h: Int)] = [:]
 
   /// Optional global scale applied at draw time
   var scale: Float = 1.0
@@ -26,7 +26,7 @@ final class AtlasImageRenderer {
     let xmlURL = baseURL.appendingPathComponent(atlasXMLPath)
 
     // Parse XML for subtexture rects and imagePath
-    let delegate = AtlasXMLParserDelegate()
+    let delegate = ImageAtlas.TexturePackerXMLCoordinator()
     if let data = try? Data(contentsOf: xmlURL) {
       let parser = XMLParser(data: data)
       parser.delegate = delegate
@@ -88,7 +88,7 @@ final class AtlasImageRenderer {
   }
 
   /// Return the unscaled pixel size for a named sprite in the atlas.
-  func spriteSize(name: String) -> (w: Int32, h: Int32)? {
+  func spriteSize(name: String) -> (w: Int, h: Int)? {
     guard let r = nameToRect[name] else { return nil }
     return (r.w, r.h)
   }
@@ -304,31 +304,5 @@ final class AtlasImageRenderer {
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
     glDeleteVertexArrays(1, &vao)
-  }
-}
-
-final class AtlasXMLParserDelegate: NSObject, XMLParserDelegate {
-  var imagePath: String? = nil
-  var nameToRect: [String: (x: Int32, y: Int32, w: Int32, h: Int32)] = [:]
-
-  func parser(
-    _ parser: XMLParser,
-    didStartElement elementName: String,
-    namespaceURI: String?,
-    qualifiedName qName: String?,
-    attributes attributeDict: [String: String]
-  ) {
-    if elementName == "TextureAtlas" {
-      imagePath = attributeDict["imagePath"]
-    } else if elementName == "SubTexture" {
-      guard let name = attributeDict["name"],
-        let x = attributeDict["x"],
-        let y = attributeDict["y"],
-        let w = attributeDict["width"],
-        let h = attributeDict["height"],
-        let xi = Int32(x), let yi = Int32(y), let wi = Int32(w), let hi = Int32(h)
-      else { return }
-      nameToRect[name] = (x: xi, y: yi, w: wi, h: hi)
-    }
   }
 }

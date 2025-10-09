@@ -1,0 +1,17 @@
+---
+description: Explicit declaration imports for Foundation, GLFW, ImageFormats
+globs: ["Sources/**/*.swift", "Demos/**/*.swift"]
+alwaysApply: false
+---
+
+- Use explicit declaration imports for these modules: Foundation, GLFW, ImageFormats.
+- Prefer `import struct|class|enum|func|let`; avoid bare `import Module`.
+- Examples:
+  - `import struct Foundation.Date`
+  - `import class Foundation.ProcessInfo`
+  - `import func GLFW.glfwInit`
+  - `import struct GLFW.Image`
+  - `import struct ImageFormats.Image`
+  - `import func ImageFormats.loadImage`
+- Disallow: `import Foundation`, `import GLFW`, `import ImageFormats`
+

@@ -1,0 +1,16 @@
+---
+description: Prefer engine geometry types Point/Size/Rect from Rendering/Core/Geometry.swift
+globs: ["Sources/**/*.swift", "Demos/**/*.swift"]
+alwaysApply: false
+---
+
+- Use our geometry types from `Sources/Rendering/Core/Geometry.swift`:
+  - `Point`, `Size`, `Rect`
+
+- Prefer these over ad-hoc tuples or custom structs for 2D UI/layout coordinates.
+
+- Examples:
+  - `func beginFrame(viewportSize: Size, scale: Float)`
+  - `Image.draw(in: Rect(x: 24, y: 24, width: 64, height: 64))`
+  - `let position = Point(100, 200)`
+

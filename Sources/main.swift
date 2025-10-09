@@ -1,5 +1,4 @@
 import ArgumentParser
-import Foundation
 import GL
 import GLFW
 import GLMath
@@ -8,17 +7,21 @@ import unistd
 
 //@_exported import Inject
 
+/// The width of the game window in pixels.
 let WIDTH = 1280
+/// The height of the game window in pixels.
 let HEIGHT = 720
 
 print(" 🥛 Glass Engine ")
+logger.info("yeet!")
 
+/// Command-line interface options for the Glass engine.
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
   var demo: String?
 
-  @Flag(help: "Take a screenshot after 1 second.")
-  var screenshot: Bool = false
+  @Option(help: "Take a screenshot after 1 second. Optionally specify a path to save the screenshot.")
+  var screenshot: String?
 
   @Flag(help: "Exit after 2 seconds.")
   var exit: Bool = false
@@ -51,10 +54,10 @@ let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
-window.setIcon(Image("UI/AppIcon/icon~masked.webp"))
+window.setIcon(Image(resourcePath: "UI/AppIcon/icon~masked.webp").glfwImage)
 //window.mouse.cursorMode = .disabled
-let dotCursorImage = Image("UI/Cursors/dot_large.png")
-let dotCursor = Mouse.Cursor.custom(dotCursorImage, center: Point(dotCursorImage.width, dotCursorImage.height) / 2)
+let dotCursorImage = GLFW.Image("UI/Cursors/dot_large.png")
+let dotCursor = Mouse.Cursor.custom(dotCursorImage, center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2)
 window.mouse.setCursor(to: dotCursor)
 
 var polygonMode = GL_FILL
@@ -69,16 +72,17 @@ let loops: [RenderLoop] = [
   //
   MainLoop(),
   InputPromptsDemo(),
-  AttributedTextDemo(),
-  TextDemo(),
+  //  AttributedTextDemo(),
+  //  TextDemo(),
   DocumentDemo(),
   CalloutDemo(),
   FontsDemo(),
-  PhysicsDemo(),
+  PathDemo(),
+  //  PhysicsDemo(),
 ]
 
 var loopCount = loops.count
-//var currentLoopIndex = 0
+
 if let demoArg = cli.demo?.lowercased() {
   if let found = loops.enumerated().first(where: { index, loop in
     let typeName = String(describing: type(of: loop)).lowercased()
@@ -88,11 +92,12 @@ if let demoArg = cli.demo?.lowercased() {
     config.currentLoopIndex = found
   }
 }
+
 var activeLoop: RenderLoop = loops[config.currentLoopIndex]
 activeLoop.onAttach(window: window)
 
 // Schedule CLI actions relative to current time
-if cli.screenshot { scheduleScreenshotAt = GLFWSession.currentTime + 1.0 }
+if cli.screenshot != nil { scheduleScreenshotAt = GLFWSession.currentTime + 1.0 }
 if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
 
 @MainActor func cycleLoops(_ step: Int) {
@@ -133,32 +138,18 @@ window.keyInputHandler = { window, key, scancode, state, mods in
     UISound.select()
     cycleLoops(+1)
 
-  case .o:
-    if let mainLoop = activeLoop as? MainLoop {
-      mainLoop.toggleObjective()
-    }
-
   default:
     break
   }
 }
 
-var camera = FreeCamera()
-
-@MainActor func processInput() {
-  camera.processKeyboardState(window.keyboard, deltaTime)
-}
-
 window.cursorPositionHandler = { window, x, y in
   guard window.isFocused else { return }
   if activeLoop.onMouseMove(window: window, x: x, y: y) { return }
-  camera.processMousePosition(Float(x), Float(y))
-  ScreenEffect.mousePosition = (Float(x), Float(y))
 }
 
 window.scrollInputHandler = { window, xOffset, yOffset in
   if activeLoop.onScroll(window: window, xOffset: xOffset, yOffset: yOffset) { return }
-  camera.processMouseScroll(Float(yOffset))
 }
 
 glEnable(GL_DEPTH_TEST)
@@ -168,20 +159,30 @@ let grapeSoda = TextRenderer("Grape Soda")!
 let determination = TextRenderer("Determination", 32)!
 let ari = TextRenderer("Ari-W9500 Bold", 32)!
 
+// Global 2D renderer for UI elements
+let gl2DRenderer = GLRenderer()
+
 while !window.shouldClose {
   let currentFrame = Float(GLFWSession.currentTime)
   deltaTime = currentFrame - lastFrame
   lastFrame = currentFrame
 
-  processInput()
+  // All per-frame input is handled by the active loop's update(window:deltaTime:)
 
   glClearColor(0.2, 0.1, 0.1, 1)
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
   glPolygonMode(GL_FRONT_AND_BACK, polygonMode)
 
   // Active loop
-  activeLoop.update(deltaTime: deltaTime)
-  activeLoop.draw()
+  activeLoop.update(window: window, deltaTime: deltaTime)
+
+  // Set up global GraphicsContext for UI rendering
+  gl2DRenderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
+  let graphicsContext = GraphicsContext(renderer: gl2DRenderer, scale: 1)
+  GraphicsContext.withContext(graphicsContext) {
+    activeLoop.draw()
+  }
+  gl2DRenderer.endFrame()
 
   if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
     requestScreenshot = true
@@ -189,7 +190,7 @@ while !window.shouldClose {
   }
 
   if requestScreenshot {
-    saveScreenshot(width: Int32(WIDTH), height: Int32(HEIGHT))
+    saveScreenshot(width: Int32(WIDTH), height: Int32(HEIGHT), path: cli.screenshot)
     requestScreenshot = false
   }
 

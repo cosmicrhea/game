@@ -2,6 +2,8 @@
   "cSpell.words": [
     "assimp",
     "Assimp",
+    "bezier",
+    "Bezier",
     "Creato",
     "dpad",
     "Framebuffer",
@@ -10,6 +12,7 @@
     "glfw",
     "GLFW",
     "Harf",
+    "Integerv",
     "Lsizei",
     "msdf",
     "MSDF",
@@ -18,6 +21,7 @@
     "rects",
     "scancode",
     "squircle",
+    "tpxml",
     "unistd",
     "xbox",
     "Xlinker"

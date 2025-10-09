@@ -1,6 +1,6 @@
-// TODO:
-
+/// Manages input mappings for the game.
 final class InputMap {
+  /// The standard input map instance.
   @MainActor static let standard = InputMap()
 }
 

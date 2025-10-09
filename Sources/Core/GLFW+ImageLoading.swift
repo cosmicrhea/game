@@ -1,6 +1,11 @@
-import Foundation
-import GLFW
-import ImageFormats
+import class Foundation.Bundle
+import struct Foundation.Data
+import class Foundation.FileManager
+import struct Foundation.URL
+import struct GLFW.Color
+import struct GLFW.Image
+import struct ImageFormats.Image
+import struct ImageFormats.RGBA
 
 extension GLFW.Image {
   init(_ path: String) {

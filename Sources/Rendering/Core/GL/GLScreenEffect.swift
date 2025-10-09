@@ -1,13 +1,12 @@
-import Foundation
 import GL
-import GLFW
-import ImageFormats
+
+import enum GLFW.GLFWSession
 
 // Usage:
-// let effect = ScreenEffect()
+// let effect = GLScreenEffect()
 // effect.draw(texture: someTexture)
 
-class ScreenEffect {
+class GLScreenEffect {
   @MainActor static var mousePosition: (Float, Float) = (0, 0)
   private var vao: GLuint = 0
   private var vbo: GLuint = 0
@@ -158,7 +157,7 @@ class ScreenEffect {
 
     let iMouseLoc = glGetUniformLocation(shader.programID, "iMouse")
     if iMouseLoc != -1 {
-      let mouse = ScreenEffect.mousePosition
+      let mouse = GLScreenEffect.mousePosition
       // Convert to bottom-left origin to match gl_FragCoord
       let mouseYGL = Float(height) - mouse.1
       print(mouse, mouseYGL)
@@ -284,7 +283,7 @@ class ScreenEffect {
 
     let iMouseLoc = glGetUniformLocation(shader.programID, "iMouse")
     if iMouseLoc != -1 {
-      let mouse = ScreenEffect.mousePosition
+      let mouse = GLScreenEffect.mousePosition
       let mouseYGL = Float(height) - mouse.1
       glUniform4f(iMouseLoc, mouse.0, mouseYGL, 0, 0)
     }

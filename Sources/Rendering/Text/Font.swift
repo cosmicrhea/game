@@ -1,7 +1,7 @@
 import Foundation
 import STBTrueType
 
-/// Unified font handling that combines font discovery and loading
+/// The representation of a font in the game.
 public final class Font {
   private let trueTypeFont: TrueTypeFont
   private let maxAboveBaseline: Float
@@ -10,15 +10,22 @@ public final class Font {
 
   // MARK: - Font Discovery
 
+  /// Information about a resolved font file.
   public struct ResolvedFont {
+    /// The URL of the font file.
     public let url: URL
+    /// The display name of the font.
     public let displayName: String
+    /// The base name of the font (without size suffix).
     public let baseName: String
+    /// The pixel size of the font, if specified in the filename.
     public let pixelSize: Int?
   }
 
   private static let defaultFontsPath = "Fonts"
 
+  /// The available fonts in the game.
+  /// - Returns: An array of resolved font information, sorted by display name.
   public static var availableFonts: [ResolvedFont] {
     let extensions = ["ttf", "otf"]
     var entries: [ResolvedFont] = []
@@ -36,6 +43,9 @@ public final class Font {
     return entries.sorted { $0.displayName > $1.displayName }
   }
 
+  /// Resolves a font by name from the available fonts.
+  /// - Parameter name: The name of the font to resolve.
+  /// - Returns: The resolved font information, or `nil` if not found.
   public static func resolve(name: String) -> ResolvedFont? {
     let (requestedBase, requestedSize) = parseBaseAndSize(from: name)
     let matches = availableFonts.filter { $0.displayName == name || $0.baseName == requestedBase }
@@ -72,6 +82,11 @@ public final class Font {
 
   // MARK: - Font Loading
 
+  /// Creates and returns a font object for the specified font name and pixel size.
+  /// - Parameters:
+  ///   - fontName: The name of the font to load.
+  ///   - pixelHeight: The pixel height of the font; defaults to the font's specified size or 16.
+  /// - Returns: A new font instance, or `nil` if the font could not be loaded.
   public init?(fontName: String, pixelHeight: Float? = nil) {
     guard let entry = Font.resolve(name: fontName) else { return nil }
     let resolvedPixelHeight = pixelHeight ?? entry.pixelSize.map(Float.init) ?? 16
@@ -119,12 +134,17 @@ public final class Font {
 
   // MARK: - Font Operations
 
-  /// Get the underlying TrueType font
+  /// Gets the underlying TrueType font for advanced operations.
+  /// - Returns: The underlying TrueType font instance.
   public func getTrueTypeFont() -> TrueTypeFont {
     return trueTypeFont
   }
 
-  /// Measure the width of a string
+  /// Measures the width of a string in points.
+  /// - Parameters:
+  ///   - text: The text to measure.
+  ///   - scale: The scale factor to apply to the measurement.
+  /// - Returns: The width of the text in points.
   public func measureWidth(_ text: String, scale: Float = 1.0) -> Float {
     var width: Float = 0
     let scalars = Array(text.unicodeScalars)
@@ -140,7 +160,12 @@ public final class Font {
     return width
   }
 
-  /// Get advance for a codepoint
+  /// Gets the advance width for a codepoint, considering the next character for kerning.
+  /// - Parameters:
+  ///   - codepoint: The Unicode codepoint to get the advance for.
+  ///   - next: The next codepoint for kerning calculations, or `nil` if none.
+  ///   - scale: The scale factor to apply to the advance.
+  /// - Returns: The advance width in points.
   public func getAdvance(for codepoint: Int32, next: Int32?, scale: Float = 1.0) -> Float {
     return trueTypeFont.getAdvance(for: codepoint, next: next) * scale
   }

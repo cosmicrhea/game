@@ -1,33 +1,44 @@
 import Assimp
-import Foundation
 import GL
 import GLFW
 import GLMath
 
+import class Foundation.Bundle
+
+/// The main game loop that handles rendering and input.
+@MainActor
 final class MainLoop: RenderLoop {
-  private var window: GLFWWindow?
 
   // Scene and camera
+  /// The free camera for navigating the scene.
   private var camera = FreeCamera()
 
   // Triangle demo
+  /// Test triangle renderer for basic geometry testing.
   private let testTriangle = TestTriangle()
 
   // Assimp mesh
+  /// Array of mesh renderers for 3D objects.
   private let renderers: [MeshRenderer]
 
   // UI resources
+  /// Text renderer using the Determination font.
   private let determination = TextRenderer("Determination", 32)!
-  private let calloutRenderer = CalloutRenderer()
-  private let calloutRenderer2 = CalloutRenderer()
-  private let inputPrompts: InputPromptsRenderer
-  private let chevron = ImageRenderer("UI/Icons/Callouts/chevron.png")
+  /// Callout UI component for displaying hints.
+  private var callout = Callout("Find the triangle and key", icon: .chevron)
+  /// Input prompts component for controller/keyboard icons.
+  private let inputPrompts: InputPrompts
+  /// 2D renderer for UI components.
+  private let gl2DRenderer = GLRenderer()
 
   // Objective visibility state
+  /// Whether the objective callout is currently visible.
   private var objectiveVisible: Bool = true
 
+  /// The main shader program for rendering.
   private let program = try! GLProgram("Common/basic 2")
 
+  /// Initializes the main loop with scene data and renderers.
   init() {
     let scenePath = Bundle.module.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
     let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
@@ -37,40 +48,47 @@ final class MainLoop: RenderLoop {
       .filter { $0.numberOfVertices > 0 }
       .map { MeshRenderer(scene: scene, mesh: $0) }
 
-    inputPrompts = InputPromptsRenderer()
+    inputPrompts = InputPrompts()
   }
 
-  @MainActor func onAttach(window: GLFWWindow) {
-    self.window = window
-  }
-
-  @MainActor func onDetach(window: GLFWWindow) {
-    self.window = nil
-  }
-
-  @MainActor func onMouseMove(window: GLFWWindow, x: Double, y: Double) -> Bool {
+  func onMouseMove(window: GLFWWindow, x: Double, y: Double) -> Bool {
     guard window.isFocused else { return false }
     camera.processMousePosition(Float(x), Float(y))
-    ScreenEffect.mousePosition = (Float(x), Float(y))
-    return false
+    GLScreenEffect.mousePosition = (Float(x), Float(y))
+    return true
   }
 
-  @MainActor func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) -> Bool {
+  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) -> Bool {
     camera.processMouseScroll(Float(yOffset))
-    return false
+    return true
   }
 
-  @MainActor func update(deltaTime: Float) {
-    if let w = window { camera.processKeyboardState(w.keyboard, deltaTime) }
+  func onKey(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier)
+    -> Bool
+  {
+    guard state == .pressed else { return false }
+
+    switch key {
+    case .o: toggleObjective()
+    default: return false
+    }
+
+    return true
+  }
+
+  func update(window: GLFWWindow, deltaTime: Float) {
+    camera.processKeyboardState(window.keyboard, deltaTime)
+
     // Update callout animation
-    calloutRenderer.update(deltaTime: deltaTime)
+    callout.visible = objectiveVisible
+    callout.update(deltaTime: deltaTime)
   }
 
-  @MainActor func toggleObjective() {
+  func toggleObjective() {
     objectiveVisible.toggle()
   }
 
-  @MainActor func draw() {
+  func draw() {
     program.use()
     program.setMat4("projection", value: GLMath.perspective(camera.zoom, 1, 0.001, 1000.0))
     program.setMat4("view", value: camera.getViewMatrix())
@@ -82,35 +100,35 @@ final class MainLoop: RenderLoop {
     // Meshes
     renderers.forEach { $0.draw() }
 
-    //drawObjectiveCallout()
+    drawObjectiveCallout()
     //drawDebugInputPrompts()
     drawDebugText()
   }
 
-  @MainActor func drawObjectiveCallout() {
-    calloutRenderer.draw(
-      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-      size: (520, 44),
-      position: (0, Float(HEIGHT) - 180),
-      anchor: .topLeft,
-      fade: .right,
-      icon: chevron,
-      label: "Find the triangle and key",
-      visible: objectiveVisible
-    )
+  func drawObjectiveCallout() {
+    callout.draw(in: Rect(x: 0, y: Float(HEIGHT) - 180, width: 520, height: 44))
   }
 
-  @MainActor func drawDebugInputPrompts() {
-    inputPrompts.drawHorizontal(
-      prompts: InputPromptsRenderer.groups["Item Viewer"]!,
-      inputSource: .keyboardMouse,
-      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-      origin: (Float(WIDTH) - 32, 24),
-      anchor: .bottomRight
-    )
+  func drawDebugInputPrompts() {
+    // Set up 2D rendering context
+    gl2DRenderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
+    let ctx = GraphicsContext(renderer: gl2DRenderer, scale: 1)
+    GraphicsContext.withContext(ctx) {
+      // Draw input prompts for the current group (Item Pickup as example)
+      if let itemPickupPrompts = InputPromptGroups.groups["Item Pickup"] {
+        inputPrompts.drawHorizontal(
+          prompts: itemPickupPrompts,
+          inputSource: .keyboardMouse,
+          windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+          origin: (Float(WIDTH) - 32, 24),
+          anchor: .bottomRight
+        )
+      }
+    }
+    gl2DRenderer.endFrame()
   }
 
-  @MainActor func drawDebugText() {
+  func drawDebugText() {
     let debugText = String(
       format: "%.1fx @ %@; %.1f; %.1f",
       camera.zoom, StringFromGLMathVec3(camera.position), camera.yaw, camera.pitch

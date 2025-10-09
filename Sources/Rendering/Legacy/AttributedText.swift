@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a text attribute applied to a specific range
-public struct TextAttribute {
+public struct LegacyTextAttribute {
   public let range: Range<String.Index>
   public let color: (Float, Float, Float, Float)?
   public let font: String?
@@ -16,9 +16,9 @@ public struct TextAttribute {
 /// Attributed text that supports color and font changes within the same text
 public struct AttributedText {
   public let text: String
-  public let attributes: [TextAttribute]
+  public let attributes: [LegacyTextAttribute]
 
-  public init(text: String, attributes: [TextAttribute] = []) {
+  public init(text: String, attributes: [LegacyTextAttribute] = []) {
     self.text = text
     self.attributes = attributes
   }
@@ -27,13 +27,13 @@ public struct AttributedText {
   public static func withColor(_ text: String, color: (Float, Float, Float, Float)) -> AttributedText {
     return AttributedText(
       text: text,
-      attributes: [TextAttribute(range: text.startIndex..<text.endIndex, color: color)]
+      attributes: [LegacyTextAttribute(range: text.startIndex..<text.endIndex, color: color)]
     )
   }
 
   /// Apply a color to a specific range of text
   public func withColor(_ color: (Float, Float, Float, Float), range: Range<String.Index>) -> AttributedText {
-    let newAttribute = TextAttribute(range: range, color: color)
+    let newAttribute = LegacyTextAttribute(range: range, color: color)
     return AttributedText(text: text, attributes: attributes + [newAttribute])
   }
 

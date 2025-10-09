@@ -3,7 +3,7 @@ import OrderedCollections
 import STBRectPack
 
 final class InputPromptsDemo: RenderLoop {
-  private lazy var promptRenderer = InputPromptsRenderer()
+  private lazy var promptRenderer = InputPrompts()
   private lazy var titleText = TextRenderer("Creato Display Bold", 18)!
 
   // Helper function to measure the actual width of a group
@@ -19,7 +19,7 @@ final class InputPromptsDemo: RenderLoop {
     return maxWidth
   }
 
-  @MainActor func draw() {
+  func draw() {
     let ws = (Int32(WIDTH), Int32(HEIGHT))
 
     // Layout constants
@@ -32,7 +32,7 @@ final class InputPromptsDemo: RenderLoop {
     // Collect all groups and measure their sizes
     var groupData: [(title: String, prompts: OrderedDictionary<String, [[String]]>, width: Float, height: Float)] = []
 
-    for (title, prompts) in InputPromptsRenderer.groups.reversed() {
+    for (title, prompts) in InputPromptGroups.groups.reversed() {
       let measuredWidth = measureGroupWidth(prompts: prompts)
       let totalHeight = groupHeight + titleAboveOffset + titleText.scaledLineHeight + padding
       groupData.append((title: title, prompts: prompts, width: measuredWidth, height: totalHeight))

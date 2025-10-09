@@ -6,7 +6,7 @@ let package = Package(
   name: "Glass",
 
   platforms: [
-    .macOS(.v10_15),
+    .macOS(.v12),
     .custom("Linux", versionString: "6"),
     .custom("Windows", versionString: "10"),
   ],

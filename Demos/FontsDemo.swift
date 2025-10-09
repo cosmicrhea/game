@@ -1,4 +1,4 @@
-import Foundation
+import GLFW
 
 final class FontsDemo: RenderLoop {
 
@@ -8,7 +8,7 @@ final class FontsDemo: RenderLoop {
       return (renderer, resolvedFont)
     }
 
-  @MainActor func draw() {
+  func draw() {
     var yCursor: Float = 24
 
     // Original font demo first
