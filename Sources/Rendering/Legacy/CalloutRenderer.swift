@@ -146,11 +146,11 @@ final class CalloutRenderer {
     let rightWidth: Float = (fade == .right || fade == .both) ? fadeWidth : 0
 
     // UI should render on top: no depth/cull interference
-    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST) == GLboolean(GL_TRUE)
-    let cullWasEnabled = glIsEnabled(GL_CULL_FACE) == GLboolean(GL_TRUE)
+    let depthWasEnabled = glIsEnabled(GL_DEPTH_TEST)
+    let cullWasEnabled = glIsEnabled(GL_CULL_FACE)
     glDisable(GL_DEPTH_TEST)
     glDisable(GL_CULL_FACE)
-    glDepthMask(GLboolean(GL_FALSE))
+    glDepthMask(false)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
@@ -204,7 +204,7 @@ final class CalloutRenderer {
 
     // Restore GL state
     glPolygonMode(GL_FRONT_AND_BACK, GLenum(prevPoly[0]))
-    glDepthMask(GLboolean(GL_TRUE))
+    glDepthMask(true)
     if depthWasEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
     if cullWasEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
   }

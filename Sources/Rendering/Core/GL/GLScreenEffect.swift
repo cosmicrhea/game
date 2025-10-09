@@ -44,12 +44,12 @@ class GLScreenEffect {
     )
 
     glVertexAttribPointer(
-      0, 2, GL_FLOAT, GLboolean(GL_FALSE), GLsizei(4 * MemoryLayout<Float>.stride), nil)
+      0, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), nil)
     glEnableVertexAttribArray(0)
 
     let texOffset = UnsafeRawPointer(bitPattern: 2 * MemoryLayout<Float>.stride)
     glVertexAttribPointer(
-      1, 2, GL_FLOAT, GLboolean(GL_FALSE), GLsizei(4 * MemoryLayout<Float>.stride), texOffset)
+      1, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), texOffset)
     glEnableVertexAttribArray(1)
 
     glBindVertexArray(0)
