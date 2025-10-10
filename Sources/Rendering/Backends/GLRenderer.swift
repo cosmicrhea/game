@@ -333,14 +333,17 @@ public final class GLRenderer: Renderer {
       indexOffset += UInt32(lineVertices.count / 8)
     }
 
-    // Get outline color and thickness from stroke attributes
-    let outlineColor = attributedString.attributes.compactMap { $0.stroke?.color }.first
-    let outlineThickness = attributedString.attributes.compactMap { $0.stroke?.width }.first ?? 0
+    // Get outline color and thickness from stroke attributes (prioritize attributed string, fall back to default style)
+    let outlineColor = attributedString.attributes.compactMap { $0.stroke?.color }.first ?? defaultStyle.strokeColor
+    let outlineThickness =
+      attributedString.attributes.compactMap { $0.stroke?.width }.first ?? defaultStyle.strokeWidth
 
-    // Get shadow attributes
-    let shadowColor = attributedString.attributes.compactMap { $0.shadow?.color }.first
-    let shadowOffset = attributedString.attributes.compactMap { $0.shadow?.offset }.first ?? Point(0, 0)
-    let shadowBlur = attributedString.attributes.compactMap { $0.shadow?.width }.first ?? 0
+    // Get shadow attributes (prioritize attributed string, fall back to default style)
+    let shadowColor = attributedString.attributes.compactMap { $0.shadow?.color }.first ?? defaultStyle.shadowColor
+    let shadowOffset =
+      attributedString.attributes.compactMap { $0.shadow?.offset }.first ?? defaultStyle.shadowOffset
+    let shadowBlur =
+      attributedString.attributes.compactMap { $0.shadow?.width }.first ?? defaultStyle.shadowWidth
 
     // Render the text using UI context
     withUIContext {

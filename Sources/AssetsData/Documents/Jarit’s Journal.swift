@@ -67,7 +67,7 @@ extension Document {
       """,
       
       """
-      [Photocopied by The Watchers,
+      [Photocopied by The Watchers, 
       Amager Underground Press, October 2025]
       """
     ]

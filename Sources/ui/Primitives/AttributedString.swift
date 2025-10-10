@@ -19,22 +19,197 @@ public struct TextStyle: Sendable {
   /// Text alignment.
   public var alignment: TextAlignment
 
+  // Stroke properties
+  /// Width of the stroke in points. If 0, no stroke is applied.
+  public var strokeWidth: Float
+  /// Color of the stroke.
+  public var strokeColor: Color
+
+  // Shadow properties
+  /// Blur radius of the shadow in points. If 0, no shadow is applied.
+  public var shadowWidth: Float
+  /// Offset of the shadow from the text.
+  public var shadowOffset: Point
+  /// Color of the shadow.
+  public var shadowColor: Color
+
   /// Creates a new text style with the specified properties.
   /// - Parameters:
   ///   - fontName: Name of the font to use.
   ///   - fontSize: Size of the font in points.
   ///   - color: Color of the text.
   ///   - alignment: Text alignment.
-  public init(fontName: String, fontSize: Float, color: Color, alignment: TextAlignment = .left) {
+  ///   - strokeWidth: Width of the stroke in points. If 0, no stroke is applied.
+  ///   - strokeColor: Color of the stroke.
+  ///   - shadowWidth: Blur radius of the shadow in points. If 0, no shadow is applied.
+  ///   - shadowOffset: Offset of the shadow from the text.
+  ///   - shadowColor: Color of the shadow.
+  public init(
+    fontName: String,
+    fontSize: Float,
+    color: Color,
+    alignment: TextAlignment = .left,
+    strokeWidth: Float = 0,
+    strokeColor: Color = .clear,
+    shadowWidth: Float = 0,
+    shadowOffset: Point = Point(0, 0),
+    shadowColor: Color = .clear
+  ) {
     self.fontName = fontName
     self.fontSize = fontSize
     self.color = color
     self.alignment = alignment
+    self.strokeWidth = strokeWidth
+    self.strokeColor = strokeColor
+    self.shadowWidth = shadowWidth
+    self.shadowOffset = shadowOffset
+    self.shadowColor = shadowColor
+  }
+
+  /// Creates a new text style with a different alignment.
+  /// - Parameter alignment: The new alignment to use.
+  /// - Returns: A new TextStyle with the specified alignment.
+  public func withAlignment(_ alignment: TextAlignment) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
+    )
+  }
+
+  /// Creates a new text style with a different color.
+  /// - Parameter color: The new color to use.
+  /// - Returns: A new TextStyle with the specified color.
+  public func withColor(_ color: Color) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: color,
+      alignment: self.alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
+    )
+  }
+
+  /// Creates a new text style with a different font size.
+  /// - Parameter fontSize: The new font size to use.
+  /// - Returns: A new TextStyle with the specified font size.
+  public func withFontSize(_ fontSize: Float) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
+    )
+  }
+
+  /// Creates a new text style with a different font name.
+  /// - Parameter fontName: The new font name to use.
+  /// - Returns: A new TextStyle with the specified font name.
+  public func withFontName(_ fontName: String) -> TextStyle {
+    return TextStyle(
+      fontName: fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
+    )
+  }
+
+  /// Creates a new text style with different stroke properties.
+  /// - Parameters:
+  ///   - strokeWidth: The new stroke width to use.
+  ///   - strokeColor: The new stroke color to use.
+  /// - Returns: A new TextStyle with the specified stroke properties.
+  public func withStroke(width strokeWidth: Float, color strokeColor: Color) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      strokeWidth: strokeWidth,
+      strokeColor: strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
+    )
+  }
+
+  /// Creates a new text style with different shadow properties.
+  /// - Parameters:
+  ///   - shadowWidth: The new shadow width to use.
+  ///   - shadowOffset: The new shadow offset to use.
+  ///   - shadowColor: The new shadow color to use.
+  /// - Returns: A new TextStyle with the specified shadow properties.
+  public func withShadow(width shadowWidth: Float, offset shadowOffset: Point, color shadowColor: Color) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: shadowWidth,
+      shadowOffset: shadowOffset,
+      shadowColor: shadowColor
+    )
+  }
+
+  /// Creates a new text style with a different stroke color.
+  /// - Parameter strokeColor: The new stroke color to use.
+  /// - Returns: A new TextStyle with the specified stroke color.
+  public func withStrokeColor(_ strokeColor: Color) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
+    )
+  }
+
+  /// Creates a new text style with a different shadow color.
+  /// - Parameter shadowColor: The new shadow color to use.
+  /// - Returns: A new TextStyle with the specified shadow color.
+  public func withShadowColor(_ shadowColor: Color) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: shadowColor
+    )
   }
 }
 
 /// Stroke configuration for text rendering.
-public struct TextStroke: Equatable {
+public struct TextStroke: Equatable, Sendable {
   /// The width of the stroke in points.
   public var width: Float
   /// The color of the stroke.
@@ -51,7 +226,7 @@ public struct TextStroke: Equatable {
 }
 
 /// Shadow configuration for text rendering.
-public struct TextShadow: Equatable {
+public struct TextShadow: Equatable, Sendable {
   /// The blur radius of the shadow in points.
   public var width: Float
   /// The offset of the shadow from the text.

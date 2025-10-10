@@ -6,7 +6,7 @@ extension Document {
 
     pages: [
       """
-      A photograph of the Perring Building in Amager. It’s dated “2 January, 2025”.
+      A photograph of the Perring Building on Amager. It’s dated “2 January, 2025”.
       """,
       "",
 //      """

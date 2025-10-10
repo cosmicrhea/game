@@ -34,4 +34,12 @@ extension TextStyle {
     fontSize: dialog.fontSize,
     color: .gray700
   )
+
+  static let documentViewer = TextStyle(
+    fontName: "Creato Display Medium",
+    fontSize: 24,
+    color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
+    strokeWidth: 2,
+    strokeColor: Color(red: 0.078, green: 0.059, blue: 0.055, alpha: 1.0)
+  )
 }

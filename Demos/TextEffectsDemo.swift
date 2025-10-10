@@ -1,32 +1,99 @@
 import GL
 import GLFW
 import GLMath
+import STBRectPack
 
 @MainActor
 final class TextEffectsDemo: RenderLoop {
-  @ConfigValue("TextEffectsDemo/currentEffect")
-  private var currentEffect: Int = 0
+  private let titleStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 16, color: .white)
+  private let sampleText = "The quick brown fox jumps over the lazy dog"
 
-  private let effects = [
-    "Plain Text",
-    "Outline Only",
-    "Shadow Only",
-    "Outline + Shadow",
-    "Thick Outline",
-    "Soft Shadow",
-  ]
+  private let effects: [(name: String, style: TextStyle)] = {
+    let sampleText = "The quick brown fox jumps over the lazy dog"
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    switch key {
-    case .space:
-      currentEffect = (currentEffect + 1) % effects.count
-      print("Switched to: \(effects[currentEffect]) (effect #\(currentEffect))")
-    case .escape:
-      window.shouldClose = true
-    default:
-      break
-    }
-  }
+    return [
+      (
+        "Plain Text",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+          alignment: .left
+        )
+      ),
+      (
+        "Red Outline",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+          alignment: .left,
+          strokeWidth: 2.0,
+          strokeColor: Color(red: 1.0, green: 0.0, blue: 0.0, alpha: 1.0)
+        )
+      ),
+      (
+        "Document Viewer",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
+          alignment: .left,
+          strokeWidth: 2.0,
+          strokeColor: Color(red: 0.078, green: 0.059, blue: 0.055, alpha: 1.0)
+        )
+      ),
+      (
+        "Black Shadow",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+          alignment: .left,
+          shadowWidth: 3.0,
+          shadowOffset: Point(3, -3),
+          shadowColor: Color(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.7)
+        )
+      ),
+      (
+        "Green Outline + Shadow",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+          alignment: .left,
+          strokeWidth: 1.5,
+          strokeColor: Color(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
+          shadowWidth: 2.0,
+          shadowOffset: Point(2, -2),
+          shadowColor: Color(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.5)
+        )
+      ),
+      (
+        "Thick Blue Outline",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+          alignment: .left,
+          strokeWidth: 4.0,
+          strokeColor: Color(red: 0.0, green: 0.0, blue: 1.0, alpha: 1.0)
+        )
+      ),
+      (
+        "Soft Purple Shadow",
+        TextStyle(
+          fontName: "Creato Display Medium",
+          fontSize: 24,
+          color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+          alignment: .left,
+          shadowWidth: 4.0,
+          shadowOffset: Point(3, -3),
+          shadowColor: Color(red: 0.5, green: 0.0, blue: 0.5, alpha: 0.4)
+        )
+      ),
+    ]
+  }()
 
   func draw() {
     guard let context = GraphicsContext.current else { return }
@@ -35,94 +102,81 @@ final class TextEffectsDemo: RenderLoop {
     glClearColor(0.1, 0.1, 0.2, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
 
-    // Create test text with different effects
-    let testText = "Text Effects Demo\nPress SPACE to cycle effects"
-    let style = TextStyle(
-      fontName: "Better VCR",
-      fontSize: 24,
-      color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
-      alignment: .center
-    )
+    let ws = (Int32(WIDTH), Int32(HEIGHT))
 
-    // Create attributed string based on current effect
-    var attributedString = AttributedString(string: testText)
+    // Layout constants
+    let titleHeight: Float = 24
+    let textHeight: Float = 32
+    let padding: Float = 16
+    let marginX: Float = 40
+    let marginY: Float = 40
+    let spacingX: Float = 40
+    let spacingY: Float = 60
 
-    switch currentEffect {
-    case 0:  // Plain Text
-      // No additional attributes
-      break
+    // Measure each effect
+    var effectData: [(name: String, style: TextStyle, width: Float, height: Float)] = []
 
-    case 1:  // Outline Only
-      attributedString = attributedString.withStroke(
-        width: 3.0,
-        color: Color(red: 1.0, green: 0.0, blue: 0.0, alpha: 1.0),
-        range: testText.startIndex..<testText.endIndex
-      )
-
-    case 2:  // Shadow Only
-      attributedString = attributedString.withShadow(
-        width: 3.0,
-        offset: Point(4, -4),
-        color: Color(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.8),
-        range: testText.startIndex..<testText.endIndex
-      )
-
-    case 3:  // Outline + Shadow
-      attributedString =
-        attributedString
-        .withStroke(
-          width: 2.0,
-          color: Color(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-          range: testText.startIndex..<testText.endIndex
-        )
-        .withShadow(
-          width: 2.0,
-          offset: Point(3, -3),
-          color: Color(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.6),
-          range: testText.startIndex..<testText.endIndex
-        )
-
-    case 4:  // Thick Outline
-      attributedString = attributedString.withStroke(
-        width: 4.0,
-        color: Color(red: 1.0, green: 0.0, blue: 0.0, alpha: 1.0),
-        range: testText.startIndex..<testText.endIndex
-      )
-
-    case 5:  // Soft Shadow
-      attributedString = attributedString.withShadow(
-        width: 5.0,
-        offset: Point(4, -4),
-        color: Color(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.3),
-        range: testText.startIndex..<testText.endIndex
-      )
-
-    default:
-      break
+    for effect in effects {
+      let textSize = sampleText.size(with: effect.style)
+      let totalWidth = max(textSize.width, Float(effect.name.count) * 8)  // Rough title width
+      let totalHeight = titleHeight + textHeight + padding
+      effectData.append(
+        (name: effect.name, style: effect.style, width: totalWidth, height: totalHeight))
     }
 
-    // Draw the text
-    attributedString.draw(
-      at: Point(400, 300),
-      defaultStyle: style,
-      wrapWidth: 800,
-      anchor: .topLeft,
-      context: context
+    // Pack rectangles using STBRectPack
+    let binWidth = WIDTH - Int(marginX * 2)
+    let binHeight = HEIGHT - Int(marginY * 2)
+
+    let rectSizes = effectData.map { (width: Int($0.width + spacingX), height: Int($0.height + spacingY)) }
+
+    let (packedRects, _) = RectPacking.pack(
+      binWidth: binWidth,
+      binHeight: binHeight,
+      sizes: rectSizes,
+      heuristic: .skylineBL
     )
 
-    // Draw effect name
-    let effectName = effects[currentEffect]
-    let effectStyle = TextStyle(
-      fontName: "Better VCR",
-      fontSize: 16,
-      color: Color(red: 0.7, green: 0.7, blue: 0.7, alpha: 1.0),
-      alignment: .center
-    )
+    // Draw each effect at its packed position
+    for (index, effect) in effectData.enumerated() {
+      guard index < packedRects.count else { continue }
+      let packed = packedRects[index]
+      guard packed.wasPacked else { continue }
 
-    effectName.draw(
-      at: Point(400, 400),
-      style: effectStyle,
-      context: context
-    )
+      // Convert packed coordinates to screen coordinates (top-left aligned)
+      let screenX = marginX + Float(packed.x)
+      let screenY = marginY + Float(packed.y)
+
+      // Draw title
+      let titleColor = Color(red: 0.8, green: 0.8, blue: 0.8, alpha: 1.0)
+      let titleStyleWithColor = TextStyle(
+        fontName: titleStyle.fontName,
+        fontSize: titleStyle.fontSize,
+        color: titleColor
+      )
+
+      effect.name.draw(
+        at: Point(screenX, screenY),
+        style: titleStyleWithColor,
+        anchor: .topLeft,
+        context: context
+      )
+
+      // Draw the text effect
+      sampleText.draw(
+        at: Point(screenX, screenY + titleHeight + 8),
+        style: effect.style,
+        anchor: .topLeft,
+        context: context
+      )
+
+      // Draw debug rectangle if needed
+      if wireframeMode {
+        Debug.drawRect(
+          x: screenX, y: screenY, width: effect.width, height: effect.height,
+          windowSize: ws, lineWidth: 1.0
+        )
+      }
+    }
   }
 }

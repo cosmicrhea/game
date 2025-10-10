@@ -17,8 +17,6 @@ final class DocumentViewer: RenderLoop {
   private let caretRight = Caret(direction: .right)
   //let ref = Image("UI/RE2Doc.jpg")
 
-  private let textStyle = TextStyle(fontName: "Creato Display Medium", fontSize: 24, color: .white)
-
   private var deltaTime: Float = 0.0
   private var currentPage: Int = 0
 
@@ -197,7 +195,7 @@ final class DocumentViewer: RenderLoop {
     caretRight.draw(at: Point(rightArrowX, arrowY), deltaTime: deltaTime)
 
     // 3. Create 400px wide text area within the 640px section
-    let textWidth: Float = 400
+    let textWidth: Float = 416
     let textAreaX: Float = sectionX + (sectionWidth - textWidth) / 2
     let textArea = Rect(x: textAreaX, y: 0, width: textWidth, height: Float(HEIGHT))
 
@@ -210,14 +208,9 @@ final class DocumentViewer: RenderLoop {
 
     // Use centered alignment for frontmatter, left alignment for regular pages
     if currentPage == 0, hasFrontmatter() {
-      currentTextStyle = TextStyle(
-        fontName: textStyle.fontName,
-        fontSize: textStyle.fontSize,
-        color: textStyle.color,
-        alignment: .center
-      )
+      currentTextStyle = TextStyle.documentViewer.withAlignment(.center)
     } else {
-      currentTextStyle = textStyle
+      currentTextStyle = TextStyle.documentViewer
     }
 
     let textBounds = currentText.boundingRect(with: currentTextStyle, wrapWidth: textWidth)
@@ -235,21 +228,17 @@ final class DocumentViewer: RenderLoop {
       // Check if old page was frontmatter
       if previousPageIndex == 0, hasFrontmatter() {
         oldText = document.frontMatter!
-        oldTextStyle = TextStyle(
-          fontName: textStyle.fontName,
-          fontSize: textStyle.fontSize,
-          color: textStyle.color.withAlphaComponent(1.0 - animationProgress),
-          alignment: .center
-        )
+        oldTextStyle = TextStyle.documentViewer
+          .withColor(TextStyle.documentViewer.color.withAlphaComponent(1.0 - animationProgress))
+          .withStrokeColor(TextStyle.documentViewer.strokeColor.withAlphaComponent(1.0 - animationProgress))
+          .withAlignment(.center)
       } else {
         // Calculate which page index to use (accounting for frontmatter)
         let oldPageIndex = hasFrontmatter() ? previousPageIndex - 1 : previousPageIndex
         oldText = document.pages[oldPageIndex]
-        oldTextStyle = TextStyle(
-          fontName: textStyle.fontName,
-          fontSize: textStyle.fontSize,
-          color: textStyle.color.withAlphaComponent(1.0 - animationProgress)
-        )
+        oldTextStyle = TextStyle.documentViewer
+          .withColor(TextStyle.documentViewer.color.withAlphaComponent(1.0 - animationProgress))
+          .withStrokeColor(TextStyle.documentViewer.strokeColor.withAlphaComponent(1.0 - animationProgress))
       }
 
       let oldTextBounds = oldText.boundingRect(with: oldTextStyle, wrapWidth: textWidth)
@@ -267,12 +256,10 @@ final class DocumentViewer: RenderLoop {
       let newTextX: Float = textAreaX + (1.0 - animationProgress) * 50.0 * Float(animationDirection)
       let newFadeAlpha: Float = animationProgress
 
-      let newStyle = TextStyle(
-        fontName: currentTextStyle.fontName,
-        fontSize: currentTextStyle.fontSize,
-        color: currentTextStyle.color.withAlphaComponent(newFadeAlpha),
-        alignment: currentTextStyle.alignment
-      )
+      let newStyle =
+        currentTextStyle
+        .withColor(currentTextStyle.color.withAlphaComponent(newFadeAlpha))
+        .withStrokeColor(currentTextStyle.strokeColor.withAlphaComponent(newFadeAlpha))
 
       currentText.draw(
         at: Point(newTextX, baseTextY),

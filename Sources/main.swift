@@ -108,6 +108,8 @@ if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
   activeLoop.onDetach(window: window)
   activeLoop = loops[config.currentLoopIndex]
   activeLoop.onAttach(window: window)
+  // TODO: move this elsewhere; setting default clear color when changing loop
+  GraphicsContext.current?.renderer.setClearColor(Color(0.2, 0.1, 0.1, 1.0))
 }
 
 // timing

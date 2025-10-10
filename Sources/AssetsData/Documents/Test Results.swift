@@ -4,13 +4,14 @@ extension Document {
     displayName: "Test Results",
     image: Image("Items/Documents/test_results.png"),
 
-    pages: [
-      """
+    frontMatter: """
       LAB REPORT — SAMPLE ID: █████-A12  
-      Date: 03/14/2025  
-      Collected at: Amager Pharma Research Wing
+      
+      Date: 14/03/2025
+      Collected at: Amager Research Wing
       """,
 
+    pages: [
       """
       ### Blood Test Results:
       
@@ -28,7 +29,7 @@ extension Document {
 
       """
       # TRIAL DATA — PROJECT ████ GLASS  
-      Date: 03/22/2025  
+      Date: 22/03/2025  
 
       Subjects: ████████ (redacted)  
       Dosage: Compound 19-B (“clear solution”)
