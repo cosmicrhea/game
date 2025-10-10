@@ -14,7 +14,7 @@ public struct InputPromptGroups {
     ],
 
     "Document Viewer": [
-      "Flip Pages": [["keyboard_arrows_horizontal"], ["xbox_dpad_horizontal"], ["playstation_dpad_horizontal"]],
+      "Change Page": [["keyboard_arrows_horizontal"], ["xbox_dpad_horizontal"], ["playstation_dpad_horizontal"]],
       // "Continue": [["keyboard_tab_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
       "Continue": [["mouse_left"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
     ],

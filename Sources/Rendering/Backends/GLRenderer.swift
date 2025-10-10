@@ -427,7 +427,7 @@ public final class GLRenderer: Renderer {
     case .topLeft:
       return Point(0, -baseline)
     case .bottomLeft:
-      return Point(0, layoutResult.totalHeight - layoutResult.lineHeight - baseline)
+      return Point(0, layoutResult.totalHeight - baseline)
     case .baselineLeft:
       return Point(0, 0)
     }

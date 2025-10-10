@@ -2,13 +2,19 @@ import GL
 import GLFW
 import GLMath
 
+struct Document {
+  let title: String?
+  let image: Image?
+  let pages: [String]
+}
+
 final class DocumentViewer: RenderLoop {
   let document = keepersDiary
 
   let caretLeft = Caret(direction: .left)
   let caretRight = Caret(direction: .right)
   //  let ref = Image("UI/RE2Doc.jpg")
-  let background = Image("Items/cassette_player.png")
+  let background = Image("Items/brown_book.png")
 
   let textStyle = TextStyle(fontName: "Creato Display Medium", fontSize: 24, color: .white)
 
@@ -54,7 +60,7 @@ final class DocumentViewer: RenderLoop {
 
     glClearColor(0, 0, 0, 1)
 
-    // Draw background at 720x720 in the center of the screen
+    // Draw background in the center of the screen
     let backgroundSize: Float = 360
     let backgroundX: Float = (Float(WIDTH) - backgroundSize) / 2
     let backgroundY: Float = (Float(HEIGHT) - backgroundSize) / 2
@@ -66,15 +72,19 @@ final class DocumentViewer: RenderLoop {
     let sectionX: Float = (Float(WIDTH) - sectionWidth) / 2
     let sectionY: Float = 0
     let sectionHeight: Float = Float(HEIGHT)
-    let mainSection = Rect(x: sectionX, y: sectionY, width: sectionWidth, height: sectionHeight)
+    //let mainSection = Rect(x: sectionX, y: sectionY, width: sectionWidth, height: sectionHeight)
 
     // Debug draw the main section
-    mainSection.frame(with: Color(red: 1.0, green: 0.0, blue: 0.0), lineWidth: 2.0)
+    // mainSection.frame(with: .rose)
 
     // 2. Position chevrons on left and right sides, centered vertically
     let arrowY: Float = Float(HEIGHT) / 2
     let leftArrowX: Float = sectionX
-    let rightArrowX: Float = sectionX + sectionWidth - caretRight.image.naturalSize.width
+    let rightArrowX: Float = sectionX + sectionWidth - (caretRight.image.naturalSize.width * 0.5 * 1.5)
+
+    // Update caret visibility based on current page
+    caretLeft.visible = currentPage > 0
+    caretRight.visible = currentPage < document.count - 1
 
     caretLeft.draw(at: Point(leftArrowX, arrowY), deltaTime: deltaTime)
     caretRight.draw(at: Point(rightArrowX, arrowY), deltaTime: deltaTime)
@@ -85,19 +95,22 @@ final class DocumentViewer: RenderLoop {
     let textArea = Rect(x: textAreaX, y: 0, width: textWidth, height: Float(HEIGHT))
 
     // Debug draw the text area
-    textArea.frame(with: Color(red: 0.0, green: 0.0, blue: 1.0), lineWidth: 2.0)
+    // textArea.frame(with: .indigo)
 
     // 4. Center text vertically using text measurement
     let currentText = document[currentPage]
     let textBounds = currentText.boundingRect(with: textStyle, wrapWidth: textWidth)
-    let textY: Float = Float(HEIGHT) - textBounds.size.height
+    let textY: Float = textArea.origin.y + (textArea.size.height - textBounds.size.height) / 2
+
+    // textBounds.frame(with: .rose)
+    Rect(origin: Point(textAreaX, textY), size: textBounds.size).frame(with: .amber)
 
     // Draw the text
     currentText.draw(
       at: Point(textAreaX, textY),
       style: textStyle,
       wrapWidth: textWidth,
-      anchor: .topLeft
+      anchor: .bottomLeft
     )
 
     // Draw the input prompts
@@ -116,6 +129,7 @@ final class DocumentViewer: RenderLoop {
 public final class Caret {
   private let direction: Direction
   public let image: Image
+  public var visible: Bool = true
 
   private var animationTime: Float = 0
 
@@ -137,13 +151,19 @@ public final class Caret {
     // Update animation time with proper delta time
     animationTime += deltaTime
 
+    guard visible else { return }
+
     // Animate with slow back-and-forth movement
     let animationOffset: Float = GLMath.sin(animationTime * 0.8) * 8  // 8px amplitude, slow speed
     let animatedX: Float = direction == .left ? point.x - animationOffset : point.x + animationOffset
 
     // Use the new Image API with custom tinting
     let animatedPoint = Point(animatedX, point.y)
-    let rect = Rect(origin: animatedPoint, size: image.naturalSize)
+    let originalSize = image.naturalSize
+    let scale: Float = 0.5  // Half size
+    let elongatedWidth = originalSize.width * scale * 1.5  // Make wider
+    let elongatedHeight = originalSize.height * scale  // Keep height at half
+    let rect = Rect(origin: animatedPoint, size: Size(elongatedWidth, elongatedHeight))
 
     // Draw with tint by directly calling the renderer
     if let context = GraphicsContext.current {
