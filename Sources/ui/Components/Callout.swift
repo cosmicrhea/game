@@ -112,7 +112,7 @@ public struct Callout {
   @MainActor public mutating func draw(in rect: Rect, context: GraphicsContext? = nil) {
     // Update icon cache if needed
     if cachedIcon == nil, let icon = icon, let path = iconResourcePath(icon) {
-      cachedIcon = Image(resourcePath: path)
+      cachedIcon = Image(path)
     }
 
     // Early out if fully hidden

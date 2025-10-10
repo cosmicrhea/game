@@ -32,7 +32,7 @@ extension ImageAtlas {
     let imageURL = xmlURL.deletingLastPathComponent().appendingPathComponent(imageFileName)
     let relativeFromBundle = imageURL.path.replacingOccurrences(of: baseURL.path + "/", with: "")
     logger.info("ImageAtlas: loading image from \(relativeFromBundle)")
-    let texture = Image(resourcePath: relativeFromBundle)
+    let texture = Image(relativeFromBundle)
 
     // Get dimensions from the loaded image instead of XML
     let atlasW = Int(texture.naturalSize.width)

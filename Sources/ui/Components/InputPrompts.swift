@@ -27,9 +27,8 @@ public final class InputPrompts {
   }
 
   private func measureTextWidth(_ text: String) -> Float {
-    // TODO: Implement proper text measurement
-    // For now, return an approximation based on character count
-    return Float(text.count) * textStyle.fontSize * 0.6
+    // Use proper text measurement like AppKit
+    return text.size(with: textStyle).width
   }
 
   private var lineHeight: Float {

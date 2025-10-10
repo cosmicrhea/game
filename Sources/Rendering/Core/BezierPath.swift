@@ -59,6 +59,32 @@ public struct BezierPath {
     return elements
   }
 
+  /// Adds a rectangle to the path.
+  /// - Parameter rect: The rectangle to add.
+  public mutating func addRect(_ rect: Rect) {
+    let x = rect.origin.x
+    let y = rect.origin.y
+    let w = rect.size.width
+    let h = rect.size.height
+
+    // Start from top-left corner
+    move(to: Point(x, y))
+
+    // Top edge
+    addLine(to: Point(x + w, y))
+
+    // Right edge
+    addLine(to: Point(x + w, y + h))
+
+    // Bottom edge
+    addLine(to: Point(x, y + h))
+
+    // Left edge (back to start)
+    addLine(to: Point(x, y))
+
+    closePath()
+  }
+
   /// Adds a rounded rectangle to the path.
   /// - Parameters:
   ///   - rect: The rectangle to add.

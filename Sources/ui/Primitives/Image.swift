@@ -58,15 +58,16 @@ public struct Image {
   /// Draws the image in the specified rectangle.
   /// - Parameters:
   ///   - rect: Destination rectangle in points.
+  ///   - tint:
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  public func draw(in rect: Rect, context: GraphicsContext? = nil) {
+  public func draw(in rect: Rect, tint: Color? = nil, context: GraphicsContext? = nil) {
     let ctx = context ?? GraphicsContext.current
     guard let ctx else { return }
     guard textureID != 0 else { return }
     ctx.renderer.drawImage(
       textureID: textureID,
       in: rect,
-      tint: nil
+      tint: tint
     )
   }
 }

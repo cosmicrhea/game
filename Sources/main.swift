@@ -56,9 +56,9 @@ let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
-window.setIcon(Image(resourcePath: "UI/AppIcon/icon~masked.webp").glfwImage)
+window.setIcon(Image("UI/AppIcon/icon~masked.webp").glfwImage)
 //window.mouse.cursorMode = .disabled
-let dotCursorImage = Image(resourcePath: "UI/Cursors/dot_large.png").glfwImage
+let dotCursorImage = Image("UI/Cursors/dot_large.png").glfwImage
 let dotCursor = Mouse.Cursor.custom(dotCursorImage, center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2)
 window.mouse.setCursor(to: dotCursor)
 
@@ -75,7 +75,7 @@ let loops: [RenderLoop] = [
   InputPromptsDemo(),
   //  AttributedTextDemo(),
   //  TextDemo(),
-  DocumentDemo(),
+  DocumentViewer(),
   CalloutDemo(),
   FontsDemo(),
   PathDemo(),
@@ -114,40 +114,47 @@ var lastFrame: Float = 0.0
 var numberOfFrames: Int64 = 0
 
 window.keyInputHandler = { window, key, scancode, state, mods in
-  guard state == .pressed else { return }
+  if state == .pressed {
+    activeLoop.onKeyPressed(window: window, key: key, scancode: Int32(scancode), mods: mods)
 
-  if activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods) { return }
+    // Global debug commands
+    switch key {
+    case .comma:
+      UISound.select()
+      wireframeMode.toggle()
+      renderer.setWireframeMode(wireframeMode)
 
-  switch key {
-  case .comma:
-    UISound.select()
-    wireframeMode.toggle()
-    renderer.setWireframeMode(wireframeMode)
+    case .p:
+      UISound.shutter()
+      requestScreenshot = true
 
-  case .p:
-    UISound.shutter()
-    requestScreenshot = true
+    case .leftBracket:
+      UISound.select()
+      cycleLoops(-1)
 
-  case .leftBracket:
-    UISound.select()
-    cycleLoops(-1)
+    case .rightBracket:
+      UISound.select()
+      cycleLoops(+1)
 
-  case .rightBracket:
-    UISound.select()
-    cycleLoops(+1)
-
-  default:
-    break
+    default:
+      break
+    }
   }
 }
 
 window.cursorPositionHandler = { window, x, y in
   guard window.isFocused else { return }
-  if activeLoop.onMouseMove(window: window, x: x, y: y) { return }
+  activeLoop.onMouseMove(window: window, x: x, y: y)
 }
 
 window.scrollInputHandler = { window, xOffset, yOffset in
-  if activeLoop.onScroll(window: window, xOffset: xOffset, yOffset: yOffset) { return }
+  activeLoop.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+}
+
+window.mouseButtonHandler = { window, button, state, mods in
+  if state == .pressed {
+    activeLoop.onMouseButtonPressed(window: window, button: button, mods: mods)
+  }
 }
 
 let renderer: Renderer = {

@@ -288,7 +288,7 @@ public final class GLRenderer: Renderer {
     var allIndices: [UInt32] = []
     var indexOffset: UInt32 = 0
 
-    for (lineIndex, line) in layoutResult.lines.enumerated() {
+    for (_, line) in layoutResult.lines.enumerated() {
       // Calculate proper Y position for this line using the working approach
       let lineBaselineY = origin.y + anchorOffset.y - Float(line.baselineY) * lineHeight
 

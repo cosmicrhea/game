@@ -9,13 +9,13 @@ import struct ImageFormats.RGBA
 
 extension Image {
   /// Load an image from SPM resource path and upload to GL. Returns a GPU-backed Image.
-  public init(resourcePath: String, pixelScale: Float = 1.0) {
+  public init(_ path: String, pixelScale: Float = 1.0) {
     var width = 1
     var height = 1
     var bytes: [UInt8] = [255, 255, 255, 255]
 
     if let baseURL = Bundle.module.resourceURL {
-      let url = baseURL.appendingPathComponent(resourcePath)
+      let url = baseURL.appendingPathComponent(path)
       if let data = try? Data(contentsOf: url) {
         let ext = url.pathExtension.lowercased()
         let raw = Array(data)
@@ -28,15 +28,15 @@ extension Image {
           loaded = try? ImageFormats.Image<ImageFormats.RGBA>.load(from: raw)
         }
         if let image = loaded {
-          logger.trace("Decoded image at \(resourcePath)")
+          logger.trace("Decoded image at \(path)")
           width = image.width
           height = image.height
           bytes = image.bytes
         } else {
-          logger.error("Failed to decode image at \(resourcePath)")
+          logger.error("Failed to decode image at \(path)")
         }
       } else {
-        logger.error("Failed to load image at \(resourcePath)")
+        logger.error("Failed to load image at \(path)")
       }
     }
 

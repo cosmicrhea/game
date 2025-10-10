@@ -28,8 +28,6 @@ final class MainLoop: RenderLoop {
   private var callout = Callout("Find the triangle and key", icon: .chevron)
   /// Input prompts component for controller/keyboard icons.
   private let inputPrompts: InputPrompts
-  /// Renderer for both 2D and 3D content.
-  private let renderer: Renderer
 
   // State
   private var objectiveVisible: Bool = true
@@ -38,15 +36,7 @@ final class MainLoop: RenderLoop {
   /// The main shader program for rendering.
   private let program = try! GLProgram("Common/basic 2")
 
-  /// Initializes the main loop with scene data and renderers.
   init() {
-    // Initialize Metal renderer
-    do {
-      self.renderer = try MTLRenderer()
-    } catch {
-      print("Failed to create Metal renderer, falling back to OpenGL: \(error)")
-      self.renderer = GLRenderer()
-    }
     let scenePath = Bundle.module.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
     let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
     print("\(scene.rootNode)")
@@ -58,23 +48,17 @@ final class MainLoop: RenderLoop {
     inputPrompts = InputPrompts()
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) -> Bool {
-    guard window.isFocused else { return false }
+  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+    guard window.isFocused else { return }
     camera.processMousePosition(Float(x), Float(y))
     GLScreenEffect.mousePosition = (Float(x), Float(y))
-    return true
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) -> Bool {
+  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
     camera.processMouseScroll(Float(yOffset))
-    return true
   }
 
-  func onKey(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier)
-    -> Bool
-  {
-    guard state == .pressed else { return false }
-
+  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .o:
       UISound.select()
@@ -85,10 +69,8 @@ final class MainLoop: RenderLoop {
       showDebugText.toggle()
 
     default:
-      return false
+      break
     }
-
-    return true
   }
 
   func update(window: GLFWWindow, deltaTime: Float) {
@@ -116,7 +98,7 @@ final class MainLoop: RenderLoop {
     renderers.forEach { $0.draw() }
 
     drawObjectiveCallout()
-    //drawDebugInputPrompts()
+    drawDebugInputPrompts()
     drawDebugText()
   }
 
@@ -125,22 +107,15 @@ final class MainLoop: RenderLoop {
   }
 
   func drawDebugInputPrompts() {
-    // Set up rendering context
-    renderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
-    let ctx = GraphicsContext(renderer: renderer, scale: 1)
-    GraphicsContext.withContext(ctx) {
-      // Draw input prompts for the current group (Item Pickup as example)
-      if let itemPickupPrompts = InputPromptGroups.groups["Item Pickup"] {
-        inputPrompts.drawHorizontal(
-          prompts: itemPickupPrompts,
-          inputSource: .keyboardMouse,
-          windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-          origin: (Float(WIDTH) - 32, 24),
-          anchor: .bottomRight
-        )
-      }
+    if let prompts = InputPromptGroups.groups["Item Viewer"] {
+      inputPrompts.drawHorizontal(
+        prompts: prompts,
+        inputSource: .keyboardMouse,
+        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+        origin: (Float(WIDTH) - 56, 12),
+        anchor: .bottomRight
+      )
     }
-    renderer.endFrame()
   }
 
   func drawDebugText() {
@@ -158,21 +133,3 @@ final class MainLoop: RenderLoop {
     )
   }
 }
-
-// grapeSoda.draw(
-//   "The quick brown fox jumps over the lazy dog", at: (100, 200),
-//   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
-
-// determination.draw(
-//   "The quick brown fox jumps over the lazy dog", at: (0, 0),
-//   windowSize: (Int32(WIDTH), Int32(HEIGHT)))
-// determination.draw(
-//   "Quizdeltagerne spiste jordbær med fløde mens cirkusklovnen Walther spillede på xylofon",
-//   at: (0, 64), windowSize: (Int32(WIDTH), Int32(HEIGHT)))
-
-//  damageVignette.draw()
-//  frostedVignette.draw()
-//  gaussianBlur.draw()
-// test.draw()
-
-//  panel.draw()

@@ -276,3 +276,63 @@ extension String {
     draw(at: rect.origin, style: style, context: context)
   }
 }
+
+// MARK: - Measurement Functions
+
+extension AttributedString {
+  /// Returns the size necessary to draw the string.
+  /// - Parameters:
+  ///   - defaultStyle: The default text style to use for measurement.
+  ///   - wrapWidth: Optional width constraint for text wrapping.
+  /// - Returns: The size required to draw the string.
+  public func size(defaultStyle: TextStyle, wrapWidth: Float? = nil) -> Size {
+    return boundingRect(defaultStyle: defaultStyle, wrapWidth: wrapWidth).size
+  }
+
+  /// Returns the bounding rectangle necessary to draw the string.
+  /// - Parameters:
+  ///   - defaultStyle: The default text style to use for measurement.
+  ///   - wrapWidth: Optional width constraint for text wrapping.
+  /// - Returns: The bounding rectangle required to draw the string.
+  public func boundingRect(defaultStyle: TextStyle, wrapWidth: Float? = nil) -> Rect {
+    // Create font and layout for measurement
+    guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize) else {
+      return Rect(origin: Point(0, 0), size: Size(0, 0))
+    }
+
+    let layout = TextLayout(font: font.getTrueTypeFont(), scale: 1.0)
+    let lineHeight = font.lineHeight
+
+    // Layout the text
+    let layoutResult = layout.layout(
+      string,
+      wrapWidth: wrapWidth,
+      lineHeight: lineHeight
+    )
+
+    return Rect(
+      origin: Point(0, 0),
+      size: Size(layoutResult.totalWidth, layoutResult.totalHeight)
+    )
+  }
+}
+
+extension String {
+  /// Returns the bounding box size the receiver occupies when drawn with the given attributes.
+  /// - Parameters:
+  ///   - style: The text style to use for measurement.
+  ///   - wrapWidth: Optional width constraint for text wrapping.
+  /// - Returns: The size required to draw the string.
+  public func size(with style: TextStyle, wrapWidth: Float? = nil) -> Size {
+    return AttributedString(string: self).size(defaultStyle: style, wrapWidth: wrapWidth)
+  }
+
+  /// Calculates and returns the bounding rect for the receiver drawn using the given options.
+  /// - Parameters:
+  ///   - style: The text style to use for measurement.
+  ///   - wrapWidth: Optional width constraint for text wrapping.
+  /// - Returns: The bounding rectangle required to draw the string.
+  public func boundingRect(with style: TextStyle, wrapWidth: Float? = nil) -> Rect {
+    return AttributedString(string: self).boundingRect(defaultStyle: style, wrapWidth: wrapWidth)
+  }
+}
