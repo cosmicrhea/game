@@ -24,6 +24,9 @@ public final class MTLRenderer: Renderer {
   private var currentRenderPassDescriptor: MTLRenderPassDescriptor?
   private var currentRenderEncoder: MTLRenderCommandEncoder?
 
+  // Clear color state
+  private var clearColor: Color = Color(red: 0.2, green: 0.1, blue: 0.1, alpha: 1.0)
+
   // Vertex buffers for rendering
   private var imageVertexBuffer: MTLBuffer?
   private var pathVertexBuffer: MTLBuffer?
@@ -93,7 +96,9 @@ public final class MTLRenderer: Renderer {
     renderPassDescriptor.colorAttachments[0].texture = drawable.texture
     renderPassDescriptor.colorAttachments[0].loadAction = .clear
     renderPassDescriptor.colorAttachments[0].storeAction = .store
-    renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.2, green: 0.1, blue: 0.1, alpha: 1.0)
+    renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(
+      red: Double(clearColor.red), green: Double(clearColor.green), blue: Double(clearColor.blue),
+      alpha: Double(clearColor.alpha))
 
     self.currentRenderPassDescriptor = renderPassDescriptor
 
@@ -313,6 +318,10 @@ public final class MTLRenderer: Renderer {
   public func setWireframeMode(_ enabled: Bool) {
     // TODO: Implement Metal wireframe mode
     print("MTLRenderer.setWireframeMode: \(enabled)")
+  }
+
+  public func setClearColor(_ color: Color) {
+    clearColor = color
   }
 
   public func drawPath(_ path: BezierPath, color: Color) {

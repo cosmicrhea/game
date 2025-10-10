@@ -21,6 +21,10 @@ public protocol Renderer {
   /// - Parameter enabled: `true` for wireframe rendering, `false` for filled polygons.
   func setWireframeMode(_ enabled: Bool)
 
+  /// Sets the clear color for the next frame.
+  /// - Parameter color: The color to clear the screen with.
+  func setClearColor(_ color: Color)
+
   // MARK: - Primitives
 
   /// Draws an image with the specified texture ID in the given rectangle.

@@ -1,5 +1,5 @@
 /// An object that manages image data in the game.
-public struct Image {
+public struct Image: Sendable {
   public let textureID: UInt64
   public let naturalSize: Size
   public let pixelScale: Float

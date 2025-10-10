@@ -7,6 +7,9 @@ public final class GLRenderer: Renderer {
   private let pathProgram: GLProgram
   private let textProgram: GLProgram
 
+  // Clear color state
+  private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
+
   // MARK: - UI State Management
 
   /// Execute a block with UI rendering state (no depth testing, blending enabled)
@@ -65,7 +68,7 @@ public final class GLRenderer: Renderer {
     glViewport(0, 0, GLsizei(viewportSize.width), GLsizei(viewportSize.height))
 
     // Clear the screen and set up OpenGL state
-    glClearColor(0.2, 0.1, 0.1, 1)
+    glClearColor(clearColor.red, clearColor.green, clearColor.blue, clearColor.alpha)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     //    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)  // Default to filled polygons
   }
@@ -73,6 +76,10 @@ public final class GLRenderer: Renderer {
   public func setWireframeMode(_ enabled: Bool) {
     let mode = enabled ? GL_LINE : GL_FILL
     glPolygonMode(GL_FRONT_AND_BACK, mode)
+  }
+
+  public func setClearColor(_ color: Color) {
+    clearColor = color
   }
 
   public func endFrame() {
