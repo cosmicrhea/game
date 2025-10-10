@@ -337,6 +337,11 @@ public final class GLRenderer: Renderer {
     let outlineColor = attributedString.attributes.compactMap { $0.stroke?.color }.first
     let outlineThickness = attributedString.attributes.compactMap { $0.stroke?.width }.first ?? 0
 
+    // Get shadow attributes
+    let shadowColor = attributedString.attributes.compactMap { $0.shadow?.color }.first
+    let shadowOffset = attributedString.attributes.compactMap { $0.shadow?.offset }.first ?? Point(0, 0)
+    let shadowBlur = attributedString.attributes.compactMap { $0.shadow?.width }.first ?? 0
+
     // Render the text using UI context
     withUIContext {
       renderTextVertices(
@@ -346,6 +351,9 @@ public final class GLRenderer: Renderer {
         color: defaultStyle.color,
         outlineColor: outlineColor,
         outlineThickness: outlineThickness,
+        shadowColor: shadowColor,
+        shadowOffset: shadowOffset,
+        shadowBlur: shadowBlur,
         windowSize: windowSize
       )
     }
@@ -533,6 +541,9 @@ public final class GLRenderer: Renderer {
     color: Color,
     outlineColor: Color?,
     outlineThickness: Float,
+    shadowColor: Color? = nil,
+    shadowOffset: Point = Point(0, 0),
+    shadowBlur: Float = 0.0,
     windowSize: (w: Int32, h: Int32)
   ) {
     guard !vertices.isEmpty && !indices.isEmpty else { return }
@@ -577,6 +588,27 @@ public final class GLRenderer: Renderer {
       textProgram.setMat4("uMVP", value: buffer.baseAddress!)
     }
 
+    // Draw shadow first if specified
+    if let shadowColor = shadowColor, shadowBlur > 0 {
+      textProgram.setVec4("uColor", value: (shadowColor.red, shadowColor.green, shadowColor.blue, shadowColor.alpha))
+
+      // Create shadow vertices with offset
+      var shadowVertices = vertices
+      for i in stride(from: 0, to: shadowVertices.count, by: 8) {
+        shadowVertices[i] += shadowOffset.x
+        shadowVertices[i + 1] += shadowOffset.y
+      }
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo)
+      glBufferData(GL_ARRAY_BUFFER, shadowVertices.count * MemoryLayout<Float>.stride, shadowVertices, GL_DYNAMIC_DRAW)
+
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, atlas.texture)
+      textProgram.setInt("uAtlas", value: 0)
+
+      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+    }
+
     // Draw outline if specified
     if let outlineColor = outlineColor, outlineThickness > 0 {
       textProgram.setVec4(
@@ -585,6 +617,8 @@ public final class GLRenderer: Renderer {
       let offsets: [(Float, Float)] = [
         (-outlineThickness, 0), (outlineThickness, 0),
         (0, -outlineThickness), (0, outlineThickness),
+        (-outlineThickness, -outlineThickness), (outlineThickness, outlineThickness),
+        (-outlineThickness, outlineThickness), (outlineThickness, -outlineThickness),
       ]
 
       for (offsetX, offsetY) in offsets {

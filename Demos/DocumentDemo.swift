@@ -44,8 +44,8 @@ final class DocumentDemo: RenderLoop {
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
-    case .semicolon: cycleDocument(forward: true)
-    case .apostrophe: cycleDocument(forward: false)
+    case .up: cycleDocument(forward: false)
+    case .down: cycleDocument(forward: true)
     default: documentViewer.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
     }
   }

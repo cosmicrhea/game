@@ -63,7 +63,10 @@ public final class ModularTextRenderer {
     wrapWidth: Float? = nil,
     anchor: Anchor = .topLeft,
     outlineColor: (Float, Float, Float, Float)? = nil,
-    outlineThickness: Float = 0.0
+    outlineThickness: Float = 0.0,
+    shadowColor: (Float, Float, Float, Float)? = nil,
+    shadowOffset: (x: Float, y: Float) = (0, 0),
+    shadowBlur: Float = 0.0
   ) {
     let currentScale = overrideScale ?? self.scale
     let lineHeight = font.lineHeight * currentScale
@@ -119,6 +122,9 @@ public final class ModularTextRenderer {
       color: color,
       outlineColor: outlineColor,
       outlineThickness: outlineThickness,
+      shadowColor: shadowColor,
+      shadowOffset: shadowOffset,
+      shadowBlur: shadowBlur,
       windowSize: windowSize
     )
   }
@@ -219,6 +225,9 @@ public final class ModularTextRenderer {
     color: (Float, Float, Float, Float),
     outlineColor: (Float, Float, Float, Float)?,
     outlineThickness: Float,
+    shadowColor: (Float, Float, Float, Float)?,
+    shadowOffset: (x: Float, y: Float),
+    shadowBlur: Float,
     windowSize: (w: Int32, h: Int32)
   ) {
     // Create OpenGL objects
@@ -275,6 +284,27 @@ public final class ModularTextRenderer {
       program.setMat4("uMVP", value: buffer.baseAddress!)
     }
 
+    // Draw shadow first if specified
+    if let shadowColor = shadowColor, shadowBlur > 0 {
+      program.setVec4("uColor", value: (shadowColor.0, shadowColor.1, shadowColor.2, shadowColor.3))
+
+      // Create shadow vertices with offset
+      var shadowVertices = vertices
+      for i in stride(from: 0, to: shadowVertices.count, by: 8) {
+        shadowVertices[i] += shadowOffset.x
+        shadowVertices[i + 1] += shadowOffset.y
+      }
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo)
+      glBufferData(GL_ARRAY_BUFFER, shadowVertices.count * MemoryLayout<Float>.stride, shadowVertices, GL_DYNAMIC_DRAW)
+
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, atlas.texture)
+      program.setInt("uAtlas", value: 0)
+
+      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+    }
+
     // Draw outline if specified
     if let outlineColor = outlineColor, outlineThickness > 0 {
       program.setVec4("uColor", value: (outlineColor.0, outlineColor.1, outlineColor.2, outlineColor.3))
@@ -282,11 +312,13 @@ public final class ModularTextRenderer {
       let offsets: [(Float, Float)] = [
         (-outlineThickness, 0), (outlineThickness, 0),
         (0, -outlineThickness), (0, outlineThickness),
+        (-outlineThickness, -outlineThickness), (outlineThickness, outlineThickness),
+        (-outlineThickness, outlineThickness), (outlineThickness, -outlineThickness),
       ]
 
       for (offsetX, offsetY) in offsets {
         var offsetVertices = vertices
-        for i in stride(from: 0, to: offsetVertices.count, by: 4) {
+        for i in stride(from: 0, to: offsetVertices.count, by: 8) {
           offsetVertices[i] += offsetX
           offsetVertices[i + 1] += offsetY
         }

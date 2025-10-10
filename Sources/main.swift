@@ -80,6 +80,7 @@ let loops: [RenderLoop] = [
   CalloutDemo(),
   FontsDemo(),
   PathDemo(),
+  TextEffectsDemo(),
   //  PhysicsDemo(),
 ]
 
