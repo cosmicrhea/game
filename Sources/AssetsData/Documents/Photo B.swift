@@ -6,9 +6,12 @@ extension Document {
 
     pages: [
       """
-      Cylindrical canisters containing unmarked liquid.
+      Soldiers have barricated Nørreport Station. On the back there’s a handwritten note: “They knew before we did.”
       """,
       "",
+//      """
+//      
+//      """
     ]
   )
 }

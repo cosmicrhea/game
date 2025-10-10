@@ -1,7 +1,7 @@
 import Assimp
 import GL
 
-class MeshRenderer {
+class MeshInstance {
   struct Vertex {
     var position: (AssimpReal, AssimpReal, AssimpReal)
     var normal: (AssimpReal, AssimpReal, AssimpReal)
@@ -78,12 +78,12 @@ class MeshRenderer {
 // MARK: - Mesh helpers for packing GPU data
 
 extension Mesh {
-  func makeVertices() -> [MeshRenderer.Vertex] {
+  func makeVertices() -> [MeshInstance.Vertex] {
     let positions = vertices
     let normals = self.normals
     let uvs = texCoordsPacked.0
 
-    var result: [MeshRenderer.Vertex] = []
+    var result: [MeshInstance.Vertex] = []
     result.reserveCapacity(numberOfVertices)
 
     for i in 0..<numberOfVertices {
@@ -104,7 +104,7 @@ extension Mesh {
       } else {
         t = (0, 0)
       }
-      result.append(MeshRenderer.Vertex(position: p, normal: n, uv: t))
+      result.append(MeshInstance.Vertex(position: p, normal: n, uv: t))
     }
     return result
   }

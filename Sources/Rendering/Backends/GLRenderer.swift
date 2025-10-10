@@ -320,9 +320,7 @@ public final class GLRenderer: Renderer {
         atlas: atlas,
         origin: Point(origin.x + anchorOffset.x + lineXOffset, lineBaselineY),
         scale: currentScale,
-        color: defaultStyle.color,
-        strokeWidth: defaultStyle.strokeWidth,
-        strokeColor: defaultStyle.strokeColor
+        color: defaultStyle.color
       )
 
       let lineIndices = generateTextLineIndices(
@@ -474,9 +472,7 @@ public final class GLRenderer: Renderer {
     atlas: GlyphAtlas,
     origin: Point,
     scale: Float,
-    color: Color,
-    strokeWidth: Float = 0,
-    strokeColor: Color = .clear
+    color: Color
   ) -> [Float] {
     var vertices: [Float] = []
     var currentX: Float = 0
@@ -487,12 +483,6 @@ public final class GLRenderer: Renderer {
 
     while i < scalars.count {
       let codepoint = Int32(scalars[i].value)
-      let character = String(UnicodeScalar(UInt32(codepoint)) ?? UnicodeScalar(0)!)
-
-      // Debug: print character info for block characters
-      if character == "█" {
-        print("DEBUG: Found █ character, codepoint: \(codepoint) (0x\(String(codepoint, radix: 16)))")
-      }
 
       // Handle spaces - they should advance but not render
       if codepoint == 32 {  // Space character
@@ -500,51 +490,6 @@ public final class GLRenderer: Renderer {
         let spaceWidth = atlas.glyphs[32]?.advance ?? 8  // Default space width
         currentX += Float(spaceWidth) * scale
         i += 1
-        continue
-      }
-
-      // Special case for "█" character - detect consecutive blocks and draw as one
-      if codepoint == 0x2588 {  // Full block character "█"
-        print("DEBUG: Found █ character, detecting consecutive blocks")
-
-        // Count consecutive █ characters
-        var consecutiveCount = 1
-        var j = i + 1
-        while j < scalars.count && Int32(scalars[j].value) == 0x2588 {
-          consecutiveCount += 1
-          j += 1
-        }
-
-        // Get a reasonable block size - use font size as reference
-        let fontSize = 24.0  // Use a reasonable font size
-        let singleBlockWidth = Float(fontSize) * scale
-        let blockHeight = Float(fontSize) * scale
-
-        let totalBlockWidth = singleBlockWidth * Float(consecutiveCount)
-
-        let x0 = origin.x + currentX
-        // Position the redaction block to match the text baseline exactly
-        // Extend downward from baseline instead of upward
-        let y0 = origin.y  // Start at the baseline
-        let y1 = y0 + blockHeight  // Extend downward from baseline
-        let x1 = x0 + totalBlockWidth
-
-        print(
-          "DEBUG: Continuous block (\(consecutiveCount) chars) at (\(x0), \(y0)) to (\(x1), \(y1)), color: (\(color.red), \(color.green), \(color.blue), \(color.alpha))"
-        )
-
-        // Draw solid rectangle with the same stroke as the text
-        let blockRect = Rect(x: x0, y: y0, width: totalBlockWidth, height: blockHeight)
-        blockRect.fill(with: color)  // Use the text color for the fill
-
-        // Add stroke if the text style has one
-        if strokeWidth > 0 {
-          blockRect.frame(with: strokeColor, lineWidth: strokeWidth)
-        }
-
-        // Advance by the total block width and skip all consecutive █ characters
-        currentX += totalBlockWidth
-        i += consecutiveCount
         continue
       }
 

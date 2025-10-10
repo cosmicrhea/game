@@ -13,7 +13,7 @@ final class FontsDemo: RenderLoop {
 
     // Original font demo first
     for (style, resolvedFont) in fontStyles {
-      let text = resolvedFont.baseName + ": The quick brown fox jumps over the lazy dog  — ° æøå"
+      let text = resolvedFont.baseName + ": ███ The quick brown fox jumps over the lazy dog  — ° æøå"
       text.draw(
         at: Point(24, yCursor),
         style: style

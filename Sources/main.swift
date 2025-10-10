@@ -72,10 +72,11 @@ var config: Config { .current }
 let loops: [RenderLoop] = [
   //
   MainLoop(),
+  LibraryView(),
   InputPromptsDemo(),
   //  AttributedTextDemo(),
   //  TextDemo(),
-  // DocumentViewer(document: .operationGlasport),
+  // DocumentView(document: .operationGlasport),
   DocumentDemo(),
   CalloutDemo(),
   FontsDemo(),

@@ -68,6 +68,7 @@ let package = Package(
       path: "./",
 
       exclude: [
+        // "Documentation",
         "Sources/Assets",
         "NOTES.md",
       ],

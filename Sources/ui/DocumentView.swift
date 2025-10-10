@@ -10,7 +10,7 @@ struct Document: Sendable {
   var pages: [String]
 }
 
-final class DocumentViewer: RenderLoop {
+final class DocumentView: RenderLoop {
   let document: Document
 
   private let caretLeft = Caret(direction: .left)
@@ -208,9 +208,9 @@ final class DocumentViewer: RenderLoop {
 
     // Use centered alignment for frontmatter, left alignment for regular pages
     if currentPage == 0, hasFrontmatter() {
-      currentTextStyle = TextStyle.documentViewer.withAlignment(.center)
+      currentTextStyle = TextStyle.document.withAlignment(.center)
     } else {
-      currentTextStyle = TextStyle.documentViewer
+      currentTextStyle = TextStyle.document
     }
 
     let textBounds = currentText.boundingRect(with: currentTextStyle, wrapWidth: textWidth)
@@ -228,17 +228,17 @@ final class DocumentViewer: RenderLoop {
       // Check if old page was frontmatter
       if previousPageIndex == 0, hasFrontmatter() {
         oldText = document.frontMatter!
-        oldTextStyle = TextStyle.documentViewer
-          .withColor(TextStyle.documentViewer.color.withAlphaComponent(1.0 - animationProgress))
-          .withStrokeColor(TextStyle.documentViewer.strokeColor.withAlphaComponent(1.0 - animationProgress))
+        oldTextStyle = TextStyle.document
+          .withColor(TextStyle.document.color.withAlphaComponent(1.0 - animationProgress))
+          .withStrokeColor(TextStyle.document.strokeColor.withAlphaComponent(1.0 - animationProgress))
           .withAlignment(.center)
       } else {
         // Calculate which page index to use (accounting for frontmatter)
         let oldPageIndex = hasFrontmatter() ? previousPageIndex - 1 : previousPageIndex
         oldText = document.pages[oldPageIndex]
-        oldTextStyle = TextStyle.documentViewer
-          .withColor(TextStyle.documentViewer.color.withAlphaComponent(1.0 - animationProgress))
-          .withStrokeColor(TextStyle.documentViewer.strokeColor.withAlphaComponent(1.0 - animationProgress))
+        oldTextStyle = TextStyle.document
+          .withColor(TextStyle.document.color.withAlphaComponent(1.0 - animationProgress))
+          .withStrokeColor(TextStyle.document.strokeColor.withAlphaComponent(1.0 - animationProgress))
       }
 
       let oldTextBounds = oldText.boundingRect(with: oldTextStyle, wrapWidth: textWidth)

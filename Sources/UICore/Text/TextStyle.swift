@@ -35,7 +35,7 @@ extension TextStyle {
     color: .gray700
   )
 
-  static let documentViewer = TextStyle(
+  static let document = TextStyle(
     fontName: "Creato Display Medium",
     fontSize: 24,
     color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),

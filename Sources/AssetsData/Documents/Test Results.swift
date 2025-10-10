@@ -6,7 +6,7 @@ extension Document {
 
     frontMatter: """
       LAB REPORT — SAMPLE ID: █████-A12  
-      
+
       Date: 14/03/2025
       Collected at: Amager Research Wing
       """,
@@ -31,13 +31,13 @@ extension Document {
       # TRIAL DATA — PROJECT ████ GLASS  
       Date: 22/03/2025  
 
-      Subjects: ████████ (redacted)  
+      Subjects: ████████
       Dosage: Compound 19-B (“clear solution”)
       """,
 
       """
       ### Observed Effects:
-      
+
       - 3/10 subjects: glassy dermal patches within 4h.  
       - 6/10 subjects: *violent neurological event* followed by mutation onset.  
       - 1/10 subjects: no symptoms (possible immunity marker?).  
@@ -45,12 +45,12 @@ extension Document {
       **Anomalous finding:** immune subject shared rare blood group **HH (Bombay phenotype)**.
       """,
 
-//      """
-//      # INTERNAL MEMO — HANDWRITTEN ON REPORT
-//      > “Stop running the tests. It’s not ‘treatment’ — it’s **conversion**.  
-//      > If anyone reads this: DO NOT DRINK THE CLEAR SOLUTION.  
-//      > — J.”
-//      """
+      //      """
+      //      # INTERNAL MEMO — HANDWRITTEN ON REPORT
+      //      > “Stop running the tests. It’s not ‘treatment’ — it’s **conversion**.
+      //      > If anyone reads this: DO NOT DRINK THE CLEAR SOLUTION.
+      //      > — J.”
+      //      """
     ]
   )
 }

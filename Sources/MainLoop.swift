@@ -19,7 +19,7 @@ final class MainLoop: RenderLoop {
 
   // Assimp mesh
   /// Array of mesh renderers for 3D objects.
-  private let renderers: [MeshRenderer]
+  private let meshInstances: [MeshInstance]
 
   // UI resources
   /// Text style using the Determination font.
@@ -41,9 +41,9 @@ final class MainLoop: RenderLoop {
     let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
     print("\(scene.rootNode)")
 
-    renderers = scene.meshes
+    meshInstances = scene.meshes
       .filter { $0.numberOfVertices > 0 }
-      .map { MeshRenderer(scene: scene, mesh: $0) }
+      .map { MeshInstance(scene: scene, mesh: $0) }
 
     inputPrompts = InputPrompts()
   }
@@ -95,7 +95,7 @@ final class MainLoop: RenderLoop {
     testTriangle.draw()
 
     // Meshes
-    renderers.forEach { $0.draw() }
+    meshInstances.forEach { $0.draw() }
 
     drawObjectiveCallout()
     drawDebugInputPrompts()
