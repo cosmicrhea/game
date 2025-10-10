@@ -30,10 +30,24 @@ final class DocumentViewer: RenderLoop {
   private var animationDirection: Int = 1  // 1 for forward (right), -1 for backward (left)
   private let pageAnimationEasing: Easing = .easeInOutCubic
 
+  // Background opacity animation
+  private var targetBackgroundOpacity: Float = 0.25
+  private var currentBackgroundOpacity: Float = 0.25
+  private var backgroundOpacityAnimationTime: Float = 0.0
+  private var isBackgroundAnimating: Bool = false
+  private let backgroundAnimationDuration: Float = 0.5
+  private let backgroundAnimationEasing: Easing = .easeInOutCubic
+
   private let inputPrompts = InputPrompts()
 
   init(document: Document) {
     self.document = document
+
+    // Initialize background opacity based on first page
+    let pageText = getCurrentPageText()
+    let isCurrentPageEmpty = pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    currentBackgroundOpacity = isCurrentPageEmpty ? 1.0 : 0.25
+    targetBackgroundOpacity = currentBackgroundOpacity
   }
 
   func update(deltaTime: Float) {
@@ -45,6 +59,23 @@ final class DocumentViewer: RenderLoop {
       if animationTime >= animationDuration {
         isAnimating = false
         animationTime = 0.0
+      }
+    }
+
+    // Update background opacity animation
+    if isBackgroundAnimating {
+      backgroundOpacityAnimationTime += deltaTime
+      let progress = min(backgroundOpacityAnimationTime / backgroundAnimationDuration, 1.0)
+      let easedProgress = backgroundAnimationEasing.apply(progress)
+
+      // Interpolate between current and target opacity
+      let startOpacity = currentBackgroundOpacity
+      currentBackgroundOpacity = startOpacity + (targetBackgroundOpacity - startOpacity) * easedProgress
+
+      if progress >= 1.0 {
+        isBackgroundAnimating = false
+        backgroundOpacityAnimationTime = 0.0
+        currentBackgroundOpacity = targetBackgroundOpacity
       }
     }
   }
@@ -73,6 +104,7 @@ final class DocumentViewer: RenderLoop {
     currentPage += 1
     animationDirection = 1  // Forward (right)
     startPageAnimation()
+    startBackgroundOpacityAnimation()
     UISound.pageTurn()
   }
 
@@ -84,6 +116,7 @@ final class DocumentViewer: RenderLoop {
     currentPage -= 1
     animationDirection = -1  // Backward (left)
     startPageAnimation()
+    startBackgroundOpacityAnimation()
     UISound.pageTurn()
   }
 
@@ -95,9 +128,32 @@ final class DocumentViewer: RenderLoop {
     return document.frontMatter != nil && !document.frontMatter!.isEmpty
   }
 
+  private func getCurrentPageText() -> String {
+    // Check if we're showing frontmatter (first page and frontmatter exists)
+    if currentPage == 0, let frontmatter = document.frontMatter, !frontmatter.isEmpty {
+      return frontmatter
+    } else {
+      // Calculate which page index to use (accounting for frontmatter)
+      let pageIndex = hasFrontmatter() ? currentPage - 1 : currentPage
+      return document.pages[pageIndex]
+    }
+  }
+
   private func startPageAnimation() {
     isAnimating = true
     animationTime = 0.0
+  }
+
+  private func startBackgroundOpacityAnimation() {
+    let pageText = getCurrentPageText()
+    let isCurrentPageEmpty = pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    let newTargetOpacity: Float = isCurrentPageEmpty ? 1.0 : 0.25
+
+    if newTargetOpacity != targetBackgroundOpacity {
+      targetBackgroundOpacity = newTargetOpacity
+      isBackgroundAnimating = true
+      backgroundOpacityAnimationTime = 0.0
+    }
   }
 
   func draw() {
@@ -113,7 +169,9 @@ final class DocumentViewer: RenderLoop {
     let backgroundX: Float = (Float(WIDTH) - backgroundSize) / 2
     let backgroundY: Float = (Float(HEIGHT) - backgroundSize) / 2
     let backgroundRect = Rect(x: backgroundX, y: backgroundY, width: backgroundSize, height: backgroundSize)
-    document.image?.draw(in: backgroundRect, tint: .white.withAlphaComponent(0.25))
+
+    // Use animated background opacity
+    document.image?.draw(in: backgroundRect, tint: .white.withAlphaComponent(currentBackgroundOpacity))
 
     // 1. Create 640px wide section in the middle of the screen
     let sectionWidth: Float = 640
@@ -147,13 +205,11 @@ final class DocumentViewer: RenderLoop {
     // textArea.frame(with: .indigo)
 
     // 4. Center text vertically using text measurement
-    let currentText: String
+    let currentText = getCurrentPageText()
     let currentTextStyle: TextStyle
 
-    // Check if we're showing frontmatter (first page and frontmatter exists)
-    if currentPage == 0, let frontmatter = document.frontMatter, !frontmatter.isEmpty {
-      currentText = frontmatter
-      // Use centered alignment for frontmatter
+    // Use centered alignment for frontmatter, left alignment for regular pages
+    if currentPage == 0, hasFrontmatter() {
       currentTextStyle = TextStyle(
         fontName: textStyle.fontName,
         fontSize: textStyle.fontSize,
@@ -161,9 +217,6 @@ final class DocumentViewer: RenderLoop {
         alignment: .center
       )
     } else {
-      // Calculate which page index to use (accounting for frontmatter)
-      let pageIndex = hasFrontmatter() ? currentPage - 1 : currentPage
-      currentText = document.pages[pageIndex]
       currentTextStyle = textStyle
     }
 
@@ -238,7 +291,7 @@ final class DocumentViewer: RenderLoop {
     }
 
     // Draw the input prompts
-    if let prompts = InputPromptGroups.groups["Document Viewer"] {
+    if let prompts = InputPromptGroups.groups[getTotalPageCount() > 1 ? "Document Viewer" : "Continue"] {
       inputPrompts.drawHorizontal(
         prompts: prompts,
         inputSource: .keyboardMouse,

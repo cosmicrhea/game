@@ -14,7 +14,7 @@ extension Document {
       They say it’s “natural.”
       But glass doesn’t grow inside people.
 
-      Blood tests from 2019 already showed crystalization markers. Nobody asked *why*.
+      Blood tests from 2019 already showed crystalization markers. Nobody asked why.
       
       What if it isn’t disease? What if it’s design?
       """,
@@ -47,7 +47,7 @@ extension Document {
       GLASS PEOPLE AMONG US
 
       Look close at your neighbors.
-      Some of them already have *the shine*.
+      Some of them already have the shine.
       Pale skin, reflective eyes, moving wrong.
 
       They’re not sick. They’re transmitting.
@@ -58,7 +58,7 @@ extension Document {
       WHAT THEY DON'T WANT YOU TO KNOW
 
       The outbreak isn’t the start.
-      It’s the **harvest.**
+      It’s the harvest.
 
       Pharma, military, government: they’re all in on it. We are the test subjects. The city is the lab.
 

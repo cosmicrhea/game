@@ -72,14 +72,14 @@ final class InputPromptsDemo: RenderLoop {
       let screenY = translateY + Float(packed.y)
 
       // Draw title
-      let titleWidth = Float(group.title.count) * titleStyle.fontSize * 0.6  // Approximate width
-      let titleX = screenX + Float(group.width) - titleWidth
-      let titleBaselineY = screenY + Float(group.height) - padding
       let titleColor = Color(red: 0.75, green: 0.75, blue: 0.75, alpha: 1.0)
       let titleStyleWithColor = TextStyle(
         fontName: titleStyle.fontName, fontSize: titleStyle.fontSize, color: titleColor)
+      let titleWidth = group.title.size(with: titleStyleWithColor).width
+      let titleX = screenX + Float(group.width) - titleWidth
+      let titleBaselineY = screenY + Float(group.height) - padding
       group.title.draw(
-        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, anchor: .baselineLeft)
+        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, anchor: .bottomLeft)
 
       // Draw input prompts for each source
       for (i, source) in InputSource.allCases.enumerated() {

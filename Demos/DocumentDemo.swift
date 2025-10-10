@@ -12,15 +12,20 @@ final class DocumentDemo: RenderLoop {
 
   init() {
     documents = [
+      .photoA,
+      .photoB,
+      .photoC,
+
       .glasportReport,
       .siezedCargo,
-//      .metroNote,
+      .execsRecording,
+      .metroNote,
       .jaritsJournal,
+      .testResults,
 
-//      .keepersDiary,
-//      .policeRadioRecording,
+      //      .keepersDiary,
+      //      .policeRadioRecording,
     ]
-
 
     documentViewer = DocumentViewer(document: documents[currentDocumentIndex])
   }

@@ -7,7 +7,7 @@ extension Document {
     frontMatter: """
       DDIS INTERNAL MEMO
       
-      REF: CARGO-XFR-392
+      FILE REF: CARGO-XFR-392
       ORIGIN: KASTELLET / FIELD DESK 37
       DATE: 19 SEPTEMBER, 1983
       """,

@@ -19,6 +19,11 @@ public struct InputPromptGroups {
       "Continue": [["mouse_left"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
     ],
 
+    "Continue": [
+      // "Continue": [["keyboard_tab_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+      "Continue": [["mouse_left"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+    ],
+
     "Model Viewer": [
       "Hide Controls": [["keyboard_z"], ["xbox_button_menu"], ["playstation5_button_options"]],
       // "Close": [["keyboard_tab_icon"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],

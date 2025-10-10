@@ -9,7 +9,7 @@ extension Document {
       
       OPERATION: GLASPORT
       
-      REF: 13-GLS/83-DK
+      FILE REF: 13-GLS/83-DK
       CLASSIFICATION: OBSIDIAN
       ORIGIN: DDIS HQ / ARCHIVE B-4
       DATE: 12 JULY, 1983

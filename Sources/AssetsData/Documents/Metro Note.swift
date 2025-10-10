@@ -4,11 +4,12 @@ extension Document {
     displayName: "Metro Note",
     image: Image("Items/Documents/metro_note.png"),
 
-    pages: [
-      """
-      Metro still running.
-      If you read this – don’t go down!
-      """
-    ]
+    frontMatter: """
+      Metro still running!
+      If you read this —
+      don’t go down!
+      """,
+
+    pages: []
   )
 }

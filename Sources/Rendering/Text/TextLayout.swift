@@ -54,6 +54,16 @@ public final class TextLayout {
 
     while i < scalars.count {
       let codepoint = Int32(scalars[i].value)
+
+      // Handle spaces with consistent width like the rendering code
+      if codepoint == 32 {  // Space character
+        // Use a reasonable space width to match rendering behavior
+        let spaceWidth: Float = 8  // Default space width (matches GLRenderer)
+        width += spaceWidth * scale
+        i += 1
+        continue
+      }
+
       let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
       width += font.getAdvance(for: codepoint, next: next) * scale
       i += 1
@@ -174,12 +184,11 @@ public final class TextLayout {
     endIndex: String.Index,
     baselineY: Float
   ) -> Line {
-    // Trim whitespace from the line
-    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    let width = measureWidth(trimmedText)
+    // Don't trim whitespace - spaces are important for proper text measurement
+    let width = measureWidth(text)
 
     return Line(
-      text: trimmedText,
+      text: text,
       startIndex: startIndex,
       endIndex: endIndex,
       width: width,
