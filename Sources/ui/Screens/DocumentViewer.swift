@@ -3,9 +3,11 @@ import GLFW
 import GLMath
 
 struct Document: Sendable {
-  let title: String?
-  let image: Image?
-  let pages: [String]
+  var id: String?
+  var displayName: String?
+  var image: Image?
+  var frontMatter: String?
+  var pages: [String]
 }
 
 final class DocumentViewer: RenderLoop {

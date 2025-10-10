@@ -13,38 +13,64 @@ Estimated runtime: ~2.5–3 hours.
 ---
 
 ### Act I — The Break
+
 - **The Citadel (DDIS HQ)** — opening cutscene, outbreak confirmed.
+
 - **The Farm (DDIS Collection Station)** — intro gameplay, partner banter, calm before the storm.
+
 - **Amager Roads / Outskirts** — driving sequence, outbreak witnessed first-hand, car crash.
+
 👉 End of Act: first glass creatures encountered, stranded.
 
 ---
 
+
+
 ### Act II — The Descent
+
 - **Residential Amager (Hub)** — semi-open area with multiple routes:
   - Apartment block (civilian encounter).
   - School (lore dump).
   - Mini-market (ammo/gear).
   - Parking garage (first real monster arena).
-  - All paths converge at **Metro entrance**.
-- **Metro Maintenance Room** — midpoint refuge, “don’t open the door” sequence.
+  - All paths converge at **Metro entrance**
+  
+- *Tunnels* — glass creatures, atmosphere, traversal.
+
+- **Metro Maintenance Room** — midpoint refuge, “don’t open the door” sequence.  
+
+- *Tunnels* — deeper, darker, increasing danger.
+
+- **Church (Metro Exit)** — emerges onto ruined street, closer to Citadel.  
+  - *Street encounters / short traversal*
+
+- **Citadel Entrance**  
+
 - **The Citadel (return)** — regroup, upgrade arsenal, shocking revelation about immunity.
+  - **Citadel Conference Room** (cutscene)  
+
 - **Urban Copenhagen Core (Hub)** — semi-open objectives in ruined city:
   - Secure comms relay.
   - Investigate lab storage.
   - Rescue stranded team.
   - All converge toward harbor.
+
 👉 End of Act: Citadel compromised, protagonists realize they are on their own.
 
 ---
 
 ### Act III — The Revelation
+
 - **Harbor Approach** — choice of infiltration:
   - Stealthier **dockside route**.
   - Combat-heavy **front plaza assault**.
+
 - **Highrise Tower (Pharma Corp HQ)** — red pulsing nightmare space.
+
 - **Upper Labs & Rooftop** — truth revealed: outbreak is no accident.
+
 - **Final Confrontation** — cure vs cover-up vs escalation (player choice).
+
 👉 End of Game: ambiguous survival or bleak ending ties back to opening.
 
 

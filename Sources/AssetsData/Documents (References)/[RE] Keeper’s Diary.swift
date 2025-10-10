@@ -1,7 +1,7 @@
 extension Document {
   static let keepersDiary = Document(
-    title: "KEEPER’S DIARY",
-    image: Image("Items/brown_book.png"),
+    displayName: "KEEPER’S DIARY",
+    image: Image("Items/Documents/brown_book.png"),
     pages: [
       """
       May 9, 1998

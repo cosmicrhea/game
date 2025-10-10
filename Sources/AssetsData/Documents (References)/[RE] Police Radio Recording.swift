@@ -1,7 +1,7 @@
 extension Document {
   static let policeRadioRecording = Document(
-    title: "Police Radio Recording",
-    image: Image("Items/cassette_player.png"),
+    displayName: "Police Radio Recording",
+    image: Image("Items/Documents/cassette_player.png"),
     pages: [
       """
       — This is Officer Mills! HQ, please respond!
