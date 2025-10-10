@@ -50,7 +50,7 @@ extension Document {
       Some of them already have *the shine*.
       Pale skin, reflective eyes, moving wrong.
 
-      They’re not sick. They’re *transmitting*.
+      They’re not sick. They’re transmitting.
       You can catch it by standing too close. By trusting the wrong face.
       """,
 
@@ -67,9 +67,8 @@ extension Document {
       """,
       
       """
-      [Photocopied by “The Watchers”,
-      Amager Underground Press,
-      October 2025]
+      [Photocopied by The Watchers,
+      Amager Underground Press, October 2025]
       """
     ]
   )

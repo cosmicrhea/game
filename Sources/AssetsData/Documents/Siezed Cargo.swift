@@ -8,8 +8,8 @@ extension Document {
       DDIS INTERNAL MEMO
       
       REF: CARGO-XFR-392
-      ORIGIN: KASTELLET / FIELD DESK 2A
-      DATE: 19 SEPTEMBER 1983
+      ORIGIN: KASTELLET / FIELD DESK 37
+      DATE: 19 SEPTEMBER, 1983
       """,
 
     pages: [
@@ -45,9 +45,12 @@ extension Document {
 
       """
       DDIS Field Notes:
-      * Exterior crates marked with Ferring seal, but interior packaging unlabelled.
-      * Substance appears dormant but reacts to proximity.
-      * Sample stored under blackout protocol; awaiting transfer to Site B.
+      
+      - Exterior crates marked with Perring seal, but interior packaging unlabelled.
+      
+      - Substance appears dormant but reacts to proximity.
+      
+      - Sample stored under blackout protocol; awaiting transfer to B-Site.
       
       """,
 //      Handwritten Annotation (unconfirmed):

@@ -51,12 +51,14 @@ public protocol Renderer {
   ///   - defaultStyle: The default text style to use for unformatted text.
   ///   - wrapWidth: Optional width to wrap text at.
   ///   - anchor: The anchor point for positioning.
+  ///   - alignment: Text alignment within the wrap width.
   func drawText(
     _ attributedString: AttributedString,
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float?,
-    anchor: TextAnchor
+    anchor: TextAnchor,
+    alignment: TextAlignment
   )
 
   // MARK: - Paths

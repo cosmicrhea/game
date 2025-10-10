@@ -1,6 +1,13 @@
 import Foundation
 import GL
 
+/// Text alignment options
+public enum TextAlignment: Sendable {
+  case left
+  case center
+  case right
+}
+
 /// Style configuration for text rendering.
 public struct TextStyle: Sendable {
   /// Name of the font to use.
@@ -9,16 +16,20 @@ public struct TextStyle: Sendable {
   public var fontSize: Float
   /// Color of the text.
   public var color: Color
+  /// Text alignment.
+  public var alignment: TextAlignment
 
   /// Creates a new text style with the specified properties.
   /// - Parameters:
   ///   - fontName: Name of the font to use.
   ///   - fontSize: Size of the font in points.
   ///   - color: Color of the text.
-  public init(fontName: String, fontSize: Float, color: Color) {
+  ///   - alignment: Text alignment.
+  public init(fontName: String, fontSize: Float, color: Color, alignment: TextAlignment = .left) {
     self.fontName = fontName
     self.fontSize = fontSize
     self.color = color
+    self.alignment = alignment
   }
 }
 
@@ -217,7 +228,8 @@ extension AttributedString {
       at: point,
       defaultStyle: defaultStyle,
       wrapWidth: wrapWidth,
-      anchor: anchor
+      anchor: anchor,
+      alignment: defaultStyle.alignment
     )
   }
 

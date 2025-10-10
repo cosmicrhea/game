@@ -5,21 +5,24 @@ import GLMath
 @MainActor
 final class DocumentDemo: RenderLoop {
   private let documents: [Document]
+  private var documentViewer: DocumentViewer!
+
+  @ConfigValue("DocumentDemo/currentIndex")
   private var currentDocumentIndex: Int = 0
-  private var documentViewer: DocumentViewer
 
   init() {
     documents = [
       .glasportReport,
       .siezedCargo,
-      .metroNote,
+//      .metroNote,
       .jaritsJournal,
 
 //      .keepersDiary,
 //      .policeRadioRecording,
     ]
 
-    documentViewer = DocumentViewer(document: documents[0])
+
+    documentViewer = DocumentViewer(document: documents[currentDocumentIndex])
   }
 
   func onAttach(window: GLFWWindow) {

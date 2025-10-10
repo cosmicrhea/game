@@ -253,7 +253,8 @@ public final class GLRenderer: Renderer {
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float? = nil,
-    anchor: TextAnchor = .topLeft
+    anchor: TextAnchor = .topLeft,
+    alignment: TextAlignment = .left
   ) {
     // Create font and layout for the default style
     guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize) else {
@@ -299,10 +300,25 @@ public final class GLRenderer: Renderer {
       // Calculate proper Y position for this line using the working approach
       let lineBaselineY = origin.y + anchorOffset.y - Float(line.baselineY) * lineHeight
 
+      // Calculate X offset based on alignment
+      let lineXOffset: Float
+      if let wrapWidth = wrapWidth {
+        switch alignment {
+        case .left:
+          lineXOffset = 0
+        case .center:
+          lineXOffset = (wrapWidth - line.width) / 2
+        case .right:
+          lineXOffset = wrapWidth - line.width
+        }
+      } else {
+        lineXOffset = 0
+      }
+
       let lineVertices = generateTextLineVertices(
         line: line,
         atlas: atlas,
-        origin: Point(origin.x + anchorOffset.x, lineBaselineY),
+        origin: Point(origin.x + anchorOffset.x + lineXOffset, lineBaselineY),
         scale: currentScale,
         color: defaultStyle.color
       )

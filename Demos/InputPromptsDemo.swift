@@ -41,12 +41,13 @@ final class InputPromptsDemo: RenderLoop {
     // Pack rectangles using STBRectPack
     let marginX: Float = 56
     let marginY: Float = 12
-    let spacing: Float = 16  // Spacing between rectangles
+    let spacingX: Float = 56  // Spacing between rectangles
+    let spacingY: Float = 48  // Spacing between rectangles
     let binWidth = WIDTH - Int(marginX * 2)  // Leave margin on both sides
     let binHeight = HEIGHT - Int(marginY * 2)
 
     // Add spacing to each rectangle size for packing
-    let rectSizes = groupData.map { (width: Int($0.width + spacing), height: Int($0.height + spacing)) }
+    let rectSizes = groupData.map { (width: Int($0.width + spacingX), height: Int($0.height + spacingY)) }
 
     let (packedRects, _) = RectPacking.pack(
       binWidth: binWidth,

@@ -65,7 +65,8 @@ final class DocumentViewer: RenderLoop {
   }
 
   private func nextPage() {
-    guard currentPage < document.pages.count - 1 else { return }
+    let totalPages = getTotalPageCount()
+    guard currentPage < totalPages - 1 else { return }
     guard !isAnimating else { return }
 
     previousPageIndex = currentPage
@@ -84,6 +85,14 @@ final class DocumentViewer: RenderLoop {
     animationDirection = -1  // Backward (left)
     startPageAnimation()
     UISound.pageTurn()
+  }
+
+  private func getTotalPageCount() -> Int {
+    return document.pages.count + (hasFrontmatter() ? 1 : 0)
+  }
+
+  private func hasFrontmatter() -> Bool {
+    return document.frontMatter != nil && !document.frontMatter!.isEmpty
   }
 
   private func startPageAnimation() {
@@ -122,8 +131,9 @@ final class DocumentViewer: RenderLoop {
     let rightArrowX: Float = sectionX + sectionWidth - (caretRight.image.naturalSize.width * 0.5 * 1.5)
 
     // Update caret visibility based on current page
+    let totalPages = getTotalPageCount()
     caretLeft.visible = currentPage > 0
-    caretRight.visible = currentPage < document.pages.count - 1
+    caretRight.visible = currentPage < totalPages - 1
 
     caretLeft.draw(at: Point(leftArrowX, arrowY), deltaTime: deltaTime)
     caretRight.draw(at: Point(rightArrowX, arrowY), deltaTime: deltaTime)
@@ -137,8 +147,27 @@ final class DocumentViewer: RenderLoop {
     // textArea.frame(with: .indigo)
 
     // 4. Center text vertically using text measurement
-    let currentText = document.pages[currentPage]
-    let textBounds = currentText.boundingRect(with: textStyle, wrapWidth: textWidth)
+    let currentText: String
+    let currentTextStyle: TextStyle
+
+    // Check if we're showing frontmatter (first page and frontmatter exists)
+    if currentPage == 0, let frontmatter = document.frontMatter, !frontmatter.isEmpty {
+      currentText = frontmatter
+      // Use centered alignment for frontmatter
+      currentTextStyle = TextStyle(
+        fontName: textStyle.fontName,
+        fontSize: textStyle.fontSize,
+        color: textStyle.color,
+        alignment: .center
+      )
+    } else {
+      // Calculate which page index to use (accounting for frontmatter)
+      let pageIndex = hasFrontmatter() ? currentPage - 1 : currentPage
+      currentText = document.pages[pageIndex]
+      currentTextStyle = textStyle
+    }
+
+    let textBounds = currentText.boundingRect(with: currentTextStyle, wrapWidth: textWidth)
     let baseTextY: Float = textArea.origin.y + (textArea.size.height - textBounds.size.height) / 2
 
     if isAnimating {
@@ -147,21 +176,36 @@ final class DocumentViewer: RenderLoop {
       let animationProgress: Float = pageAnimationEasing.apply(rawProgress)
 
       // Old text (fading out, moving in opposite direction of animation)
-      let oldText = document.pages[previousPageIndex]
-      let oldTextBounds = oldText.boundingRect(with: textStyle, wrapWidth: textWidth)
+      let oldText: String
+      let oldTextStyle: TextStyle
+
+      // Check if old page was frontmatter
+      if previousPageIndex == 0, hasFrontmatter() {
+        oldText = document.frontMatter!
+        oldTextStyle = TextStyle(
+          fontName: textStyle.fontName,
+          fontSize: textStyle.fontSize,
+          color: textStyle.color.withAlphaComponent(1.0 - animationProgress),
+          alignment: .center
+        )
+      } else {
+        // Calculate which page index to use (accounting for frontmatter)
+        let oldPageIndex = hasFrontmatter() ? previousPageIndex - 1 : previousPageIndex
+        oldText = document.pages[oldPageIndex]
+        oldTextStyle = TextStyle(
+          fontName: textStyle.fontName,
+          fontSize: textStyle.fontSize,
+          color: textStyle.color.withAlphaComponent(1.0 - animationProgress)
+        )
+      }
+
+      let oldTextBounds = oldText.boundingRect(with: oldTextStyle, wrapWidth: textWidth)
       let oldTextY: Float = textArea.origin.y + (textArea.size.height - oldTextBounds.size.height) / 2
       let oldTextX: Float = textAreaX - animationProgress * 50.0 * Float(animationDirection)
-      let oldFadeAlpha: Float = 1.0 - animationProgress
-
-      let oldStyle = TextStyle(
-        fontName: textStyle.fontName,
-        fontSize: textStyle.fontSize,
-        color: textStyle.color.withAlphaComponent(oldFadeAlpha)
-      )
 
       oldText.draw(
         at: Point(oldTextX, oldTextY),
-        style: oldStyle,
+        style: oldTextStyle,
         wrapWidth: textWidth,
         anchor: .bottomLeft
       )
@@ -171,9 +215,10 @@ final class DocumentViewer: RenderLoop {
       let newFadeAlpha: Float = animationProgress
 
       let newStyle = TextStyle(
-        fontName: textStyle.fontName,
-        fontSize: textStyle.fontSize,
-        color: textStyle.color.withAlphaComponent(newFadeAlpha)
+        fontName: currentTextStyle.fontName,
+        fontSize: currentTextStyle.fontSize,
+        color: currentTextStyle.color.withAlphaComponent(newFadeAlpha),
+        alignment: currentTextStyle.alignment
       )
 
       currentText.draw(
@@ -186,7 +231,7 @@ final class DocumentViewer: RenderLoop {
       // Draw current text normally
       currentText.draw(
         at: Point(textAreaX, baseTextY),
-        style: textStyle,
+        style: currentTextStyle,
         wrapWidth: textWidth,
         anchor: .bottomLeft
       )
