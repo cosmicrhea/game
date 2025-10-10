@@ -75,7 +75,7 @@ let loops: [RenderLoop] = [
   InputPromptsDemo(),
   //  AttributedTextDemo(),
   //  TextDemo(),
-  DocumentViewer(),
+  DocumentViewer(document: .operationGlasport),
   CalloutDemo(),
   FontsDemo(),
   PathDemo(),

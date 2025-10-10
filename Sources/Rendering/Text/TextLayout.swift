@@ -81,18 +81,14 @@ public final class TextLayout {
     var lines: [Line] = []
     var currentLine = ""
     var currentStart = text.startIndex
-    let currentIndex = text.startIndex
+    var currentIndex = text.startIndex
 
-    // Simple word-based wrapping
-    let words = text.components(separatedBy: .whitespacesAndNewlines)
-    var wordIndex = 0
+    // Process text character by character to properly handle newlines
+    while currentIndex < text.endIndex {
+      let char = text[currentIndex]
 
-    while wordIndex < words.count {
-      let word = words[wordIndex]
-
-      // Handle newlines explicitly
-      if word.isEmpty && wordIndex < words.count - 1 {
-        // This is a newline - finalize current line
+      if char == "\n" {
+        // Found a newline - finalize current line and move to next line
         if !currentLine.isEmpty {
           lines.append(
             createLine(
@@ -101,42 +97,61 @@ public final class TextLayout {
               endIndex: currentIndex,
               baselineY: Float(lines.count)
             ))
-          currentLine = ""
         }
-        // Add empty line for the newline
-        lines.append(
-          createLine(
-            text: "",
-            startIndex: currentIndex,
-            endIndex: currentIndex,
-            baselineY: Float(lines.count)
-          ))
-        wordIndex += 1
+
+        currentLine = ""
+        currentIndex = text.index(after: currentIndex)
+
+        // Check if this is a consecutive newline (paragraph break)
+        if currentIndex < text.endIndex && text[currentIndex] == "\n" {
+          // This is \n\n - add an empty line for paragraph spacing
+          lines.append(
+            createLine(
+              text: "",
+              startIndex: currentIndex,
+              endIndex: currentIndex,
+              baselineY: Float(lines.count)
+            ))
+          currentIndex = text.index(after: currentIndex)
+        }
+
+        currentStart = currentIndex
         continue
       }
 
-      let testLine = currentLine.isEmpty ? word : currentLine + " " + word
-      let testWidth = measureWidth(testLine)
+      // Add character to current line
+      currentLine.append(char)
 
-      if testWidth <= wrapWidth || currentLine.isEmpty {
-        // Word fits or it's the first word on the line
-        currentLine = testLine
-        wordIndex += 1
-      } else {
-        // Word doesn't fit - finalize current line
-        if !currentLine.isEmpty {
+      // Check if current line exceeds wrap width
+      let testWidth = measureWidth(currentLine)
+      if testWidth > wrapWidth && !currentLine.isEmpty {
+        // Line is too wide - need to wrap
+        // Find the last space to break at
+        var breakIndex = currentLine.lastIndex(of: " ")
+        if breakIndex == nil || breakIndex == currentLine.startIndex {
+          // No space found or space is at start - break at current character
+          breakIndex = currentLine.index(before: currentLine.endIndex)
+        }
+
+        // Extract the part that fits
+        let fittingPart = String(currentLine[..<breakIndex!])
+        let remainingPart = String(currentLine[text.index(after: breakIndex!)...])
+
+        if !fittingPart.isEmpty {
           lines.append(
             createLine(
-              text: currentLine,
+              text: fittingPart,
               startIndex: currentStart,
               endIndex: currentIndex,
               baselineY: Float(lines.count)
             ))
         }
-        currentLine = word
+
+        currentLine = remainingPart
         currentStart = currentIndex
-        wordIndex += 1
       }
+
+      currentIndex = text.index(after: currentIndex)
     }
 
     // Add final line if there's content
