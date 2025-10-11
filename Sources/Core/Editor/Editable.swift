@@ -3,28 +3,8 @@ import SwiftUI
 
 /// Macro to automatically generate getEditableProperties() method from @Editable properties
 @attached(member, names: named(getEditableProperties))
-public macro EditableProperties() = #externalMacro(module: "GlassMacros", type: "EditablePropertiesMacro")
-
-/// Helper function to automatically generate editable properties from @Editable annotations
-public func generateEditableProperties<T: EditableObject>(for object: T) -> [AnyEditableProperty] {
-  let mirror = Mirror(reflecting: object)
-  var properties: [AnyEditableProperty] = []
-
-  for child in mirror.children {
-    guard let label = child.label else { continue }
-
-    // Check if this is an @Editable property by looking for the projected value
-    if let editable = child.value as? AnyEditableProperty {
-      // This is already an AnyEditableProperty, use it directly
-      properties.append(editable)
-    } else if let editableWrapper = child.value as? AnyEditableProperty {
-      // This is a projected value from @Editable
-      properties.append(editableWrapper)
-    }
-  }
-
-  return properties
-}
+@attached(extension, conformances: Editing)
+public macro Editor() = #externalMacro(module: "GlassEditorMacros", type: "EditorMacro")
 
 /// A property wrapper that marks properties as editable in the debug editor
 @propertyWrapper
@@ -71,7 +51,7 @@ public struct Editable<T> {
 }
 
 /// Protocol for objects that can provide editable properties
-public protocol EditableObject: AnyObject {
+public protocol Editing: AnyObject {
   func getEditableProperties() -> [AnyEditableProperty]
 }
 
@@ -111,7 +91,7 @@ public struct AnyEditableProperty {
 }
 
 /// A SwiftUI view that automatically generates controls for @Editable properties
-public struct AutoEditorView<T: EditableObject>: View {
+public struct AutoEditorView<T: Editing>: View {
   @State private var properties: [AnyEditableProperty] = []
   private let object: T
 
@@ -153,8 +133,10 @@ public struct EditablePropertyControl: View {
         UISound.select()
       }
     } else {
-      Text("\(localValue)")
-        .font(.system(.body, design: .monospaced))
+      LabeledContent(property.displayName) {
+        Text("\(localValue)")
+          .font(.system(.body, design: .monospaced))
+      }
     }
   }
 }

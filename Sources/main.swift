@@ -3,8 +3,11 @@ import GL
 import GLFW
 import GLMath
 import Logging
-import SwiftUI
 import unistd
+
+#if EDITOR
+  import SwiftUI
+#endif
 
 //@_exported import Inject
 
@@ -51,41 +54,18 @@ GLFWWindow.hints.retinaFramebuffer = false
 //GLFWWindow.hints.doubleBuffer = false
 //GLFWWindow.hints.openGLDebugMode = true
 
-struct Editor: View {
-  var body: some View {
-    Group {
-      if let mapView = activeLoop as? MapView {
-        AutoEditorView(for: mapView)
-      } else if let mapDemo = activeLoop as? MapDemo {
-        // Access the MapView from MapDemo
-        AutoEditorView(for: mapDemo.mapView)
-      } else {
-        Text("Current loop: \(String(describing: type(of: activeLoop)))")
-        Text("No editable properties available")
-      }
-    }
-    .formStyle(.grouped)
-    .controlSize(.mini)
-    .frame(maxWidth: 320)
-    .scrollDisabled(true)
-    .scrollContentBackground(.hidden)
-    // .fixedSize(horizontal: false, vertical: true)
-    //.background(Color.clear)
-    // .border(.mint)
-    //.tint(.black)
-  }
-}
-
 let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
+
 //window.nsWindow?.styleMask.insert(.fullSizeContentView)
 //window.nsWindow?.titlebarAppearsTransparent = true
 
-let hostingView = NSHostingView(rootView: Editor())
-hostingView.frame = NSRect(x: 0, y: 0, width: 320, height: HEIGHT)
-hostingView.autoresizingMask = [.height, .minXMargin]
+#if EDITOR
+  let editorHostingView = NSHostingView(rootView: EditorView())
+  editorHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: HEIGHT)
+  editorHostingView.autoresizingMask = [.height, .minXMargin]
+  window.nsWindow?.contentView?.addSubview(editorHostingView)
+#endif
 
-// Add hosting view to the GLFW content view
-window.nsWindow?.contentView?.addSubview(hostingView)
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)

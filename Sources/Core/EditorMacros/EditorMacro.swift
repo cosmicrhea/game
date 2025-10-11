@@ -1,25 +1,34 @@
 import SwiftDiagnostics
 import SwiftSyntax
+import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
-public struct EditablePropertiesMacro: MemberMacro {
+extension String {
+  var titleCased: String {
+    replacingOccurrences(of: #"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])"#, with: " ", options: .regularExpression)
+      .capitalized
+  }
+}
+
+public struct EditorMacro: MemberMacro, ExtensionMacro {
   public static func expansion(
     of node: AttributeSyntax,
     providingMembersOf declaration: some DeclGroupSyntax,
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
 
-    guard let classDecl = declaration.as(ClassDeclSyntax.self) else {
-      throw MacroError("@EditableProperties can only be applied to classes")
+    guard
+      let typeName = declaration.as(ClassDeclSyntax.self)?.name.text ?? declaration.as(StructDeclSyntax.self)?.name.text
+        ?? declaration.as(ActorDeclSyntax.self)?.name.text
+    else {
+      throw EditorMacroError("@Editor can only be applied to types (classes, structs, actors)")
     }
 
-    let className = classDecl.name.text
-
     // Find all @Editable properties
-    let editableProperties = findEditableProperties(in: classDecl)
+    let editableProperties = findEditableProperties(in: declaration)
 
     guard !editableProperties.isEmpty else {
-      throw MacroError("No @Editable properties found in class \(className)")
+      throw EditorMacroError("No @Editable properties found in \(typeName)")
     }
 
     // Generate the getEditableProperties method
@@ -28,10 +37,45 @@ public struct EditablePropertiesMacro: MemberMacro {
     return [DeclSyntax(method)]
   }
 
-  private static func findEditableProperties(in classDecl: ClassDeclSyntax) -> [EditablePropertyInfo] {
+  public static func expansion(
+    of node: AttributeSyntax,
+    attachedTo declaration: some DeclGroupSyntax,
+    providingExtensionsOf type: some TypeSyntaxProtocol,
+    conformingTo protocols: [TypeSyntax],
+    in context: some MacroExpansionContext
+  ) throws -> [ExtensionDeclSyntax] {
+
+    guard
+      declaration.as(ClassDeclSyntax.self) != nil || declaration.as(StructDeclSyntax.self) != nil
+        || declaration.as(ActorDeclSyntax.self) != nil
+    else {
+      throw EditorMacroError("@Editor can only be applied to types (classes, structs, actors)")
+    }
+
+    // Check if the type already conforms to Editing
+    let alreadyConforms =
+      declaration.as(ClassDeclSyntax.self)?.inheritanceClause?.inheritedTypes.contains { inheritedType in
+        inheritedType.type.as(IdentifierTypeSyntax.self)?.name.text == "Editing"
+      } ?? false
+
+    if alreadyConforms {
+      return []
+    }
+
+    // Generate extension adding Editing conformance
+    let extensionDecl = try ExtensionDeclSyntax(
+      """
+      extension \(type.trimmed): Editing {}
+      """
+    )
+
+    return [extensionDecl]
+  }
+
+  private static func findEditableProperties(in declaration: DeclGroupSyntax) -> [EditablePropertyInfo] {
     var properties: [EditablePropertyInfo] = []
 
-    for member in classDecl.memberBlock.members {
+    for member in declaration.memberBlock.members {
       if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
         for binding in variableDecl.bindings {
           if let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
@@ -44,7 +88,7 @@ public struct EditablePropertiesMacro: MemberMacro {
             let propertyType = type.description.trimmingCharacters(in: .whitespacesAndNewlines)
 
             // Extract display name and range from attribute arguments
-            let displayName = extractDisplayName(from: attribute) ?? propertyName.capitalized
+            let displayName = extractDisplayName(from: attribute) ?? propertyName.titleCased
             let range = extractRange(from: attribute)
 
             properties.append(
@@ -115,16 +159,16 @@ public struct EditablePropertiesMacro: MemberMacro {
   }
 }
 
+private struct EditorMacroError: Error {
+  let message: String
+  init(_ message: String) {
+    self.message = message
+  }
+}
+
 private struct EditablePropertyInfo {
   let name: String
   let type: String
   let displayName: String
   let range: String?
-}
-
-private struct MacroError: Error {
-  let message: String
-  init(_ message: String) {
-    self.message = message
-  }
 }

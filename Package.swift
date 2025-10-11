@@ -44,6 +44,8 @@ let package = Package(
       name: "Glass",
 
       dependencies: [
+        "GlassEditorMacros",
+
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "Collections", package: "swift-collections"),
         .product(name: "Logging", package: "swift-log"),
@@ -62,7 +64,6 @@ let package = Package(
         .product(name: "Jolt", package: "jolt"),
         .product(name: "STBRectPack", package: "stb-rect-pack"),
         .product(name: "STBTrueType", package: "stb-truetype"),
-        "GlassMacros",
 
         // .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
         // .product(name: "DefaultBackend", package: "swift-cross-ui"),
@@ -73,7 +74,7 @@ let package = Package(
       exclude: [
         // "Documentation",
         "Sources/Assets",
-        "Sources/GlassMacros",
+        "Sources/Core/EditorMacros",
         "NOTES.md",
       ],
 
@@ -104,12 +105,12 @@ let package = Package(
     ),
 
     .macro(
-      name: "GlassMacros",
+      name: "GlassEditorMacros",
       dependencies: [
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
       ],
-      path: "Sources/GlassMacros"
+      path: "Sources/Core/EditorMacros",
     ),
   ]
 )

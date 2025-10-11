@@ -2,8 +2,8 @@ import SwiftCompilerPlugin
 import SwiftSyntaxMacros
 
 @main
-struct GlassMacrosPlugin: CompilerPlugin {
+struct EditorMacrosPlugin: CompilerPlugin {
   let providingMacros: [Macro.Type] = [
-    EditablePropertiesMacro.self
+    EditorMacro.self
   ]
 }

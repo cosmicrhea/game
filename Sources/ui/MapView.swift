@@ -2,24 +2,20 @@ import GL
 import GLFW
 import GLMath
 
-@EditableProperties
-class MapView: RenderLoop, EditableObject {
+@Editor
+class MapView: RenderLoop {
   private var mapEffect = GLScreenEffect("Common/MapView")
 
-  // Grid parameters
+  @Editable(range: 8.0...64.0) var gridCellSize: Float = 32.0
+  @Editable(range: 0.5...3.0) var gridThickness: Float = 1.0
   @Editable(range: 0.1...3.0) var gridScale: Float = 1.0
   @Editable var gridOpacity: Float = 0.8
+
   @Editable var vignetteStrength: Float = 0.8
   @Editable var vignetteRadius: Float = 0.9
 
-  // Grid size control
-  @Editable(range: 8.0...64.0) var gridCellSize: Float = 32.0
-
-  // Color controls
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid
-
-  @Editable(range: 0.5...3.0) var gridThickness: Float = 1.0
 
   func update(deltaTime: Float) {
     // Update any animations or effects
