@@ -9,6 +9,7 @@ uniform float uBorderThickness;
 uniform float uCornerRadius;
 uniform float uNoiseScale;
 uniform float uNoiseStrength;
+uniform float uRadialGradientStrength;
 
 // Colors
 uniform vec3 uPanelColor;
@@ -92,7 +93,8 @@ void main() {
     
     // Panel color with radial gradient and inner shadow
     vec3 panelColor = uPanelColor;
-    panelColor *= (0.7 + 0.3 * radialGradient); // Subtle radial gradient
+    // Apply radial gradient - more visible effect
+    panelColor *= (0.7 + 0.3 * uRadialGradientStrength * radialGradient);
     panelColor *= (0.8 + 0.2 * (1.0 - innerShadow)); // Inner shadow effect
     
     // Silver-ish border with metallic appearance

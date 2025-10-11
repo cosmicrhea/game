@@ -92,6 +92,7 @@ let loops: [RenderLoop] = [
   MainLoop(),
   SlotDemo(),
   SlotGridDemo(),
+  ContextMenuDemo(),
   // CalloutDemo(),
   TitleScreen(),
   LibraryView(),

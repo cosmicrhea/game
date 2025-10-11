@@ -64,19 +64,33 @@ extension TextStyle {
     fontSize: 16,
     color: .gray700.withAlphaComponent(0.5)
   )
-  
+
+  static let contextMenu = TextStyle(
+    fontName: "Creato Display Medium",
+    fontSize: 16,
+    color: .white
+  )
+
+  static let contextMenuDisabled = TextStyle(
+    fontName: "Creato Display Medium",
+    fontSize: 16,
+    color: .gray500
+  )
+
   /// Creates a menu item style based on selection and disabled state
   static func menuItem(selected: Bool, disabled: Bool) -> TextStyle {
     let baseStyle = disabled ? menuItemDisabled : menuItem
-    
+
     if selected && !disabled {
       // Red text with dark red stroke for selected items
-      return baseStyle
+      return
+        baseStyle
         .withColor(.rose)
         .withStroke(width: 2, color: Color(0.3, 0.1, 0.1, 1.0))  // Dark red stroke
     } else if selected && disabled {
       // Dark red for disabled AND selected items
-      return baseStyle
+      return
+        baseStyle
         .withColor(Color(0.4, 0.1, 0.1, 1.0))  // Dark red color
         .withStroke(width: 2, color: Color(0.2, 0.05, 0.05, 1.0))  // Darker red stroke
     } else if disabled {

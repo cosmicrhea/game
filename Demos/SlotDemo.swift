@@ -14,6 +14,7 @@ final class SlotDemo: RenderLoop {
   private var cornerRadius: Float = 12.0
   private var noiseScale: Float = 0.02
   private var noiseStrength: Float = 0.3
+  private var radialGradientStrength: Float = 0.3
 
   // Colors
   private var panelColor = Color(0.1, 0.1, 0.1)
@@ -53,6 +54,14 @@ final class SlotDemo: RenderLoop {
       borderThickness += 1
     case .minus:
       borderThickness = max(1, borderThickness - 1)
+    case .q:
+      cornerRadius += 1
+    case .e:
+      cornerRadius = max(0, cornerRadius - 1)
+    case .z:
+      radialGradientStrength = min(1.0, radialGradientStrength + 0.05)
+    case .c:
+      radialGradientStrength = max(0.0, radialGradientStrength - 0.05)
     case .r:
       // Reset to defaults
       panelSize = Size(80, 80)
@@ -61,6 +70,7 @@ final class SlotDemo: RenderLoop {
       cornerRadius = 12.0
       noiseScale = 0.02
       noiseStrength = 0.3
+      radialGradientStrength = 0.3
     case .escape:
       break
     default:
@@ -72,18 +82,48 @@ final class SlotDemo: RenderLoop {
     // Dark background
     GraphicsContext.current?.renderer.setClearColor(.black)
 
-    // Draw the slot using GLScreenEffect
+    // Draw the normal slot (left)
+    let leftCenter = Point(panelCenter.x - 60, panelCenter.y)
     slotEffect.draw { shader in
       // Set uniforms
       shader.setVec2("uPanelSize", value: (panelSize.width, panelSize.height))
-      shader.setVec2("uPanelCenter", value: (panelCenter.x, panelCenter.y))
+      shader.setVec2("uPanelCenter", value: (leftCenter.x, leftCenter.y))
       shader.setFloat("uBorderThickness", value: borderThickness)
       shader.setFloat("uCornerRadius", value: cornerRadius)
       shader.setFloat("uNoiseScale", value: noiseScale)
       shader.setFloat("uNoiseStrength", value: noiseStrength)
+      shader.setFloat("uRadialGradientStrength", value: radialGradientStrength)
+
+      // Set colors - normal dark panel
+      shader.setVec3("uPanelColor", value: (x: panelColor.red, y: panelColor.green, z: panelColor.blue))
+      shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
+      shader.setVec3(
+        "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))
+      shader.setVec3("uBorderShadow", value: (x: borderShadow.red, y: borderShadow.green, z: borderShadow.blue))
+    }
+
+    // Draw the amber-tinted slot (right)
+    let rightCenter = Point(panelCenter.x + 60, panelCenter.y)
+    slotEffect.draw { shader in
+      // Set uniforms
+      shader.setVec2("uPanelSize", value: (panelSize.width, panelSize.height))
+      shader.setVec2("uPanelCenter", value: (rightCenter.x, rightCenter.y))
+      shader.setFloat("uBorderThickness", value: borderThickness)
+      shader.setFloat("uCornerRadius", value: cornerRadius)
+      shader.setFloat("uNoiseScale", value: noiseScale)
+      shader.setFloat("uNoiseStrength", value: noiseStrength)
+      shader.setFloat("uRadialGradientStrength", value: radialGradientStrength)
+
+      // Apply amber tint to the panel color - this creates the cool amber effect
+      let amberPanelColor = Color(
+        0.1 + radialGradientStrength * 0.3,  // Base amber red
+        0.08 + radialGradientStrength * 0.24,  // Base amber green
+        0.05 + radialGradientStrength * 0.15,  // Base amber blue
+        panelColor.alpha
+      )
 
       // Set colors
-      shader.setVec3("uPanelColor", value: (x: panelColor.red, y: panelColor.green, z: panelColor.blue))
+      shader.setVec3("uPanelColor", value: (x: amberPanelColor.red, y: amberPanelColor.green, z: amberPanelColor.blue))
       shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
       shader.setVec3(
         "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))
@@ -95,6 +135,8 @@ final class SlotDemo: RenderLoop {
       "WASD: Resize slot",
       "Arrow Keys: Move slot",
       "+/-: Border thickness",
+      "Q/E: Corner Radius",
+      "Z/C: Radial Gradient",
       "R: Reset to defaults",
       "ESC: Exit",
     ]
@@ -112,6 +154,7 @@ final class SlotDemo: RenderLoop {
       "Slot Size: \(Int(panelSize.width))x\(Int(panelSize.height))",
       "Border Thickness: \(Int(borderThickness))",
       "Corner Radius: \(Int(cornerRadius))",
+      "Radial Gradient: \(String(format: "%.2f", radialGradientStrength)) [Z/C]",
       "Noise Scale: \(String(format: "%.3f", noiseScale))",
     ]
 
@@ -119,7 +162,7 @@ final class SlotDemo: RenderLoop {
       line.draw(
         at: Point(Float(WIDTH) - 20, Float(HEIGHT) - 20 - Float(index * 20)),
         style: TextStyle(fontName: "Determination", fontSize: 16, color: .white),
-        anchor: .topLeft
+        anchor: .topRight
       )
     }
   }

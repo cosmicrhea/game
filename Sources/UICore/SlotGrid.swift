@@ -13,7 +13,7 @@ public final class SlotGrid {
 
   // MARK: - State
   public private(set) var gridPosition: Point = Point(0, 0)
-  public private(set) var selectedIndex: Int = 0
+  public private(set) var selectedIndex: Int
   public private(set) var hoveredIndex: Int? = nil
 
   // MARK: - Rendering
@@ -28,8 +28,12 @@ public final class SlotGrid {
   // MARK: - Slot Properties
   public var borderThickness: Float = 8.0
   public var cornerRadius: Float = 12.0
+  public var radialGradientStrength: Float = 0.3
   public var noiseScale: Float = 0.02
   public var noiseStrength: Float = 0.3
+
+  // MARK: - Tinting
+  public var tint: Color? = nil  // Optional tint color for slots
 
   // MARK: - Selection Colors
   public var selectedSlotColor = Color(0.15, 0.15, 0.15)
@@ -45,6 +49,9 @@ public final class SlotGrid {
     self.rows = rows
     self.slotSize = slotSize
     self.spacing = spacing
+
+    // Start selection in bottom-left corner (now index 0)
+    self.selectedIndex = 0
   }
 
   // MARK: - Public Methods
@@ -67,7 +74,8 @@ public final class SlotGrid {
     let row = index / columns
 
     let x = gridPosition.x + Float(col) * (slotSize + spacing)
-    let y = gridPosition.y + Float(row) * (slotSize + spacing)
+    // Flip Y coordinate so bottom row is row 0
+    let y = gridPosition.y + Float(rows - 1 - row) * (slotSize + spacing)
 
     return Point(x, y)
   }
@@ -83,7 +91,10 @@ public final class SlotGrid {
     }
 
     let col = Int(relativeX / (slotSize + spacing))
-    let row = Int(relativeY / (slotSize + spacing))
+    let visualRow = Int(relativeY / (slotSize + spacing))
+
+    // Convert visual row (bottom=0) to logical row (top=0)
+    let row = rows - 1 - visualRow
 
     // Check if within valid grid
     if col < 0 || col >= columns || row < 0 || row >= rows {
@@ -92,7 +103,7 @@ public final class SlotGrid {
 
     // Check if position is within the actual slot (not in spacing)
     let slotStartX = Float(col) * (slotSize + spacing)
-    let slotStartY = Float(row) * (slotSize + spacing)
+    let slotStartY = Float(visualRow) * (slotSize + spacing)
     let slotEndX = slotStartX + slotSize
     let slotEndY = slotStartY + slotSize
 
@@ -130,13 +141,13 @@ public final class SlotGrid {
 
     switch direction {
     case .up:
-      newRow = max(0, currentRow - 1)
-    case .down:
       newRow = min(rows - 1, currentRow + 1)
-    case .left:
-      newCol = max(0, currentCol - 1)
     case .right:
       newCol = min(columns - 1, currentCol + 1)
+    case .down:
+      newRow = max(0, currentRow - 1)
+    case .left:
+      newCol = max(0, currentCol - 1)
     }
 
     let newIndex = newRow * columns + newCol
@@ -164,6 +175,16 @@ public final class SlotGrid {
         currentSlotColor = hoveredSlotColor
       }
 
+      // Apply tint if specified
+      if let tint = tint {
+        currentSlotColor = Color(
+          currentSlotColor.red * tint.red,
+          currentSlotColor.green * tint.green,
+          currentSlotColor.blue * tint.blue,
+          currentSlotColor.alpha
+        )
+      }
+
       // Draw the slot
       slotEffect.draw { shader in
         shader.setVec2("uPanelSize", value: (slotSize, slotSize))
@@ -172,6 +193,7 @@ public final class SlotGrid {
         shader.setFloat("uCornerRadius", value: cornerRadius)
         shader.setFloat("uNoiseScale", value: noiseScale)
         shader.setFloat("uNoiseStrength", value: noiseStrength)
+        shader.setFloat("uRadialGradientStrength", value: radialGradientStrength)
 
         // Set colors
         shader.setVec3(

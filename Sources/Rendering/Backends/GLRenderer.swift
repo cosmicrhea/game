@@ -460,8 +460,12 @@ public final class GLRenderer: Renderer {
     switch anchor {
     case .topLeft:
       return Point(0, -baseline)
+    case .topRight:
+      return Point(-layoutResult.totalWidth, -baseline)
     case .bottomLeft:
       return Point(0, layoutResult.totalHeight - baseline)
+    case .bottomRight:
+      return Point(-layoutResult.totalWidth, layoutResult.totalHeight - baseline)
     case .baselineLeft:
       return Point(0, 0)
     }

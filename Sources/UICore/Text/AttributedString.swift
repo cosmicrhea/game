@@ -376,7 +376,9 @@ extension AttributedString {
 /// Text anchor options for positioning text
 public enum TextAnchor {
   case topLeft
+  case topRight
   case bottomLeft
+  case bottomRight
   case baselineLeft
 }
 

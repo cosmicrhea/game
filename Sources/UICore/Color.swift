@@ -49,6 +49,7 @@ extension Color {
 
   public static let indigo = Color(0.3098, 0.2745, 0.8980, 1)
   public static let amber = Color(0.9608, 0.6196, 0.0431, 1)
+  public static let amber800 = Color(0.6, 0.4, 0.05, 1)  // Dark amber
   public static let teal = Color(0.0784, 0.7216, 0.6510, 1)
   public static let orange = Color(0.9765, 0.4510, 0.0863, 1)
   public static let purple = Color(0.6588, 0.3333, 0.9686, 1)
