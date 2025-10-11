@@ -53,7 +53,7 @@ GLFWWindow.hints.retinaFramebuffer = false
 
 struct Editor: View {
   var body: some View {
-    Form {
+    Group {
       if let mapView = activeLoop as? MapView {
         AutoEditorView(for: mapView)
       } else if let mapDemo = activeLoop as? MapDemo {

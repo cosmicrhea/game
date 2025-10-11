@@ -1,5 +1,6 @@
 // swift-tools-version: 6.1
 
+import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
@@ -21,6 +22,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
     .package(url: "https://github.com/swiftlang/swift-markdown.git", branch: "main"),
     .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
+    .package(url: "https://github.com/apple/swift-syntax", from: "509.0.0"),
 
     // .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
 
@@ -38,6 +40,15 @@ let package = Package(
   ],
 
   targets: [
+    .macro(
+      name: "GlassMacros",
+      dependencies: [
+        .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+        .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+      ],
+      path: "Sources/GlassMacros"
+    ),
+
     .executableTarget(
       name: "Glass",
 
@@ -60,6 +71,7 @@ let package = Package(
         .product(name: "Jolt", package: "jolt"),
         .product(name: "STBRectPack", package: "stb-rect-pack"),
         .product(name: "STBTrueType", package: "stb-truetype"),
+        "GlassMacros",
 
         // .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
         // .product(name: "DefaultBackend", package: "swift-cross-ui"),
@@ -70,6 +82,7 @@ let package = Package(
       exclude: [
         // "Documentation",
         "Sources/Assets",
+        "Sources/GlassMacros",
         "NOTES.md",
       ],
 
@@ -96,6 +109,6 @@ let package = Package(
       linkerSettings: [
         .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
       ]
-    )
+    ),
   ]
 )

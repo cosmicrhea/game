@@ -1,23 +1,52 @@
 import Foundation
 import SwiftUI
 
+/// Macro to automatically generate getEditableProperties() method from @Editable properties
+@attached(member, names: named(getEditableProperties))
+public macro EditableProperties() = #externalMacro(module: "GlassMacros", type: "EditablePropertiesMacro")
+
+/// Helper function to automatically generate editable properties from @Editable annotations
+public func generateEditableProperties<T: EditableObject>(for object: T) -> [AnyEditableProperty] {
+  let mirror = Mirror(reflecting: object)
+  var properties: [AnyEditableProperty] = []
+
+  for child in mirror.children {
+    guard let label = child.label else { continue }
+
+    // Check if this is an @Editable property by looking for the projected value
+    if let editable = child.value as? AnyEditableProperty {
+      // This is already an AnyEditableProperty, use it directly
+      properties.append(editable)
+    } else if let editableWrapper = child.value as? AnyEditableProperty {
+      // This is a projected value from @Editable
+      properties.append(editableWrapper)
+    }
+  }
+
+  return properties
+}
+
 /// A property wrapper that marks properties as editable in the debug editor
 @propertyWrapper
 public struct Editable<T> {
   private var value: T
   private let displayName: String
   private let range: ClosedRange<Double>?
+  private let variableName: String
 
-  public init(wrappedValue: T, displayName: String? = nil, range: ClosedRange<Double>? = nil) where T == Float {
+  public init(wrappedValue: T, displayName: String? = nil, range: ClosedRange<Double>? = nil, variableName: String = "")
+  where T == Float {
     self.value = wrappedValue
-    self.displayName = displayName ?? String(describing: T.self)
+    self.displayName = displayName ?? variableName.capitalized
     self.range = range ?? 0.0...1.0
+    self.variableName = variableName
   }
 
-  public init(wrappedValue: T, displayName: String? = nil) where T: Equatable {
+  public init(wrappedValue: T, displayName: String? = nil, variableName: String = "") where T: Equatable {
     self.value = wrappedValue
-    self.displayName = displayName ?? String(describing: T.self)
+    self.displayName = displayName ?? variableName.capitalized
     self.range = nil
+    self.variableName = variableName
   }
 
   public var wrappedValue: T {
@@ -91,7 +120,7 @@ public struct AutoEditorView<T: EditableObject>: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    Form {
       ForEach(Array(properties.enumerated()), id: \.offset) { index, property in
         EditablePropertyControl(property: property)
       }
@@ -113,20 +142,21 @@ public struct EditablePropertyControl: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(property.displayName)
-        .font(.caption)
-        .foregroundColor(.secondary)
-
-      if let range = property.validRange {
-        Slider(value: $localValue, in: range)
-          .onChange(of: localValue) { newValue in
-            property.setValue(Float(newValue))
-          }
-      } else {
-        Text("\(localValue)")
-          .font(.system(.body, design: .monospaced))
+    if let range = property.validRange {
+      Slider(value: $localValue, in: range) {
+        Text(property.displayName)
+      } onEditingChanged: { editing in
+        print("editing \(property.displayName): \(editing)")
+        if editing {
+          UISound.select()
+        }
       }
+      .onChange(of: localValue) { newValue in
+        property.setValue(Float(newValue))
+      }
+    } else {
+      Text("\(localValue)")
+        .font(.system(.body, design: .monospaced))
     }
   }
 }
