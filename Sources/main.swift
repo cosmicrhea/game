@@ -87,8 +87,6 @@ var scheduleScreenshotAt: Double? = nil
 var scheduleExitAt: Double? = nil
 
 let loops: [RenderLoop] = [
-  //
-  // FadeDemo(),
   MainLoop(),
   SlotDemo(),
   SlotGridDemo(),
@@ -98,6 +96,7 @@ let loops: [RenderLoop] = [
   LibraryView(),
   DocumentDemo(),
   MapView(),
+
   // InputPromptsDemo(),
   // FontsDemo(),
   // PathDemo(),

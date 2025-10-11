@@ -1,3 +1,4 @@
+import Foundation
 import GL
 import GLFW
 import GLMath
@@ -31,6 +32,16 @@ public class ContextMenu {
   public var appearsAtMousePosition: Bool = false
   public var anchor: MenuAnchor = .topRight
 
+  // MARK: - Animation
+  public var showDuration: Float = 0.1
+  public var hideDuration: Float = 0.15
+  private var animationProgress: Float = 0.0
+  private var isAnimating: Bool = false
+  private var animationStartTime: Double = 0.0
+  private var targetPosition: Point = Point(0, 0)
+  private var startPosition: Point = Point(0, 0)
+  private var currentTriggerSize: Size = Size(80, 80)
+
   private var menuItems: [MenuItem] = []
   private let itemHeight: Float = 32.0
   private let padding: Float = 8.0
@@ -59,13 +70,44 @@ public class ContextMenu {
     self.selectedIndex = openedWithKeyboard ? 0 : -1  // -1 means no selection for mouse
     self.isVisible = true
 
+    // Store trigger size for animation
+    self.currentTriggerSize = triggerSize
+
     // Calculate final position based on anchor
-    self.position = calculateFinalPosition(from: position, triggerSize: triggerSize)
+    self.targetPosition = calculateFinalPosition(from: position, triggerSize: triggerSize)
+
+    // Start animation
+    startShowAnimation()
   }
 
   /// Hide the context menu
   public func hide() {
-    isVisible = false
+    startHideAnimation()
+  }
+
+  /// Update animation (call this every frame)
+  public func update(deltaTime: Float) {
+    guard isAnimating else { return }
+
+    let currentTime = Date().timeIntervalSince1970
+    let elapsed = Float(currentTime - animationStartTime)
+
+    // Use different duration for show vs hide
+    let duration = isVisible ? showDuration : hideDuration
+    let progress = min(elapsed / duration, 1.0)
+
+    if progress >= 1.0 {
+      // Animation complete
+      isAnimating = false
+      if !isVisible {
+        // Hide animation complete, actually hide
+        return
+      }
+    }
+
+    // Update animation progress
+    animationProgress = progress
+    updateAnimationPosition()
   }
 
   /// Update mouse position for hover effects
@@ -156,7 +198,7 @@ public class ContextMenu {
 
   /// Draw the context menu
   public func draw() {
-    guard isVisible && !menuItems.isEmpty else { return }
+    guard (isVisible || isAnimating) && !menuItems.isEmpty else { return }
 
     let menuWidth = max(minWidth, calculateMenuWidth())
     let menuHeight = Float(menuItems.count) * itemHeight
@@ -167,6 +209,15 @@ public class ContextMenu {
       position.y - menuHeight * 0.5  // Flipped: subtract instead of add
     )
 
+    // Calculate fade alpha based on animation
+    let fadeAlpha = isVisible ? animationProgress : (1.0 - animationProgress)
+    let currentBackgroundColor = Color(
+      backgroundColor.red,
+      backgroundColor.green,
+      backgroundColor.blue,
+      backgroundColor.alpha * fadeAlpha
+    )
+
     panelEffect.draw { shader in
       shader.setVec2("uPanelSize", value: (menuWidth, menuHeight))
       shader.setVec2("uPanelCenter", value: (centerPos.x, centerPos.y))
@@ -175,8 +226,13 @@ public class ContextMenu {
       shader.setFloat("uNoiseScale", value: 0.02)
       shader.setFloat("uNoiseStrength", value: 0.1)
 
-      // Set colors
-      shader.setVec3("uPanelColor", value: (x: backgroundColor.red, y: backgroundColor.green, z: backgroundColor.blue))
+      // Set colors with fade
+      shader.setVec4(
+        "uPanelColor",
+        value: (
+          x: currentBackgroundColor.red, y: currentBackgroundColor.green, z: currentBackgroundColor.blue,
+          w: currentBackgroundColor.alpha
+        ))
       shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
       shader.setVec3("uBorderHighlight", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
       shader.setVec3("uBorderShadow", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
@@ -206,24 +262,93 @@ public class ContextMenu {
         }
       }
 
-      // Draw item text - properly centered
+      // Draw item text - properly centered with fade
       let textStyle = item.isEnabled ? TextStyle.contextMenu : TextStyle.contextMenuDisabled
       let textHeight = textStyle.fontSize * 1.2  // Approximate text height
       let textY = itemY + itemHeight - (itemHeight - textHeight) * 0.5  // Center vertically (flipped)
 
+      // Apply fade to text color
+      let fadeAlpha = isVisible ? animationProgress : (1.0 - animationProgress)
+      let fadedTextColor = Color(
+        textStyle.color.red,
+        textStyle.color.green,
+        textStyle.color.blue,
+        textStyle.color.alpha * fadeAlpha
+      )
+
+      // Create faded text style
+      let fadedTextStyle = TextStyle(
+        fontName: textStyle.fontName,
+        fontSize: textStyle.fontSize,
+        color: fadedTextColor
+      )
+
       item.label.draw(
         at: Point(position.x + padding, textY),
-        style: textStyle,
+        style: fadedTextStyle,
         anchor: .topLeft
       )
     }
+
+    // Note: For proper framebuffer fading, we'd need to:
+    // 1. Render the menu to a framebuffer
+    // 2. Apply fade effect to the framebuffer
+    // 3. Blit the faded result to screen
+    // For now, we're using alpha blending on individual elements
   }
 
   // MARK: - Private Methods
 
+  private func startShowAnimation() {
+    isAnimating = true
+    animationStartTime = Date().timeIntervalSince1970
+    animationProgress = 0.0
+
+    // Start position based on anchor (slide in from the side)
+    let slideDistance = currentTriggerSize.width / 3.0  // One third of trigger width
+
+    switch anchor {
+    case .topLeft, .left, .bottomLeft:
+      startPosition = Point(targetPosition.x + slideDistance, targetPosition.y)  // Slide from right (flipped)
+    case .top, .center, .bottom:
+      startPosition = Point(targetPosition.x, targetPosition.y - 50)  // Slide from top
+    case .topRight, .right, .bottomRight:
+      startPosition = Point(targetPosition.x - slideDistance, targetPosition.y)  // Slide from left (flipped)
+    }
+
+    position = startPosition
+  }
+
+  private func startHideAnimation() {
+    isAnimating = true
+    animationStartTime = Date().timeIntervalSince1970
+    animationProgress = 0.0
+    isVisible = false  // Hide immediately but animate out
+  }
+
+  private func updateAnimationPosition() {
+    if isVisible {
+      // Show animation: quick and snappy
+      let easedProgress = Easing.easeOutCirc.apply(animationProgress)
+      position = Point(
+        lerp(startPosition.x, targetPosition.x, easedProgress),
+        lerp(startPosition.y, targetPosition.y, easedProgress)
+      )
+    } else {
+      // Hide animation: slower and smooth
+      let easedProgress = Easing.easeInCubic.apply(animationProgress)
+      let hideStartPosition = targetPosition
+      let hideEndPosition = startPosition
+      position = Point(
+        lerp(hideStartPosition.x, hideEndPosition.x, easedProgress),
+        lerp(hideStartPosition.y, hideEndPosition.y, easedProgress)
+      )
+    }
+  }
+
   private func calculateFinalPosition(from triggerPosition: Point, triggerSize: Size) -> Point {
     let menuWidth = max(minWidth, calculateMenuWidth())
-    let menuHeight = Float(menuItems.count) * itemHeight
+    // let menuHeight = Float(menuItems.count) * itemHeight
 
     var finalX = triggerPosition.x
     var finalY = triggerPosition.y

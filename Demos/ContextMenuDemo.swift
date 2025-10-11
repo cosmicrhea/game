@@ -48,7 +48,8 @@ final class ContextMenuDemo: RenderLoop {
   }
 
   func update(deltaTime: Float) {
-    // Update any animations or effects
+    // Update context menu animations
+    slotMenu.update(deltaTime: deltaTime)
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {

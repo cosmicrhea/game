@@ -74,3 +74,15 @@ enum Easing {
     }
   }
 }
+
+// MARK: - Interpolation Utilities
+
+/// Linear interpolation between two values.
+/// - Parameters:
+///   - a: The start value.
+///   - b: The end value.
+///   - t: The interpolation factor (0.0 to 1.0).
+/// - Returns: The interpolated value.
+public func lerp(_ a: Float, _ b: Float, _ t: Float) -> Float {
+  return a + (b - a) * t
+}

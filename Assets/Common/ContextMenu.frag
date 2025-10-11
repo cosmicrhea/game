@@ -11,7 +11,7 @@ uniform float uNoiseScale;
 uniform float uNoiseStrength;
 
 // Colors
-uniform vec3 uPanelColor;
+uniform vec4 uPanelColor;
 uniform vec3 uBorderColor;
 uniform vec3 uBorderHighlight;
 uniform vec3 uBorderShadow;
@@ -86,7 +86,7 @@ void main() {
     float borderNoise = noiseValue * borderMask;
     
     // Panel color with inner shadow (NO radial gradient)
-    vec3 panelColor = uPanelColor;
+    vec3 panelColor = uPanelColor.rgb;
     panelColor *= (0.8 + 0.2 * (1.0 - innerShadow)); // Inner shadow effect only
     
     // Silver-ish border with metallic appearance
@@ -110,8 +110,8 @@ void main() {
     vignette = mix(0.9, 1.0, vignette);
     finalColor *= vignette;
     
-    // Apply panel mask
-    float alpha = panelMask;
+    // Apply panel mask and color alpha
+    float alpha = panelMask * uPanelColor.a;
     
     FragColor = vec4(finalColor, alpha);
 }

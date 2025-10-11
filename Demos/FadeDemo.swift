@@ -14,7 +14,7 @@ final class FadeDemo: RenderLoop {
   }
 
   func update(deltaTime: Float) {
-    screenFade.update(deltaTime: deltaTime)
+    // Screen fade is updated by the main loop
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
