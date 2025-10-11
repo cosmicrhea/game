@@ -1,5 +1,5 @@
 #version 330 core
-in vec2 vTexCoord;
+in vec2 TexCoord;
 out vec4 FragColor;
 
 uniform vec2 uResolution;
@@ -17,7 +17,7 @@ uniform vec3 uGridColor;
 uniform float uGridThickness;
 
 void main() {
-    vec2 uv = vTexCoord * uResolution;
+    vec2 uv = TexCoord * uResolution;
     
     // Use uniform background color
     vec3 color = uBackgroundColor;

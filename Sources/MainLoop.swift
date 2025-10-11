@@ -25,7 +25,7 @@ final class MainLoop: RenderLoop {
   /// Text style using the Determination font.
   private let determinationStyle = TextStyle(fontName: "Determination", fontSize: 32, color: .white)
   /// Callout UI component for displaying hints.
-  private var callout = Callout("Find the triangle and key", icon: .chevron)
+  private var callout = Callout("Make your way to Kastellet", icon: .chevron)
   /// Input prompts component for controller/keyboard icons.
   private let inputPrompts: InputPrompts
 
@@ -102,7 +102,8 @@ final class MainLoop: RenderLoop {
   }
 
   func drawObjectiveCallout() {
-    callout.draw(in: Rect(x: 0, y: Float(HEIGHT) - 180, width: 520, height: 36))
+    // callout.draw(in: Rect(x: 0, y: Float(HEIGHT) - 180, width: 520, height: 36))
+    callout.draw(at: .topLeft())
   }
 
   func drawDebugInputPrompts() {

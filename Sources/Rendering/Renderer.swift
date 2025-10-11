@@ -75,4 +75,11 @@ public protocol Renderer {
   ///   - color: The color to stroke the path with.
   ///   - lineWidth: The width of the stroke.
   func drawStroke(_ path: BezierPath, color: Color, lineWidth: Float)
+
+  // MARK: - UI Context
+
+  /// Execute a block with UI rendering state (no depth testing, blending enabled)
+  /// - Parameter block: The block to execute with UI context
+  /// - Returns: The result of the block
+  func withUIContext<T>(_ block: () throws -> T) rethrows -> T
 }

@@ -36,6 +36,9 @@ struct Document: Sendable {
 final class DocumentView: RenderLoop {
   let document: Document
 
+  // Completion callback for when document is finished
+  var onDocumentFinished: (() -> Void)?
+
   private let caretLeft = Caret(direction: .left)
   private let caretRight = Caret(direction: .right)
   //let ref = Image("UI/RE2Doc.jpg")
@@ -111,7 +114,15 @@ final class DocumentView: RenderLoop {
 
   func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
     switch button {
-    case .left: nextPage()
+    case .left:
+      let totalPages = getTotalPageCount()
+      if currentPage >= totalPages - 1 {
+        // We're on the last page, but only trigger completion callback if not animating
+        guard !isAnimating else { return }
+        onDocumentFinished?()
+      } else {
+        nextPage()
+      }
     default: break
     }
   }

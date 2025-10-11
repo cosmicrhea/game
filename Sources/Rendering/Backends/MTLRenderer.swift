@@ -574,6 +574,16 @@ public final class MTLRenderer: Renderer {
     // 3. Use Metal shaders to render the text
   }
 
+  // MARK: - UI Context
+
+  /// Execute a block with UI rendering state (no depth testing, blending enabled)
+  public func withUIContext<T>(_ block: () throws -> T) rethrows -> T {
+    // For Metal, we don't need to change state as much as OpenGL
+    // Metal handles blending and depth testing through render pipeline state
+    // This is a placeholder implementation that just executes the block
+    return try block()
+  }
+
 }
 
 // MARK: - Uniform Structures

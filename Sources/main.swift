@@ -86,19 +86,22 @@ var requestScreenshot = false
 var scheduleScreenshotAt: Double? = nil
 var scheduleExitAt: Double? = nil
 
-
 let loops: [RenderLoop] = [
   //
+  // FadeDemo(),
   MainLoop(),
-  MapView(),
-  LibraryView(),
-  InputPromptsDemo(),
-  DocumentDemo(),
-  CalloutDemo(),
-  FontsDemo(),
-  PathDemo(),
-  TextEffectsDemo(),
+  SlotDemo(),
+  SlotGridDemo(),
+  // CalloutDemo(),
   TitleScreen(),
+  LibraryView(),
+  DocumentDemo(),
+  MapView(),
+  // InputPromptsDemo(),
+  // FontsDemo(),
+  // PathDemo(),
+  // TextEffectsDemo(),
+  // FadeDemo(),
 ]
 
 var loopCount = loops.count
@@ -127,6 +130,9 @@ if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
   activeLoop.onDetach(window: window)
   activeLoop = loops[config.currentLoopIndex]
   activeLoop.onAttach(window: window)
+
+  // Reset screen fade when switching loops
+  ScreenFadeFBO.shared.reset()
 
   // TODO: move this elsewhere; setting default clear color when changing loop
   GraphicsContext.current?.renderer.setClearColor(Color(0.2, 0.1, 0.1, 1.0))
@@ -166,7 +172,7 @@ window.keyInputHandler = { window, key, scancode, state, mods in
       cycleLoops(+1)
 
     #if EDITOR
-      case .graveAccent:
+      case .backslash:
         UISound.select()
         config.editorEnabled.toggle()
         editorHostingView.isHidden = !config.editorEnabled
@@ -226,6 +232,12 @@ while !window.shouldClose {
 
   GraphicsContext.withContext(graphicsContext) {
     activeLoop.draw()
+  }
+
+  // Draw screen fade in UI context so it always appears on top
+  renderer.withUIContext {
+    ScreenFadeFBO.shared.update(deltaTime: deltaTime)
+    ScreenFadeFBO.shared.draw(screenSize: Size(Float(WIDTH), Float(HEIGHT)))
   }
 
   renderer.endFrame()

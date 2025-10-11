@@ -7,12 +7,21 @@ final class DocumentDemo: RenderLoop {
   private let documents: [Document]
   private var documentView: DocumentView!
 
+  // Fade state
+  private var isFadedOut: Bool = false
+  private var isFadingToBlack: Bool = false
+
   @ConfigValue("DocumentDemo/currentIndex")
   private var currentDocumentIndex: Int = 0
 
   init() {
     documents = Document.all.compactMap { $0 }
     documentView = DocumentView(document: documents[currentDocumentIndex])
+
+    // Set up completion callback for document fade
+    documentView.onDocumentFinished = { [weak self] in
+      self?.handleDocumentFinished()
+    }
   }
 
   func onAttach(window: GLFWWindow) {
@@ -31,12 +40,27 @@ final class DocumentDemo: RenderLoop {
     switch key {
     case .up: cycleDocument(forward: false)
     case .down: cycleDocument(forward: true)
-    default: documentView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+    case .left, .a:
+      if isFadedOut && !isFadingToBlack {
+        // Fade back in when faded out and not currently fading to black
+        fadeBackIn()
+      } else {
+        documentView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      }
+    default:
+      if !isFadedOut {
+        documentView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      }
     }
   }
 
   func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
-    documentView.onMouseButtonPressed(window: window, button: button, mods: mods)
+    if isFadedOut && !isFadingToBlack {
+      // Click to fade back in when faded out and not currently fading to black
+      fadeBackIn()
+    } else {
+      documentView.onMouseButtonPressed(window: window, button: button, mods: mods)
+    }
   }
 
   func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
@@ -60,10 +84,32 @@ final class DocumentDemo: RenderLoop {
     currentDocumentIndex = newIndex
     documentView = DocumentView(document: documents[currentDocumentIndex])
 
+    // Set up completion callback for the new document
+    documentView.onDocumentFinished = { [weak self] in
+      self?.handleDocumentFinished()
+    }
+
     UISound.select()
   }
 
   func draw() {
     documentView.draw()
+  }
+
+  // MARK: - Fade Handling
+
+  private func handleDocumentFinished() {
+    // Fade to black when document is finished
+    isFadingToBlack = true
+    ScreenFadeFBO.shared.fadeToBlack(duration: 0.3) {
+      self.isFadedOut = true
+      self.isFadingToBlack = false
+    }
+  }
+
+  private func fadeBackIn() {
+    ScreenFadeFBO.shared.fadeFromBlack(duration: 0.3) {
+      self.isFadedOut = false
+    }
   }
 }

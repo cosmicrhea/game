@@ -46,7 +46,7 @@ public final class GLRenderer: Renderer {
   }
 
   /// Execute a block with UI rendering state (no depth testing, blending enabled)
-  func withUIContext<T>(_ block: () throws -> T) rethrows -> T {
+  public func withUIContext<T>(_ block: () throws -> T) rethrows -> T {
     return try Self.withUIContext(block)
   }
 
