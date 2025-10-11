@@ -7,6 +7,7 @@ import unistd
 
 #if EDITOR
   import SwiftUI
+  import Foundation
 #endif
 
 //@_exported import Inject
@@ -84,8 +85,8 @@ var config: Config { .current }
 
 let loops: [RenderLoop] = [
   //
-  MapDemo(),  // Move to front for testing
   MainLoop(),
+  MapView(),  // Move to front for testing
   LibraryView(),
   InputPromptsDemo(),
   //  AttributedTextDemo(),
@@ -127,6 +128,11 @@ if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
   activeLoop.onAttach(window: window)
   // TODO: move this elsewhere; setting default clear color when changing loop
   GraphicsContext.current?.renderer.setClearColor(Color(0.2, 0.1, 0.1, 1.0))
+
+  #if EDITOR
+    // Notify the editor that the loop has changed
+    NotificationCenter.default.post(name: .loopChanged, object: nil)
+  #endif
 }
 
 // timing
