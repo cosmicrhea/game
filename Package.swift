@@ -40,15 +40,6 @@ let package = Package(
   ],
 
   targets: [
-    .macro(
-      name: "GlassMacros",
-      dependencies: [
-        .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-        .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
-      ],
-      path: "Sources/GlassMacros"
-    ),
-
     .executableTarget(
       name: "Glass",
 
@@ -103,12 +94,22 @@ let package = Package(
       ],
 
       swiftSettings: [
-        .define("EMIT_FRONTEND_COMMAND_LINES", .when(platforms: [.macOS], configuration: .debug))
+        .define("EDITOR", .when(platforms: [.macOS], configuration: .debug)),
+        .define("EMIT_FRONTEND_COMMAND_LINES", .when(platforms: [.macOS], configuration: .debug)),
       ],
 
       linkerSettings: [
         .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
       ]
+    ),
+
+    .macro(
+      name: "GlassMacros",
+      dependencies: [
+        .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+        .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+      ],
+      path: "Sources/GlassMacros"
     ),
   ]
 )

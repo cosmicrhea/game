@@ -147,12 +147,10 @@ public struct EditablePropertyControl: View {
         Text(property.displayName)
       } onEditingChanged: { editing in
         print("editing \(property.displayName): \(editing)")
-        if editing {
-          UISound.select()
-        }
       }
       .onChange(of: localValue) { newValue in
         property.setValue(Float(newValue))
+        UISound.select()
       }
     } else {
       Text("\(localValue)")
