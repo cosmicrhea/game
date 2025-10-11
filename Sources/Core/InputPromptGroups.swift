@@ -7,6 +7,10 @@ public struct InputPromptGroups {
       "Continue": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]]
     ],
 
+    "Menu Root": [
+      "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+    ],
+
     "Menu": [
       "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
       // "Return": [["keyboard_escape"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],

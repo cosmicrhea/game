@@ -2,6 +2,29 @@ import GL
 import GLFW
 import GLMath
 
+extension Document {
+  static let all: [Self?] = [
+    .jaritsJournal,
+    .metroNote,
+    .photoA,
+    .siezedCargo,
+    nil,
+    .photoB,
+    .execsRecording,
+    nil,
+    nil,
+    .photoC,
+    //.testResults, // TODO: redaction style
+    .glasportReport,
+    nil,
+    .photoD,
+    nil,
+
+    //.keepersDiary,
+    //.policeRadioRecording,
+  ]
+}
+
 struct Document: Sendable {
   var id: String?
   var displayName: String?

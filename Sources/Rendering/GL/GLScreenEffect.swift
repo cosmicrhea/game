@@ -8,6 +8,7 @@ import enum GLFW.GLFWSession
 
 class GLScreenEffect {
   @MainActor static var mousePosition: (Float, Float) = (0, 0)
+
   private var vao: GLuint = 0
   private var vbo: GLuint = 0
   private(set) var shader: GLProgram
@@ -21,7 +22,7 @@ class GLScreenEffect {
 
   init(_ fragmentShaderName: String) {
     // Pass shader base names (no extensions). Vertex shader is a standard fullscreen quad.
-    shader = try! GLProgram("common/fullscreen_quad", fragmentShaderName)
+    shader = try! GLProgram("common/Passthrough", fragmentShaderName)
 
     let quadVertices: [Float] = [
       // positions   // texCoords
@@ -57,13 +58,13 @@ class GLScreenEffect {
 
   func draw(texture: GLuint) {
     GLRenderer.withUIContext {
-    shader.use()
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, texture)
-    shader.setInt("uTexture", value: 0)
-    glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, 6)
-    glBindVertexArray(0)
+      shader.use()
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, texture)
+      shader.setInt("uTexture", value: 0)
+      glBindVertexArray(vao)
+      glDrawArrays(GL_TRIANGLES, 0, 6)
+      glBindVertexArray(0)
     }
   }
 
@@ -71,19 +72,19 @@ class GLScreenEffect {
   /// sets `uResolution` to (width, height) in pixels.
   func draw(texture: GLuint, windowSize: (Int32, Int32)) {
     GLRenderer.withUIContext {
-    shader.use()
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, texture)
-    shader.setInt("uTexture", value: 0)
+      shader.use()
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, texture)
+      shader.setInt("uTexture", value: 0)
 
-    let resLocation = glGetUniformLocation(shader.programID, "uResolution")
-    if resLocation != -1 {
-      glUniform2f(resLocation, Float(windowSize.0), Float(windowSize.1))
-    }
+      let resLocation = glGetUniformLocation(shader.programID, "uResolution")
+      if resLocation != -1 {
+        glUniform2f(resLocation, Float(windowSize.0), Float(windowSize.1))
+      }
 
-    glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, 6)
-    glBindVertexArray(0)
+      glBindVertexArray(vao)
+      glDrawArrays(GL_TRIANGLES, 0, 6)
+      glBindVertexArray(0)
     }
   }
 
@@ -128,91 +129,91 @@ class GLScreenEffect {
 
     // Bind and draw with uniforms
     GLRenderer.withUIContext {
-    shader.use()
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, captureTexture)
-    shader.setInt("uTexture", value: 0)
+      shader.use()
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, captureTexture)
+      shader.setInt("uTexture", value: 0)
 
-    // Optional resolution uniform (uResolution)
-    let resLocation = glGetUniformLocation(shader.programID, "uResolution")
-    if resLocation != -1 {
-      glUniform2f(resLocation, Float(width), Float(height))
-    }
+      // Optional resolution uniform (uResolution)
+      let resLocation = glGetUniformLocation(shader.programID, "uResolution")
+      if resLocation != -1 {
+        glUniform2f(resLocation, Float(width), Float(height))
+      }
 
-    // ShaderToy uniforms if present
-    let iResolutionLoc = glGetUniformLocation(shader.programID, "iResolution")
-    if iResolutionLoc != -1 { glUniform3f(iResolutionLoc, Float(width), Float(height), 1.0) }
+      // ShaderToy uniforms if present
+      let iResolutionLoc = glGetUniformLocation(shader.programID, "iResolution")
+      if iResolutionLoc != -1 { glUniform3f(iResolutionLoc, Float(width), Float(height), 1.0) }
 
-    let now = GLFWSession.currentTime
-    let delta = max(0.0, now - lastTime)
-    lastTime = now
+      let now = GLFWSession.currentTime
+      let delta = max(0.0, now - lastTime)
+      lastTime = now
 
-    let iTimeLoc = glGetUniformLocation(shader.programID, "iTime")
-    if iTimeLoc != -1 { glUniform1f(iTimeLoc, Float(now)) }
+      let iTimeLoc = glGetUniformLocation(shader.programID, "iTime")
+      if iTimeLoc != -1 { glUniform1f(iTimeLoc, Float(now)) }
 
-    let iTimeDeltaLoc = glGetUniformLocation(shader.programID, "iTimeDelta")
-    if iTimeDeltaLoc != -1 { glUniform1f(iTimeDeltaLoc, Float(delta)) }
+      let iTimeDeltaLoc = glGetUniformLocation(shader.programID, "iTimeDelta")
+      if iTimeDeltaLoc != -1 { glUniform1f(iTimeDeltaLoc, Float(delta)) }
 
-    let iFrameLoc = glGetUniformLocation(shader.programID, "iFrame")
-    if iFrameLoc != -1 { glUniform1i(iFrameLoc, frameCount) }
-    frameCount &+= 1
+      let iFrameLoc = glGetUniformLocation(shader.programID, "iFrame")
+      if iFrameLoc != -1 { glUniform1i(iFrameLoc, frameCount) }
+      frameCount &+= 1
 
-    let iMouseLoc = glGetUniformLocation(shader.programID, "iMouse")
-    if iMouseLoc != -1 {
-      let mouse = GLScreenEffect.mousePosition
-      // Convert to bottom-left origin to match gl_FragCoord
-      let mouseYGL = Float(height) - mouse.1
-      print(mouse, mouseYGL)
-      glUniform4f(iMouseLoc, mouse.0, mouseYGL, 0, 0)
-    }
+      let iMouseLoc = glGetUniformLocation(shader.programID, "iMouse")
+      if iMouseLoc != -1 {
+        let mouse = GLScreenEffect.mousePosition
+        // Convert to bottom-left origin to match gl_FragCoord
+        let mouseYGL = Float(height) - mouse.1
+        print(mouse, mouseYGL)
+        glUniform4f(iMouseLoc, mouse.0, mouseYGL, 0, 0)
+      }
 
-    //    // iDate: (year, month, day, seconds)
-    //    let iDateLoc = glGetUniformLocation(shader.programID, "iDate")
-    //    if iDateLoc != -1 {
-    //      let nowDate = Date()
-    //      let calendar = Calendar(identifier: .gregorian)
-    //      let comps = calendar.dateComponents(
-    //        [.year, .month, .day, .hour, .minute, .second], from: nowDate)
-    //      let seconds = Float((comps.hour ?? 0) * 3600 + (comps.minute ?? 0) * 60 + (comps.second ?? 0))
-    //      glUniform4f(
-    //        iDateLoc, Float(comps.year ?? 1970), Float(comps.month ?? 1), Float(comps.day ?? 1), seconds
-    //      )
-    //    }
+      //    // iDate: (year, month, day, seconds)
+      //    let iDateLoc = glGetUniformLocation(shader.programID, "iDate")
+      //    if iDateLoc != -1 {
+      //      let nowDate = Date()
+      //      let calendar = Calendar(identifier: .gregorian)
+      //      let comps = calendar.dateComponents(
+      //        [.year, .month, .day, .hour, .minute, .second], from: nowDate)
+      //      let seconds = Float((comps.hour ?? 0) * 3600 + (comps.minute ?? 0) * 60 + (comps.second ?? 0))
+      //      glUniform4f(
+      //        iDateLoc, Float(comps.year ?? 1970), Float(comps.month ?? 1), Float(comps.day ?? 1), seconds
+      //      )
+      //    }
 
-    // iSampleRate
-    let iSampleRateLoc = glGetUniformLocation(shader.programID, "iSampleRate")
-    if iSampleRateLoc != -1 { glUniform1f(iSampleRateLoc, sampleRate) }
+      // iSampleRate
+      let iSampleRateLoc = glGetUniformLocation(shader.programID, "iSampleRate")
+      if iSampleRateLoc != -1 { glUniform1f(iSampleRateLoc, sampleRate) }
 
-    let iChannel0Loc = glGetUniformLocation(shader.programID, "iChannel0")
-    if iChannel0Loc != -1 { glUniform1i(iChannel0Loc, 0) }
+      let iChannel0Loc = glGetUniformLocation(shader.programID, "iChannel0")
+      if iChannel0Loc != -1 { glUniform1i(iChannel0Loc, 0) }
 
-    // iChannelResolution for bound channels (0 only for now)
-    let iChannelResolutionLoc = glGetUniformLocation(shader.programID, "iChannelResolution")
-    if iChannelResolutionLoc != -1 {
-      // It's an array of 4 vec3s; set index 0, zero the rest
-      glUniform3f(iChannelResolutionLoc + 0, Float(width), Float(height), 1.0)
-      glUniform3f(iChannelResolutionLoc + 1, 0, 0, 0)
-      glUniform3f(iChannelResolutionLoc + 2, 0, 0, 0)
-      glUniform3f(iChannelResolutionLoc + 3, 0, 0, 0)
-    }
+      // iChannelResolution for bound channels (0 only for now)
+      let iChannelResolutionLoc = glGetUniformLocation(shader.programID, "iChannelResolution")
+      if iChannelResolutionLoc != -1 {
+        // It's an array of 4 vec3s; set index 0, zero the rest
+        glUniform3f(iChannelResolutionLoc + 0, Float(width), Float(height), 1.0)
+        glUniform3f(iChannelResolutionLoc + 1, 0, 0, 0)
+        glUniform3f(iChannelResolutionLoc + 2, 0, 0, 0)
+        glUniform3f(iChannelResolutionLoc + 3, 0, 0, 0)
+      }
 
-    // iChannelTime array (seconds). For now, set channel0 to iTime, others 0.
-    let iChannelTimeLoc = glGetUniformLocation(shader.programID, "iChannelTime")
-    if iChannelTimeLoc != -1 {
-      glUniform1f(iChannelTimeLoc + 0, Float(now))
-      glUniform1f(iChannelTimeLoc + 1, 0)
-      glUniform1f(iChannelTimeLoc + 2, 0)
-      glUniform1f(iChannelTimeLoc + 3, 0)
-    }
+      // iChannelTime array (seconds). For now, set channel0 to iTime, others 0.
+      let iChannelTimeLoc = glGetUniformLocation(shader.programID, "iChannelTime")
+      if iChannelTimeLoc != -1 {
+        glUniform1f(iChannelTimeLoc + 0, Float(now))
+        glUniform1f(iChannelTimeLoc + 1, 0)
+        glUniform1f(iChannelTimeLoc + 2, 0)
+        glUniform1f(iChannelTimeLoc + 3, 0)
+      }
 
-    // Additional float uniforms
-    for (name, value) in uniforms {
-      shader.setFloat(name, value: value)
-    }
+      // Additional float uniforms
+      for (name, value) in uniforms {
+        shader.setFloat(name, value: value)
+      }
 
-    glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, 6)
-    glBindVertexArray(0)
+      glBindVertexArray(vao)
+      glDrawArrays(GL_TRIANGLES, 0, 6)
+      glBindVertexArray(0)
     }
   }
 
@@ -255,70 +256,70 @@ class GLScreenEffect {
     glBindTexture(GL_TEXTURE_2D, 0)
 
     GLRenderer.withUIContext {
-    shader.use()
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, captureTexture)
-    shader.setInt("uTexture", value: 0)
+      shader.use()
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, captureTexture)
+      shader.setInt("uTexture", value: 0)
 
-    // Optional resolution uniform (uResolution)
-    let resLocation = glGetUniformLocation(shader.programID, "uResolution")
-    if resLocation != -1 {
-      glUniform2f(resLocation, Float(width), Float(height))
-    }
+      // Optional resolution uniform (uResolution)
+      let resLocation = glGetUniformLocation(shader.programID, "uResolution")
+      if resLocation != -1 {
+        glUniform2f(resLocation, Float(width), Float(height))
+      }
 
-    // ShaderToy uniforms if present
-    let iResolutionLoc = glGetUniformLocation(shader.programID, "iResolution")
-    if iResolutionLoc != -1 { glUniform3f(iResolutionLoc, Float(width), Float(height), 1.0) }
+      // ShaderToy uniforms if present
+      let iResolutionLoc = glGetUniformLocation(shader.programID, "iResolution")
+      if iResolutionLoc != -1 { glUniform3f(iResolutionLoc, Float(width), Float(height), 1.0) }
 
-    let now = GLFWSession.currentTime
-    let delta = max(0.0, now - lastTime)
-    lastTime = now
+      let now = GLFWSession.currentTime
+      let delta = max(0.0, now - lastTime)
+      lastTime = now
 
-    let iTimeLoc = glGetUniformLocation(shader.programID, "iTime")
-    if iTimeLoc != -1 { glUniform1f(iTimeLoc, Float(now)) }
+      let iTimeLoc = glGetUniformLocation(shader.programID, "iTime")
+      if iTimeLoc != -1 { glUniform1f(iTimeLoc, Float(now)) }
 
-    let iTimeDeltaLoc = glGetUniformLocation(shader.programID, "iTimeDelta")
-    if iTimeDeltaLoc != -1 { glUniform1f(iTimeDeltaLoc, Float(delta)) }
+      let iTimeDeltaLoc = glGetUniformLocation(shader.programID, "iTimeDelta")
+      if iTimeDeltaLoc != -1 { glUniform1f(iTimeDeltaLoc, Float(delta)) }
 
-    let iFrameLoc = glGetUniformLocation(shader.programID, "iFrame")
-    if iFrameLoc != -1 { glUniform1i(iFrameLoc, frameCount) }
-    frameCount &+= 1
+      let iFrameLoc = glGetUniformLocation(shader.programID, "iFrame")
+      if iFrameLoc != -1 { glUniform1i(iFrameLoc, frameCount) }
+      frameCount &+= 1
 
-    let iMouseLoc = glGetUniformLocation(shader.programID, "iMouse")
-    if iMouseLoc != -1 {
-      let mouse = GLScreenEffect.mousePosition
-      let mouseYGL = Float(height) - mouse.1
-      glUniform4f(iMouseLoc, mouse.0, mouseYGL, 0, 0)
-    }
+      let iMouseLoc = glGetUniformLocation(shader.programID, "iMouse")
+      if iMouseLoc != -1 {
+        let mouse = GLScreenEffect.mousePosition
+        let mouseYGL = Float(height) - mouse.1
+        glUniform4f(iMouseLoc, mouse.0, mouseYGL, 0, 0)
+      }
 
-    let iSampleRateLoc = glGetUniformLocation(shader.programID, "iSampleRate")
-    if iSampleRateLoc != -1 { glUniform1f(iSampleRateLoc, sampleRate) }
+      let iSampleRateLoc = glGetUniformLocation(shader.programID, "iSampleRate")
+      if iSampleRateLoc != -1 { glUniform1f(iSampleRateLoc, sampleRate) }
 
-    let iChannel0Loc = glGetUniformLocation(shader.programID, "iChannel0")
-    if iChannel0Loc != -1 { glUniform1i(iChannel0Loc, 0) }
+      let iChannel0Loc = glGetUniformLocation(shader.programID, "iChannel0")
+      if iChannel0Loc != -1 { glUniform1i(iChannel0Loc, 0) }
 
-    let iChannelResolutionLoc = glGetUniformLocation(shader.programID, "iChannelResolution")
-    if iChannelResolutionLoc != -1 {
-      glUniform3f(iChannelResolutionLoc + 0, Float(width), Float(height), 1.0)
-      glUniform3f(iChannelResolutionLoc + 1, 0, 0, 0)
-      glUniform3f(iChannelResolutionLoc + 2, 0, 0, 0)
-      glUniform3f(iChannelResolutionLoc + 3, 0, 0, 0)
-    }
+      let iChannelResolutionLoc = glGetUniformLocation(shader.programID, "iChannelResolution")
+      if iChannelResolutionLoc != -1 {
+        glUniform3f(iChannelResolutionLoc + 0, Float(width), Float(height), 1.0)
+        glUniform3f(iChannelResolutionLoc + 1, 0, 0, 0)
+        glUniform3f(iChannelResolutionLoc + 2, 0, 0, 0)
+        glUniform3f(iChannelResolutionLoc + 3, 0, 0, 0)
+      }
 
-    let iChannelTimeLoc = glGetUniformLocation(shader.programID, "iChannelTime")
-    if iChannelTimeLoc != -1 {
-      glUniform1f(iChannelTimeLoc + 0, Float(now))
-      glUniform1f(iChannelTimeLoc + 1, 0)
-      glUniform1f(iChannelTimeLoc + 2, 0)
-      glUniform1f(iChannelTimeLoc + 3, 0)
-    }
+      let iChannelTimeLoc = glGetUniformLocation(shader.programID, "iChannelTime")
+      if iChannelTimeLoc != -1 {
+        glUniform1f(iChannelTimeLoc + 0, Float(now))
+        glUniform1f(iChannelTimeLoc + 1, 0)
+        glUniform1f(iChannelTimeLoc + 2, 0)
+        glUniform1f(iChannelTimeLoc + 3, 0)
+      }
 
-    // Allow the caller to set any uniforms they want
-    configure(shader)
+      // Allow the caller to set any uniforms they want
+      configure(shader)
 
-    glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, 6)
-    glBindVertexArray(0)
+      glBindVertexArray(vao)
+      glDrawArrays(GL_TRIANGLES, 0, 6)
+      glBindVertexArray(0)
     }
   }
 }

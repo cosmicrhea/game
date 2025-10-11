@@ -51,7 +51,6 @@ final class MainLoop: RenderLoop {
   func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
     guard window.isFocused else { return }
     camera.processMousePosition(Float(x), Float(y))
-    GLScreenEffect.mousePosition = (Float(x), Float(y))
   }
 
   func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {

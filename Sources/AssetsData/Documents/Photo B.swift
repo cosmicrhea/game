@@ -6,12 +6,12 @@ extension Document {
 
     pages: [
       """
-      Soldiers have barricated Nørreport Station. On the back there’s a handwritten note: “They knew before we did.”
+      Soldiers have barricated Nørreport Station.
       """,
       "",
-//      """
-//      
-//      """
+      """
+      On the back there’s a handwritten note: “They knew before we did.”
+      """
     ]
   )
 }

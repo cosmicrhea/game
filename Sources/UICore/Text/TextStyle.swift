@@ -42,4 +42,22 @@ extension TextStyle {
     strokeWidth: 2,
     strokeColor: Color(red: 0.078, green: 0.059, blue: 0.055, alpha: 1.0)
   )
+
+  static let menuItem = TextStyle(
+    fontName: "Creato Display Bold",
+    fontSize: 32,
+    color: .white
+  )
+
+  static let menuItemDisabled = TextStyle(
+    fontName: "Creato Display Bold",
+    fontSize: 32,
+    color: .gray500
+  )
+
+  static let version = TextStyle(
+    fontName: "Creato Display Bold",
+    fontSize: 16,
+    color: .gray700.withAlphaComponent(0.5)
+  )
 }

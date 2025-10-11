@@ -1,3 +1,5 @@
+import Foundation
+
 /// A 2D point with floating-point coordinates.
 public struct Point: Equatable, Hashable, Sendable {
   /// The x-coordinate of the point.
@@ -172,4 +174,118 @@ extension Rect {
 
     context.drawStroke(path, color: color, lineWidth: lineWidth)
   }
+}
+
+// MARK: - Additional Rect Methods
+
+extension Rect {
+  /// Returns whether this rectangle contains the specified point.
+  /// - Parameter point: The point to test.
+  /// - Returns: `true` if the point is inside the rectangle, `false` otherwise.
+  public func contains(_ point: Point) -> Bool {
+    return point.x >= origin.x && point.x <= origin.x + size.width && point.y >= origin.y
+      && point.y <= origin.y + size.height
+  }
+
+  /// Returns whether this rectangle contains the specified rectangle.
+  /// - Parameter rect: The rectangle to test.
+  /// - Returns: `true` if the rectangle is completely inside this rectangle, `false` otherwise.
+  public func contains(_ rect: Rect) -> Bool {
+    return rect.origin.x >= origin.x && rect.origin.y >= origin.y
+      && rect.origin.x + rect.size.width <= origin.x + size.width
+      && rect.origin.y + rect.size.height <= origin.y + size.height
+  }
+
+  /// Divides this rectangle at the specified distance from the specified edge.
+  /// - Parameters:
+  ///   - distance: The distance from the edge to divide at.
+  ///   - edge: The edge to divide from.
+  /// - Returns: A tuple containing the slice (the divided portion) and the remainder.
+  public func divided(atDistance distance: Float, from edge: CGRectEdge) -> (slice: Rect, remainder: Rect) {
+    switch edge {
+    case .minXEdge:
+      let slice = Rect(x: origin.x, y: origin.y, width: distance, height: size.height)
+      let remainder = Rect(x: origin.x + distance, y: origin.y, width: size.width - distance, height: size.height)
+      return (slice, remainder)
+    case .maxXEdge:
+      let slice = Rect(x: origin.x + size.width - distance, y: origin.y, width: distance, height: size.height)
+      let remainder = Rect(x: origin.x, y: origin.y, width: size.width - distance, height: size.height)
+      return (slice, remainder)
+    case .minYEdge:
+      let slice = Rect(x: origin.x, y: origin.y, width: size.width, height: distance)
+      let remainder = Rect(x: origin.x, y: origin.y + distance, width: size.width, height: size.height - distance)
+      return (slice, remainder)
+    case .maxYEdge:
+      let slice = Rect(x: origin.x, y: origin.y + size.height - distance, width: size.width, height: distance)
+      let remainder = Rect(x: origin.x, y: origin.y, width: size.width, height: size.height - distance)
+      return (slice, remainder)
+    }
+  }
+
+  /// Returns whether this rectangle is equal to the specified rectangle.
+  /// - Parameter rect: The rectangle to compare with.
+  /// - Returns: `true` if the rectangles are equal, `false` otherwise.
+  public func equalTo(_ rect: Rect) -> Bool {
+    return self == rect
+  }
+
+  /// Returns the intersection of this rectangle with the specified rectangle.
+  /// - Parameter rect: The rectangle to intersect with.
+  /// - Returns: The intersection rectangle, or a zero rectangle if they don't intersect.
+  public func intersection(_ rect: Rect) -> Rect {
+    let left = max(origin.x, rect.origin.x)
+    let top = max(origin.y, rect.origin.y)
+    let right = min(origin.x + size.width, rect.origin.x + rect.size.width)
+    let bottom = min(origin.y + size.height, rect.origin.y + rect.size.height)
+
+    if left >= right || top >= bottom {
+      return .zero
+    }
+
+    return Rect(x: left, y: top, width: right - left, height: bottom - top)
+  }
+
+  /// Returns whether this rectangle intersects with the specified rectangle.
+  /// - Parameter rect: The rectangle to test intersection with.
+  /// - Returns: `true` if the rectangles intersect, `false` otherwise.
+  public func intersects(_ rect: Rect) -> Bool {
+    return
+      !(origin.x + size.width <= rect.origin.x || rect.origin.x + rect.size.width <= origin.x
+      || origin.y + size.height <= rect.origin.y || rect.origin.y + rect.size.height <= origin.y)
+  }
+
+  /// Returns the union of this rectangle with the specified rectangle.
+  /// - Parameter rect: The rectangle to union with.
+  /// - Returns: The smallest rectangle that contains both rectangles.
+  public func union(_ rect: Rect) -> Rect {
+    let left = min(origin.x, rect.origin.x)
+    let top = min(origin.y, rect.origin.y)
+    let right = max(origin.x + size.width, rect.origin.x + rect.size.width)
+    let bottom = max(origin.y + size.height, rect.origin.y + rect.size.height)
+
+    return Rect(x: left, y: top, width: right - left, height: bottom - top)
+  }
+
+  /// Returns a rectangle with integral coordinates (rounded to nearest integers).
+  public var integral: Rect {
+    return Rect(
+      x: floor(origin.x),
+      y: floor(origin.y),
+      width: ceil(origin.x + size.width) - floor(origin.x),
+      height: ceil(origin.y + size.height) - floor(origin.y)
+    )
+  }
+
+  /// Returns whether this rectangle is empty (has zero or negative width or height).
+  public var isEmpty: Bool {
+    return size.width <= 0 || size.height <= 0
+  }
+}
+
+/// Edge enumeration for rectangle division operations.
+public enum CGRectEdge {
+  case minXEdge
+  case minYEdge
+  case maxXEdge
+  case maxYEdge
 }

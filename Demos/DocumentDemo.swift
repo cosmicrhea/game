@@ -11,23 +11,7 @@ final class DocumentDemo: RenderLoop {
   private var currentDocumentIndex: Int = 0
 
   init() {
-    documents = [
-      .photoA,
-      .photoB,
-      .photoC,
-      .photoD,
-
-      .execsRecording,
-      .glasportReport,
-      .jaritsJournal,
-      .metroNote,
-      .siezedCargo,
-      //.testResults, // TODO: redaction style
-
-      //      .keepersDiary,
-      //      .policeRadioRecording,
-    ]
-
+    documents = Document.all.compactMap { $0 }
     documentView = DocumentView(document: documents[currentDocumentIndex])
   }
 

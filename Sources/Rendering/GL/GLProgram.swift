@@ -237,6 +237,12 @@ struct GLProgram {
     }
   }
 
+  /// Set a Color uniform value (RGB only)
+  func setColor(_ name: String, value: Color) {
+    let location = glGetUniformLocation(programID, name)
+    glUniform3f(location, value.red, value.green, value.blue)
+  }
+
   /// Clean up the shader program
   func delete() {
     glDeleteProgram(programID)

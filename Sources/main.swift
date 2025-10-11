@@ -3,6 +3,7 @@ import GL
 import GLFW
 import GLMath
 import Logging
+import SwiftUI
 import unistd
 
 //@_exported import Inject
@@ -50,9 +51,41 @@ GLFWWindow.hints.retinaFramebuffer = false
 //GLFWWindow.hints.doubleBuffer = false
 //GLFWWindow.hints.openGLDebugMode = true
 
+struct Editor: View {
+  var body: some View {
+    Form {
+      if let mapView = activeLoop as? MapView {
+        AutoEditorView(for: mapView)
+      } else if let mapDemo = activeLoop as? MapDemo {
+        // Access the MapView from MapDemo
+        AutoEditorView(for: mapDemo.mapView)
+      } else {
+        Text("Current loop: \(String(describing: type(of: activeLoop)))")
+        Text("No editable properties available")
+      }
+    }
+    .formStyle(.grouped)
+    .controlSize(.mini)
+    .frame(maxWidth: 320)
+    .scrollDisabled(true)
+    .scrollContentBackground(.hidden)
+    // .fixedSize(horizontal: false, vertical: true)
+    //.background(Color.clear)
+    // .border(.mint)
+    //.tint(.black)
+  }
+}
+
 let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 //window.nsWindow?.styleMask.insert(.fullSizeContentView)
 //window.nsWindow?.titlebarAppearsTransparent = true
+
+let hostingView = NSHostingView(rootView: Editor())
+hostingView.frame = NSRect(x: 0, y: 0, width: 320, height: HEIGHT)
+hostingView.autoresizingMask = [.height, .minXMargin]
+
+// Add hosting view to the GLFW content view
+window.nsWindow?.contentView?.addSubview(hostingView)
 window.position = .zero
 window.context.makeCurrent()
 //window.context.setSwapInterval(0)
@@ -71,6 +104,7 @@ var config: Config { .current }
 
 let loops: [RenderLoop] = [
   //
+  MapDemo(),  // Move to front for testing
   MainLoop(),
   LibraryView(),
   InputPromptsDemo(),
@@ -83,6 +117,7 @@ let loops: [RenderLoop] = [
   PathDemo(),
   TextEffectsDemo(),
   //  PhysicsDemo(),
+  TitleScreen(),
 ]
 
 var loopCount = loops.count
@@ -98,6 +133,7 @@ if let demoArg = cli.demo?.lowercased() {
 }
 
 var activeLoop: RenderLoop = loops[config.currentLoopIndex]
+print("🎯 Running loop: \(type(of: activeLoop))")
 activeLoop.onAttach(window: window)
 
 // Schedule CLI actions relative to current time
@@ -149,6 +185,7 @@ window.keyInputHandler = { window, key, scancode, state, mods in
 
 window.cursorPositionHandler = { window, x, y in
   guard window.isFocused else { return }
+  GLScreenEffect.mousePosition = (Float(x), Float(y))
   activeLoop.onMouseMove(window: window, x: x, y: y)
 }
 

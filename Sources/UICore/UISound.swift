@@ -5,6 +5,8 @@ extension UISound {
   static func select() { play("RE_SELECT02") }
   static func shutter() { play("shutter") }
 
+  static func navigate() { play("SFX_BlackBoardSinglev9") }
+
   static func pageTurn() { play(["page_1", "page_2", "page_3"]) }
 }
 
