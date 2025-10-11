@@ -28,13 +28,14 @@ public final class SlotMenu: ContextMenu {
   /// Show the slot menu for a specific slot
   public func showForSlot(
     at position: Point, slotIndex: Int, slotPosition: Point,
-    availableActions: [SlotAction] = [.use, .inspect, .move, .discard]
+    availableActions: [SlotAction] = [.use, .inspect, .move, .discard], openedWithKeyboard: Bool = false,
+    slotSize: Size = Size(80, 80)
   ) {
     self.slotIndex = slotIndex
     self.slotPosition = slotPosition
 
     let menuItems = createMenuItems(for: availableActions)
-    show(at: position, items: menuItems)
+    show(at: position, items: menuItems, openedWithKeyboard: openedWithKeyboard, triggerSize: slotSize)
   }
 
   /// Show the slot menu with custom actions

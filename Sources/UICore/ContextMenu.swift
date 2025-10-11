@@ -27,6 +27,10 @@ public class ContextMenu {
   public private(set) var position: Point = Point(0, 0)
   public private(set) var selectedIndex: Int = 0
 
+  // MARK: - Positioning
+  public var appearsAtMousePosition: Bool = false
+  public var anchor: MenuAnchor = .topRight
+
   private var menuItems: [MenuItem] = []
   private let itemHeight: Float = 32.0
   private let padding: Float = 8.0
@@ -41,18 +45,22 @@ public class ContextMenu {
   public var borderColor = Color(0.4, 0.4, 0.4)
 
   // MARK: - Rendering
-  private var panelEffect = GLScreenEffect("Common/Slot")
+  private var panelEffect = GLScreenEffect("Common/ContextMenu")
 
   public init() {}
 
   // MARK: - Public Methods
 
   /// Show the context menu at the specified position
-  public func show(at position: Point, items: [MenuItem]) {
-    self.position = position
+  public func show(
+    at position: Point, items: [MenuItem], openedWithKeyboard: Bool = false, triggerSize: Size = Size(80, 80)
+  ) {
     self.menuItems = items
-    self.selectedIndex = 0
+    self.selectedIndex = openedWithKeyboard ? 0 : -1  // -1 means no selection for mouse
     self.isVisible = true
+
+    // Calculate final position based on anchor
+    self.position = calculateFinalPosition(from: position, triggerSize: triggerSize)
   }
 
   /// Hide the context menu
@@ -64,12 +72,33 @@ public class ContextMenu {
   public func updateMouse(at mousePosition: Point) {
     guard isVisible else { return }
 
-    let relativeY = position.y - mousePosition.y  // Flipped: position.y - mousePosition.y
-    let newIndex = Int(relativeY / itemHeight)
+    // Only update selection if mouse is inside the menu bounds
+    if isMouseInsideMenu(at: mousePosition) {
+      let relativeY = position.y - mousePosition.y  // Flipped: position.y - mousePosition.y
+      let newIndex = Int(relativeY / itemHeight)
 
-    if newIndex >= 0 && newIndex < menuItems.count {
-      selectedIndex = newIndex
+      if newIndex >= 0 && newIndex < menuItems.count {
+        selectedIndex = newIndex
+      }
+    } else {
+      // Clear selection when mouse leaves the menu
+      selectedIndex = -1
     }
+  }
+
+  /// Check if mouse position is inside the menu bounds
+  public func isMouseInsideMenu(at mousePosition: Point) -> Bool {
+    let menuWidth = max(minWidth, calculateMenuWidth())
+    let menuHeight = Float(menuItems.count) * itemHeight
+
+    // Menu appears above the trigger point
+    let menuTop = position.y - menuHeight
+    let menuBottom = position.y
+    let menuLeft = position.x
+    let menuRight = position.x + menuWidth
+
+    return mousePosition.x >= menuLeft && mousePosition.x <= menuRight && mousePosition.y >= menuTop
+      && mousePosition.y <= menuBottom
   }
 
   /// Handle mouse click
@@ -145,7 +174,6 @@ public class ContextMenu {
       shader.setFloat("uCornerRadius", value: 6.0)
       shader.setFloat("uNoiseScale", value: 0.02)
       shader.setFloat("uNoiseStrength", value: 0.1)
-      shader.setFloat("uRadialGradientStrength", value: 0.0)
 
       // Set colors
       shader.setVec3("uPanelColor", value: (x: backgroundColor.red, y: backgroundColor.green, z: backgroundColor.blue))
@@ -159,8 +187,8 @@ public class ContextMenu {
       let itemY = position.y - Float(index + 1) * itemHeight  // Flipped: subtract instead of add
       let itemCenter = Point(position.x + menuWidth * 0.5, itemY + itemHeight * 0.5)
 
-      // Draw selection highlight
-      if index == selectedIndex {
+      // Draw selection highlight (only if selectedIndex is valid)
+      if selectedIndex >= 0 && index == selectedIndex {
         panelEffect.draw { shader in
           shader.setVec2("uPanelSize", value: (menuWidth - 4, itemHeight - 2))
           shader.setVec2("uPanelCenter", value: (itemCenter.x, itemCenter.y))
@@ -168,7 +196,6 @@ public class ContextMenu {
           shader.setFloat("uCornerRadius", value: 4.0)
           shader.setFloat("uNoiseScale", value: 0.0)
           shader.setFloat("uNoiseStrength", value: 0.0)
-          shader.setFloat("uRadialGradientStrength", value: 0.0)
 
           // Set selection color
           shader.setVec3(
@@ -179,10 +206,13 @@ public class ContextMenu {
         }
       }
 
-      // Draw item text
+      // Draw item text - properly centered
       let textStyle = item.isEnabled ? TextStyle.contextMenu : TextStyle.contextMenuDisabled
+      let textHeight = textStyle.fontSize * 1.2  // Approximate text height
+      let textY = itemY + itemHeight - (itemHeight - textHeight) * 0.5  // Center vertically (flipped)
+
       item.label.draw(
-        at: Point(position.x + padding, itemY + itemHeight * 0.5),
+        at: Point(position.x + padding, textY),
         style: textStyle,
         anchor: .topLeft
       )
@@ -190,6 +220,36 @@ public class ContextMenu {
   }
 
   // MARK: - Private Methods
+
+  private func calculateFinalPosition(from triggerPosition: Point, triggerSize: Size) -> Point {
+    let menuWidth = max(minWidth, calculateMenuWidth())
+    let menuHeight = Float(menuItems.count) * itemHeight
+
+    var finalX = triggerPosition.x
+    var finalY = triggerPosition.y
+
+    // Adjust X position based on anchor
+    switch anchor {
+    case .topLeft, .left, .bottomLeft:
+      finalX = triggerPosition.x - menuWidth  // Left of trigger
+    case .top, .center, .bottom:
+      finalX = triggerPosition.x - menuWidth * 0.5  // Centered on trigger
+    case .topRight, .right, .bottomRight:
+      finalX = triggerPosition.x + triggerSize.width * 0.5  // Right of trigger (menu's left edge at trigger's right edge)
+    }
+
+    // Adjust Y position based on anchor (OpenGL Y is flipped)
+    switch anchor {
+    case .topLeft, .top, .topRight:
+      finalY = triggerPosition.y + triggerSize.height * 0.5  // Top of menu aligns with top of trigger
+    case .left, .center, .right:
+      finalY = triggerPosition.y - triggerSize.height * 0.5  // Centered vertically
+    case .bottomLeft, .bottom, .bottomRight:
+      finalY = triggerPosition.y - triggerSize.height  // Bottom of menu aligns with bottom of trigger
+    }
+
+    return Point(finalX, finalY)
+  }
 
   private func calculateMenuWidth() -> Float {
     var maxWidth = minWidth
@@ -202,4 +262,11 @@ public class ContextMenu {
 
     return maxWidth
   }
+}
+
+// MARK: - MenuAnchor Enum
+public enum MenuAnchor {
+  case topLeft, top, topRight
+  case left, center, right
+  case bottomLeft, bottom, bottomRight
 }

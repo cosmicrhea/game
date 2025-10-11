@@ -191,16 +191,23 @@ final class ContextMenuDemo: RenderLoop {
       slotPos.x + slotSize * 0.5,
       slotPos.y + slotSize * 0.5
     )
-    showMenuForSlot(selectedIndex, at: slotCenter)
+    showMenuForSlot(selectedIndex, at: slotCenter, openedWithKeyboard: true)
   }
 
-  private func showMenuForSlot(_ slotIndex: Int, at position: Point) {
+  private func showMenuForSlot(_ slotIndex: Int, at position: Point, openedWithKeyboard: Bool = false) {
     let slotPos = slotGrid.slotPosition(at: slotIndex)
+    // Use the slot's position instead of the mouse position for consistent positioning
+    let slotCenter = Point(
+      slotPos.x + slotSize * 0.5,
+      slotPos.y + slotSize * 0.5
+    )
     slotMenu.showForSlot(
-      at: position,
+      at: slotCenter,
       slotIndex: slotIndex,
       slotPosition: slotPos,
-      availableActions: [.use, .inspect, .move, .discard]
+      availableActions: [.use, .inspect, .move, .discard],
+      openedWithKeyboard: openedWithKeyboard,
+      slotSize: Size(slotSize, slotSize)
     )
     menuTriggeredSlot = slotIndex
   }
