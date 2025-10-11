@@ -1,3 +1,4 @@
+import Collections
 import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -24,6 +25,9 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
       throw EditorMacroError("@Editor can only be applied to types (classes, structs, actors)")
     }
 
+    // Extract grouping option from macro arguments
+    let grouping = extractGroupingOption(from: node)
+
     // Find all @Editable properties
     let editableProperties = findEditableProperties(in: declaration)
 
@@ -32,7 +36,7 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
     }
 
     // Generate the getEditableProperties method
-    let method = generateGetEditablePropertiesMethod(properties: editableProperties)
+    let method = generateGetEditablePropertiesMethod(properties: editableProperties, grouping: grouping)
 
     return [DeclSyntax(method)]
   }
@@ -130,7 +134,38 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
     return nil
   }
 
-  private static func generateGetEditablePropertiesMethod(properties: [EditablePropertyInfo]) -> FunctionDeclSyntax {
+  private static func extractGroupingOption(from node: AttributeSyntax) -> Bool {
+    guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else {
+      return false
+    }
+
+    for argument in arguments {
+      if let memberAccess = argument.expression.as(MemberAccessExprSyntax.self) {
+        // Check for both EditorGrouping.grouped and .grouped
+        let isGrouped = memberAccess.declName.baseName.text == "grouped"
+        let hasEditorGroupingBase = memberAccess.base?.as(IdentifierTypeSyntax.self)?.name.text == "EditorGrouping"
+        let hasNoBase = memberAccess.base == nil  // This handles .grouped syntax
+
+        if isGrouped && (hasEditorGroupingBase || hasNoBase) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  private static func generateGetEditablePropertiesMethod(properties: [EditablePropertyInfo], grouping: Bool)
+    -> FunctionDeclSyntax
+  {
+    if grouping {
+      return generateGroupedPropertiesMethod(properties: properties)
+    } else {
+      return generateUngroupedPropertiesMethod(properties: properties)
+    }
+  }
+
+  private static func generateUngroupedPropertiesMethod(properties: [EditablePropertyInfo]) -> FunctionDeclSyntax {
     let returnStatements = properties.map { prop in
       let range = prop.range ?? "0.0...1.0"
 
@@ -145,12 +180,67 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
         """
     }.joined(separator: ",\n      ")
 
-    // Create the function declaration using SwiftSyntaxBuilder
     let functionDecl = try! FunctionDeclSyntax(
       """
-      func getEditableProperties() -> [AnyEditableProperty] {
+      func getEditableProperties() -> [Any] {
         return [
           \(raw: returnStatements)
+        ]
+      }
+      """)
+
+    return functionDecl
+  }
+
+  private static func generateGroupedPropertiesMethod(properties: [EditablePropertyInfo]) -> FunctionDeclSyntax {
+    // Group properties by their prefix (first word) while preserving order
+    var groupedProperties = OrderedDictionary<String, [EditablePropertyInfo]>()
+
+    for prop in properties {
+      let words = prop.displayName.components(separatedBy: " ")
+      let groupName = words.first ?? "Other"
+
+      if groupedProperties[groupName] != nil {
+        groupedProperties[groupName]!.append(prop)
+      } else {
+        groupedProperties[groupName] = [prop]
+      }
+    }
+
+    let sections = groupedProperties.map { (groupName, props) in
+      let sectionProperties = props.map { prop in
+        let range = prop.range ?? "0.0...1.0"
+
+        // Remove the group name prefix from the display name
+        let words = prop.displayName.components(separatedBy: " ")
+        let displayName = words.count > 1 ? words.dropFirst().joined(separator: " ") : prop.displayName
+
+        return """
+          AnyEditableProperty(
+            name: "\(prop.name)",
+            value: \(prop.name),
+            setValue: { self.\(prop.name) = $0 as! \(prop.type) },
+            displayName: "\(displayName)",
+            validRange: \(range)
+          )
+          """
+      }.joined(separator: ",\n        ")
+
+      return """
+        EditablePropertyGroup(
+          name: "\(groupName)",
+          properties: [
+            \(sectionProperties)
+          ]
+        )
+        """
+    }.joined(separator: ",\n      ")
+
+    let functionDecl = try! FunctionDeclSyntax(
+      """
+      func getEditableProperties() -> [Any] {
+        return [
+          \(raw: sections)
         ]
       }
       """)

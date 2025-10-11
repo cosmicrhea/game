@@ -22,31 +22,34 @@
     @StateObject private var loopManager = LoopManager(initialLoop: activeLoop)
 
     var body: some View {
-      Group {
-        if loopManager.currentLoop is Editing {
-          PropertiesEditor(for: loopManager.currentLoop as! Editing)
-            .controlSize(.mini)
-        } else {
-          Form {
-            Text("No Editor for `\(String(describing: type(of: loopManager.currentLoop)))`")
-              .foregroundStyle(.secondary)
+      VStack {
+        Group {
+          if loopManager.currentLoop is Editing {
+            PropertiesEditor(for: loopManager.currentLoop as! Editing)
+              .controlSize(.mini)
+          } else {
+            Form {
+              Section("`\(String(describing: type(of: loopManager.currentLoop)))`") {
+                Text("No Editor")
+                  .foregroundStyle(.secondary)
+              }
+            }
           }
-          // VStack(alignment: .leading, spacing: 8) {
-          //   Text("Current loop: \(String(describing: type(of: loopManager.currentLoop)))")
-          //     .font(.headline)
-          //   Text("No editable properties available")
-          //     .font(.caption)
-          //     .foregroundColor(.secondary)
-          //   Text("Add @Editor to this RenderLoop to enable editing")
-          //     .font(.caption2)
-          //     .foregroundColor(.secondary)
-          // }
         }
+        .formStyle(.grouped)
+//        .padding(.horizontal, -9)
+//        .padding(.top, -3)
+        .frame(width: 320)
+        .fixedSize()
+//        .padding(.bottom, 3)
+        .scrollDisabled(true)
+        .scrollContentBackground(.hidden)
+//        .background(.ultraThinMaterial)
+//        .clipShape(RoundedRectangle(cornerRadius: 7))
+//        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.ultraThickMaterial))
+        .padding(5)
       }
-      .formStyle(.grouped)
-      .frame(maxWidth: 320)
-      .scrollDisabled(true)
-      .scrollContentBackground(.hidden)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .onReceive(NotificationCenter.default.publisher(for: .loopChanged)) { _ in
         loopManager.currentLoop = activeLoop
       }
@@ -57,6 +60,7 @@
   public struct PropertiesEditor: View {
     private let object: Editing
     @State private var properties: [AnyEditableProperty] = []
+    @State private var groups: [EditablePropertyGroup] = []
 
     public init(for object: Editing) {
       self.object = object
@@ -64,12 +68,33 @@
 
     public var body: some View {
       Form {
-        ForEach(Array(properties.enumerated()), id: \.offset) { index, property in
-          EditablePropertyControl(property: property)
+        if !groups.isEmpty {
+          // Show grouped properties
+          ForEach(groups, id: \.name) { group in
+            Section(group.name) {
+              ForEach(Array(group.properties.enumerated()), id: \.offset) { index, property in
+                EditablePropertyControl(property: property)
+              }
+            }
+          }
+        } else {
+          // Show ungrouped properties
+          ForEach(Array(properties.enumerated()), id: \.offset) { index, property in
+            EditablePropertyControl(property: property)
+          }
         }
       }
       .onAppear {
-        properties = object.getEditableProperties()
+        let allItems = object.getEditableProperties()
+
+        // Check if we have grouped properties by looking at the first item
+        if allItems.first is EditablePropertyGroup {
+          groups = allItems.compactMap { $0 as? EditablePropertyGroup }
+          properties = []
+        } else {
+          properties = allItems.compactMap { $0 as? AnyEditableProperty }
+          groups = []
+        }
       }
     }
   }
@@ -107,18 +132,26 @@
 
     public var body: some View {
       if let range = property.validRange {
-        Slider(value: $localValue, in: range) {
-          Text(property.displayName)
-        } onEditingChanged: { editing in
-          print("editing \(property.displayName): \(editing)")
-        }
-        .onChange(of: localValue) { newValue in
-          property.setValue(Float(newValue))
-          UISound.select()
+        LabeledContent(property.displayName) {
+          HStack(spacing: 0) {
+            Slider(value: $localValue, in: range)
+
+              //        } onEditingChanged: { editing in
+              //          print("editing \(property.displayName): \(editing)")
+              //        }
+              .onChange(of: localValue) { newValue in
+                property.setValue(Float(newValue))
+                //          UISound.select()
+              }
+
+            Text("\(String(format: "%.3f", localValue).padding(toLength: 7, withPad: "\u{2007}", startingAt: 0))")
+              .font(.body.monospacedDigit())
+              .foregroundStyle(.secondary)
+          }
         }
       } else {
         LabeledContent(property.displayName) {
-          Text("\(localValue)")
+          Text("\(String(format: "%.3f", localValue).padding(toLength: 7, withPad: "\u{2007}", startingAt: 0))")
             .font(.system(.body, design: .monospaced))
         }
       }

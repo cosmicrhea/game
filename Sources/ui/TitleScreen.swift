@@ -37,12 +37,6 @@ final class TitleScreen: RenderLoop {
   private var previousSelectedIndex: Int = 0
   private let menuAnimationEasing: Easing = .easeOutCubic
 
-  // Text styles
-  private let titleStyle = TextStyle.titleScreen
-  private let menuStyle = TextStyle.menuItem
-  private let disabledMenuStyle = TextStyle.menuItemDisabled
-  private let versionStyle = TextStyle.version
-
   func update(deltaTime: Float) {
     self.deltaTime = deltaTime
 
@@ -133,20 +127,24 @@ final class TitleScreen: RenderLoop {
     case "New Game":
       // TODO: Start new game
       print("Starting new game...")
+
     case "Continue":
       // TODO: Load saved game
       print("Loading saved game...")
+
     case "Options":
       // TODO: Open options menu
       print("Opening options...")
+
     case "Give Up":
-      print("Exiting game...")
-      // Wait 500ms before exiting
-      Task {
-        try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms in nanoseconds
-        await MainActor.run {
-          window.close()
-        }
+      Task { @MainActor in
+        #if os(macOS)
+          window.nsWindow?.animationBehavior = .utilityWindow
+          window.nsWindow?.close()
+          try? await Task.sleep(nanoseconds: 500_000_000)
+        #endif
+
+        window.close()
       }
     default:
       break
@@ -166,10 +164,10 @@ final class TitleScreen: RenderLoop {
 
     // Draw title "Glass" at the bottom (since Y=0 is at top) - HIDDEN FOR NOW
     // let titleText = "Glass"
-    // let titleSize = titleText.size(with: titleStyle)
+    // let titleSize = titleText.size(with: .titleScreen)
     // let titleX = (screenWidth - titleSize.width) / 2
     // let titleY = screenHeight - screenHeight * 0.25 - titleSize.height
-    // titleText.draw(at: Point(titleX, titleY), style: titleStyle)
+    // titleText.draw(at: Point(titleX, titleY), style: .titleScreen)
 
     // Draw menu options - left aligned with indentation for selected items (bottom-left)
     let menuStartX: Float = 96
@@ -181,29 +179,7 @@ final class TitleScreen: RenderLoop {
       let isSelected = selectedIndex == index
       let isDisabled = item.disabled
 
-      let baseStyle = isDisabled ? disabledMenuStyle : menuStyle
-      let finalStyle: TextStyle
-
-      if isSelected && !isDisabled {
-        // Red text with dark red stroke for selected items
-        finalStyle =
-          baseStyle
-          .withColor(.rose)
-          .withStroke(width: 3, color: Color(0.3, 0.1, 0.1, 1.0))  // Dark red stroke
-      } else if isSelected && isDisabled {
-        // Dark red for disabled AND selected "Continue" item
-        finalStyle =
-          baseStyle
-          .withColor(Color(0.4, 0.1, 0.1, 1.0))  // Dark red color
-          .withStroke(width: 2, color: Color(0.2, 0.05, 0.05, 1.0))  // Darker red stroke
-      } else if isDisabled {
-        // Gray for disabled but not selected "Continue" item
-        finalStyle = baseStyle.withColor(.gray500)
-      } else {
-        // Normal styling for unselected items
-        let color: Color = .gray300
-        finalStyle = baseStyle.withColor(color)
-      }
+      let finalStyle = TextStyle.menuItem(selected: isSelected, disabled: isDisabled)
 
       // Calculate animated position
       let baseX = menuStartX
@@ -228,12 +204,12 @@ final class TitleScreen: RenderLoop {
     }
 
     // Draw version text in bottom left corner
-//    let versionText = "Version 0.40 • Everything is subject to change"
+    //    let versionText = "Version 0.40 • Everything is subject to change"
     let versionText = "v0.41"
-//    let versionSize = versionText.size(with: versionStyle)
+    //    let versionSize = versionText.size(with: .version)
     let versionX: Float = 56
     let versionY: Float = 20
-    versionText.draw(at: Point(versionX, versionY), style: versionStyle, anchor: .bottomLeft)
+    versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
 
     // Draw input prompts
     if let prompts = InputPromptGroups.groups["Menu Root"] {

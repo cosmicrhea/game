@@ -3,10 +3,17 @@
   import Foundation
   import SwiftUI
 
+  /// Editor grouping options
+  public enum EditorGrouping {
+    case none
+    case grouped
+  }
+
   /// Macro to automatically generate getEditableProperties() method from @Editable properties
   @attached(member, names: named(getEditableProperties))
   @attached(extension, conformances: Editing)
-  public macro Editor() = #externalMacro(module: "GlassEditorMacros", type: "EditorMacro")
+  public macro Editor(_ grouping: EditorGrouping = .none) =
+    #externalMacro(module: "GlassEditorMacros", type: "EditorMacro")
 
   /// A property wrapper that marks properties as editable in the debug editor
   @propertyWrapper
@@ -56,7 +63,18 @@
 
   /// Protocol for objects that can provide editable properties
   public protocol Editing: AnyObject {
-    func getEditableProperties() -> [AnyEditableProperty]
+    func getEditableProperties() -> [Any]
+  }
+
+  /// A group of related editable properties
+  public struct EditablePropertyGroup {
+    public let name: String
+    public let properties: [AnyEditableProperty]
+
+    public init(name: String, properties: [AnyEditableProperty]) {
+      self.name = name
+      self.properties = properties
+    }
   }
 
   /// Type-erased wrapper for editable properties that can actually modify the original values

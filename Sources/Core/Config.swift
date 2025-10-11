@@ -3,6 +3,7 @@ final class Config {
   static let current = Config()
 
   // Debug
+  @ConfigValue("editor") var editorEnabled = false
   @ConfigValue("currentLoopIndex") var currentLoopIndex: Int = 0
   @ConfigValue("debugWireframe") var debugWireframe = false
 

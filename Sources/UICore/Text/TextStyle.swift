@@ -46,13 +46,17 @@ extension TextStyle {
   static let menuItem = TextStyle(
     fontName: "Creato Display Bold",
     fontSize: 32,
-    color: .white
+    color: .white,
+    strokeWidth: 2,
+    strokeColor: .gray700
   )
 
   static let menuItemDisabled = TextStyle(
     fontName: "Creato Display Bold",
     fontSize: 32,
-    color: .gray500
+    color: .gray500,
+    strokeWidth: 2,
+    strokeColor: .gray900
   )
 
   static let version = TextStyle(
@@ -60,4 +64,27 @@ extension TextStyle {
     fontSize: 16,
     color: .gray700.withAlphaComponent(0.5)
   )
+  
+  /// Creates a menu item style based on selection and disabled state
+  static func menuItem(selected: Bool, disabled: Bool) -> TextStyle {
+    let baseStyle = disabled ? menuItemDisabled : menuItem
+    
+    if selected && !disabled {
+      // Red text with dark red stroke for selected items
+      return baseStyle
+        .withColor(.rose)
+        .withStroke(width: 2, color: Color(0.3, 0.1, 0.1, 1.0))  // Dark red stroke
+    } else if selected && disabled {
+      // Dark red for disabled AND selected items
+      return baseStyle
+        .withColor(Color(0.4, 0.1, 0.1, 1.0))  // Dark red color
+        .withStroke(width: 2, color: Color(0.2, 0.05, 0.05, 1.0))  // Darker red stroke
+    } else if disabled {
+      // Gray for disabled but not selected items
+      return baseStyle.withColor(.gray500)
+    } else {
+      // Normal styling for unselected items
+      return baseStyle.withColor(.gray300)
+    }
+  }
 }

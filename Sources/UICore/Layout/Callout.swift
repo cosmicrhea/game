@@ -46,7 +46,7 @@ public struct Callout {
   /// Ratio of the callout width used for fade effects (0.0 to 1.0).
   public var fadeWidthRatio: Float = 1.0 / 3.0
   /// Horizontal padding between the callout edge and icon.
-  public var iconPaddingX: Float = 12
+  public var iconPaddingX: Float = 48
   /// Gap between icon and text content.
   public var iconTextGap: Float = 8
   /// Color tint applied to the icon.
@@ -72,8 +72,8 @@ public struct Callout {
 
   // Default style for callouts (hardcoded)
   private static let defaultStyle = TextStyle(
-    fontName: "Dream Orphans Bd",
-    fontSize: 16,
+    fontName: "Creato Display Bold",
+    fontSize: 20,
     color: Color(0.9, 0.9, 0.9, 1)
   )
 
@@ -127,7 +127,7 @@ public struct Callout {
     let baseCenter: (x: Float, y: Float) = {
       switch position {
       case .topLeft(let yOffset):
-        return (px + w * 0.5, py - h * 0.5 + yOffset)
+        return (px + w * 0.5, py - h * 0.5 + yOffset - 180)
       case .center(let yOffset):
         return (px, py + yOffset)
       }
@@ -147,15 +147,24 @@ public struct Callout {
       program.setFloat("uAnimationAlpha", value: animationProgress)
     }
 
-    // Content layout with slide animation
+    // Content layout with slide animation (only for non-centered callouts)
     let left = baseCenter.x - w * 0.5
     let slideDistance: Float = w * 0.1
-    let animatedContentX = left + iconPaddingX - slideDistance * (1.0 - animationProgress)
+    let animatedContentX: Float = {
+      switch position {
+      case .center:
+        // No slide animation for centered callouts
+        return left + iconPaddingX
+      case .topLeft:
+        // Apply slide animation for top-left positioned callouts
+        return left + iconPaddingX - slideDistance * (1.0 - animationProgress)
+      }
+    }()
     var contentX = animatedContentX
 
     // Icon
     if let iconImage = cachedIcon {
-      let iconSize: Size = Size(16, 16)
+      let iconSize: Size = Size(20, 20)
       let iconRect = Rect(
         x: contentX,
         y: baseCenter.y - iconSize.height * 0.5,
@@ -166,11 +175,25 @@ public struct Callout {
       contentX += iconSize.width + iconTextGap
     }
 
-    // Label (top-left anchored inside the callout)
+    // Label positioning based on callout position
     let lineTopY = baseCenter.y + Callout.defaultStyle.fontSize * 0.5
-    let labelPoint = Point(contentX, lineTopY)
+    var labelPoint: Point
     var labelStyle = Callout.defaultStyle
     labelStyle.color.alpha *= animationProgress
+
+    switch position {
+    case .center:
+      // Center the text within the callout
+      let textWidth = text.size(with: labelStyle).width
+      let totalContentWidth = (cachedIcon != nil ? 20 + iconTextGap : 0) + textWidth
+      let contentStartX = baseCenter.x - totalContentWidth * 0.5
+      let textX = contentStartX + (cachedIcon != nil ? 20 + iconTextGap : 0)
+      labelPoint = Point(textX, lineTopY)
+    case .topLeft:
+      // Use the existing left-aligned positioning
+      labelPoint = Point(contentX, lineTopY)
+    }
+
     text.draw(at: labelPoint, style: labelStyle, context: context)
   }
 
@@ -181,7 +204,7 @@ public struct Callout {
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   @MainActor public mutating func draw(
     at position: CalloutPosition,
-    size: Size = Size(520, 32),
+    size: Size = Size(Float(WIDTH) / 3, 36),
     context: GraphicsContext? = nil
   ) {
     self.position = position

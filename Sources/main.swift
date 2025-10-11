@@ -13,12 +13,14 @@ import unistd
 //@_exported import Inject
 
 /// The width of the game window in pixels.
-let WIDTH = 1280
+public let WIDTH = 1280
 /// The height of the game window in pixels.
-let HEIGHT = 720
+public let HEIGHT = 720
 
 /// Whether to prefer Metal rendering over OpenGL on Apple platforms.
 let PREFER_METAL = false
+
+var config: Config { .current }
 
 print(" 🥛 Glass Engine ")
 
@@ -62,8 +64,11 @@ let window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
 
 #if EDITOR
   let editorHostingView = NSHostingView(rootView: EditorView())
-  editorHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: HEIGHT)
-  editorHostingView.autoresizingMask = [.height, .minXMargin]
+  editorHostingView.frame = NSRect(x: 0, y: 0, width: WIDTH, height: HEIGHT)
+  editorHostingView.autoresizingMask = [.minXMargin, .minYMargin, .height]
+  //  editorHostingView.layer!.borderWidth = 1
+  //  editorHostingView.layer!.borderColor = NSColor.red.cgColor
+  editorHostingView.isHidden = !config.editorEnabled
   window.nsWindow?.contentView?.addSubview(editorHostingView)
 #endif
 
@@ -81,23 +86,18 @@ var requestScreenshot = false
 var scheduleScreenshotAt: Double? = nil
 var scheduleExitAt: Double? = nil
 
-var config: Config { .current }
 
 let loops: [RenderLoop] = [
   //
   MainLoop(),
-  MapView(),  // Move to front for testing
+  MapView(),
   LibraryView(),
   InputPromptsDemo(),
-  //  AttributedTextDemo(),
-  //  TextDemo(),
-  // DocumentView(document: .operationGlasport),
   DocumentDemo(),
   CalloutDemo(),
   FontsDemo(),
   PathDemo(),
   TextEffectsDemo(),
-  //  PhysicsDemo(),
   TitleScreen(),
 ]
 
@@ -123,9 +123,11 @@ if cli.exit { scheduleExitAt = GLFWSession.currentTime + 2.0 }
 
 @MainActor func cycleLoops(_ step: Int) {
   config.currentLoopIndex = (config.currentLoopIndex + step + loopCount) % loopCount
+
   activeLoop.onDetach(window: window)
   activeLoop = loops[config.currentLoopIndex]
   activeLoop.onAttach(window: window)
+
   // TODO: move this elsewhere; setting default clear color when changing loop
   GraphicsContext.current?.renderer.setClearColor(Color(0.2, 0.1, 0.1, 1.0))
 
@@ -162,6 +164,13 @@ window.keyInputHandler = { window, key, scancode, state, mods in
     case .rightBracket:
       UISound.select()
       cycleLoops(+1)
+
+    #if EDITOR
+      case .graveAccent:
+        UISound.select()
+        config.editorEnabled.toggle()
+        editorHostingView.isHidden = !config.editorEnabled
+    #endif
 
     default:
       break

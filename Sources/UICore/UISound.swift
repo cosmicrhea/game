@@ -5,21 +5,27 @@ extension UISound {
   static func select() { play("RE_SELECT02") }
   static func shutter() { play("shutter") }
 
-  static func navigate() { play("SFX_BlackBoardSinglev9") }
+  static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
 
   static func pageTurn() { play(["page_1", "page_2", "page_3"]) }
 }
 
 enum UISound {
   #if os(macOS)
-    static func play(_ sound: String) {
+    static func play(_ sound: String, volume: Float = 1) {
       guard let file = Bundle.module.path(forResource: "UI/\(sound)", ofType: "wav") else {
         logger.error("failed to load \(sound)")
         return
       }
 
       // TODO: cross platform
-      NSSound(contentsOfFile: file, byReference: true)?.play()
+      guard let sound = NSSound(contentsOfFile: file, byReference: true) else {
+        logger.error("failed to decode \(sound)")
+        return
+      }
+
+      sound.volume = volume
+      sound.play()
     }
   #else
     static func play(_ sound: String) {}

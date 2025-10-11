@@ -109,6 +109,7 @@ let package = Package(
       dependencies: [
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+        .product(name: "Collections", package: "swift-collections"),
       ],
       path: "Sources/Core/EditorMacros",
     ),
