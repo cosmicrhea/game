@@ -289,3 +289,9 @@ public enum RectEdge {
   case maxXEdge
   case maxYEdge
 }
+
+/// Axis enumeration for layout direction.
+public enum Axis {
+  case horizontal
+  case vertical
+}

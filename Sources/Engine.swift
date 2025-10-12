@@ -154,13 +154,13 @@ final class Engine {
       MainLoop(),
       // SlotDemo(),
       SlotGridDemo(),
-      // CalloutDemo(),
+      CalloutDemo(),
       TitleScreen(),
       LibraryView(),
       DocumentDemo(),
       MapView(),
 
-      InputPromptsDemo(),
+      PromptListDemo(),
 
       // FontsDemo(),
       // PathDemo(),

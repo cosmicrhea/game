@@ -5,33 +5,36 @@ import struct GLFW.Mouse
 
 typealias Window = GLFW.GLFWWindow
 
+@MainActor
 protocol RenderLoop {
-  @MainActor func onAttach(window: Window)
-  @MainActor func onDetach(window: Window)
-  @MainActor func onKey(
+  func onAttach(window: Window)
+  func onDetach(window: Window)
+  func onKey(
     window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier
   )
-  @MainActor func onMouseMove(window: Window, x: Double, y: Double)
-  @MainActor func onScroll(window: Window, xOffset: Double, yOffset: Double)
-  @MainActor func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier)
-  @MainActor func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier)
-  @MainActor func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier)
-  @MainActor func update(deltaTime: Float)
-  @MainActor func update(window: Window, deltaTime: Float)
-  @MainActor func draw()
+  func onMouseMove(window: Window, x: Double, y: Double)
+  func onScroll(window: Window, xOffset: Double, yOffset: Double)
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier)
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier)
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier)
+  func update(deltaTime: Float)
+  func update(window: Window, deltaTime: Float)
+  func draw()
 }
 
 extension RenderLoop {
-  @MainActor func onAttach(window: Window) {}
-  @MainActor func onDetach(window: Window) {}
-  @MainActor func onKey(
+  func onAttach(window: Window) {}
+  func onDetach(window: Window) {}
+  func onKey(
     window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier
   ) {}
-  @MainActor func onMouseMove(window: Window, x: Double, y: Double) {}
-  @MainActor func onScroll(window: Window, xOffset: Double, yOffset: Double) {}
-  @MainActor func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {}
-  @MainActor func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {}
-  @MainActor func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {}
-  @MainActor func update(deltaTime: Float) {}
-  @MainActor func update(window: Window, deltaTime: Float) { update(deltaTime: deltaTime) }
+  func onMouseMove(window: Window, x: Double, y: Double) {}
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {}
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {}
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {}
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {}
+  func update(deltaTime: Float) {}
+  func update(window: Window, deltaTime: Float) {
+    update(deltaTime: deltaTime)
+  }
 }

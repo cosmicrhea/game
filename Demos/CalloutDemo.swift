@@ -3,23 +3,29 @@ import GLFW
 
 @MainActor
 final class CalloutDemo: RenderLoop {
-  private var callouts: [Callout] = []
+  private var objectiveCallouts: [Callout] = []
+  private var tutorialCallout: Callout?
+  private var promptListCallout: Callout?
+
   private var isVisible: Bool = true
   private var animationTimer: Float = 0.0
   private var staggerTimer: Float = 0.0
-  private let leftMargin: Float = 0
-  private let topMargin: Float = 180
   private let verticalGap: Float = 16
   private let staggerDelay: Float = 0.15  // Delay between each callout animation
 
   func onAttach(window: GLFWWindow) {
-    // Create one callout per icon from the enum cases
-    callouts = CalloutIcon.allCases.map { icon in
+    // Create objective callouts for each icon
+    objectiveCallouts = CalloutIcon.allCases.map { icon in
       Callout("Make your way to Kastellet", icon: icon)
     }
 
-    // Add a centered callout prompt
-    callouts.append(Callout("Press WASD to move"))
+    // Create tutorial callout
+    tutorialCallout = Callout("Press WASD to move", style: .tutorial)
+
+    // Create prompt list callout
+    var promptList = Callout("Press Space to continue", style: .promptList)
+    promptList.fade = .left
+    promptListCallout = promptList
   }
 
   func update(deltaTime: Float) {
@@ -31,34 +37,58 @@ final class CalloutDemo: RenderLoop {
       staggerTimer = 0.0  // Reset stagger timer when toggling
     }
 
-    // Staggered visibility updates
+    // Staggered visibility updates for objective callouts
     staggerTimer += deltaTime
 
-    for i in callouts.indices {
+    for i in objectiveCallouts.indices {
       let staggerOffset = Float(i) * staggerDelay
-      let shouldBeVisible = isVisible && staggerTimer >= staggerOffset
+      let shouldBeVisible: Bool
 
-      callouts[i].visible = shouldBeVisible
-      callouts[i].update(deltaTime: deltaTime)
+      if isVisible {
+        // Staggered showing: each callout appears after its delay
+        shouldBeVisible = staggerTimer >= staggerOffset
+      } else {
+        // Staggered hiding: each callout disappears after its delay
+        shouldBeVisible = staggerTimer < staggerOffset
+      }
+
+      objectiveCallouts[i].visible = shouldBeVisible
+      objectiveCallouts[i].update(deltaTime: deltaTime)
+    }
+
+    // Update tutorial callout
+    if var tutorial = tutorialCallout {
+      tutorial.visible = isVisible
+      tutorial.update(deltaTime: deltaTime)
+      tutorialCallout = tutorial
+    }
+
+    // Keep prompt list callout always visible and not animated
+    if var promptList = promptListCallout {
+      promptList.visible = true
+      // Don't call update() on it to prevent animation
+      promptListCallout = promptList
     }
   }
 
   func draw() {
-    // Top-left list
+    // Draw objective callouts (top-left, stacked)
     var currentTop: Float = 0
-    for i in 0..<callouts.count {
-      if i == callouts.count - 1 { break }  // last is the centered prompt
-      //let rect = Rect(x: leftMargin, y: currentTop, width: 520, height: 36)
-      callouts[i].draw(at: .topLeft(yOffset: -currentTop))
-      currentTop += (36 + verticalGap)
-//      if currentTop < 36 { break }
+    for i in objectiveCallouts.indices {
+      var callout = objectiveCallouts[i]
+      callout.style = .objective(offset: currentTop)
+      callout.draw()
+      currentTop += (callout.size.height + verticalGap)
     }
 
-    // Centered prompt
-    if let centered = callouts.last {
-      var c = centered
-      c.fade = .both
-      c.draw(at: .center(yOffset: 128))
+    // Draw tutorial callout (centered)
+    if var tutorial = tutorialCallout {
+      tutorial.draw()
+    }
+
+    // Draw prompt list callout (bottom-right, static)
+    if var promptList = promptListCallout {
+      promptList.draw()
     }
   }
 }

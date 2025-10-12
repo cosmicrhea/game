@@ -62,6 +62,7 @@
   }
 
   /// Protocol for objects that can provide editable properties
+  @MainActor
   public protocol Editing: AnyObject {
     func getEditableProperties() -> [Any]
   }

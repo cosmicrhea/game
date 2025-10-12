@@ -6,7 +6,7 @@ import GLMath
 /// Demo for testing the slot shader with textured border
 @MainActor
 final class SlotDemo: RenderLoop {
-  private let inputPrompts = InputPrompts()
+  private let promptList = PromptList(.menu, axis: .horizontal)
   private var slotEffect = GLScreenEffect("Common/Slot")
   private var panelSize = Size(80, 80)
   private var panelCenter = Point(400, 300)

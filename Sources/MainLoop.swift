@@ -27,7 +27,7 @@ final class MainLoop: RenderLoop {
   /// Callout UI component for displaying hints.
   private var callout = Callout("Make your way to Kastellet", icon: .chevron)
   /// Input prompts component for controller/keyboard icons.
-  private let inputPrompts: InputPrompts
+  private let promptList: PromptList
 
   // State
   private var objectiveVisible: Bool = true
@@ -46,7 +46,7 @@ final class MainLoop: RenderLoop {
       .filter { $0.numberOfVertices > 0 }
       .map { MeshInstance(scene: scene, mesh: $0) }
 
-    inputPrompts = InputPrompts()
+    promptList = PromptList(.itemView, axis: .horizontal)
   }
 
   func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
@@ -98,24 +98,16 @@ final class MainLoop: RenderLoop {
     meshInstances.forEach { $0.draw() }
 
     drawObjectiveCallout()
-    drawDebugInputPrompts()
+    drawDebugPromptList()
     drawDebugText()
   }
 
   func drawObjectiveCallout() {
-    // callout.draw(in: Rect(x: 0, y: Float(HEIGHT) - 180, width: 520, height: 36))
-    callout.draw(at: .topLeft())
+    callout.draw()
   }
 
-  func drawDebugInputPrompts() {
-    if let prompts = InputPromptGroups.groups["Item View"] {
-      inputPrompts.drawHorizontal(
-        prompts: prompts,
-        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-        origin: (Float(WIDTH) - 56, 12),
-        anchor: .bottomRight
-      )
-    }
+  func drawDebugPromptList() {
+    promptList.draw()
   }
 
   func drawDebugText() {

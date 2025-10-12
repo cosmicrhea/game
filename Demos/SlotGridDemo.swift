@@ -5,7 +5,7 @@ import GLMath
 /// Demo for testing the slot grid component with context menu support
 @MainActor
 final class SlotGridDemo: RenderLoop {
-  private let inputPrompts = InputPrompts()
+  private let promptList = PromptList(.menu, axis: .horizontal)
   private var slotGrid: SlotGrid
 
   // Grid configuration

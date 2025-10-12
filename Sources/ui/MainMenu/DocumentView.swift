@@ -64,7 +64,7 @@ final class DocumentView: RenderLoop {
   private let backgroundAnimationDuration: Float = 0.5
   private let backgroundAnimationEasing: Easing = .easeInOutCubic
 
-  private let inputPrompts = InputPrompts()
+  private let promptList = PromptList(.documentView, axis: .horizontal)
 
   init(document: Document) {
     self.document = document
@@ -314,14 +314,8 @@ final class DocumentView: RenderLoop {
     }
 
     // Draw the input prompts
-    if let prompts = InputPromptGroups.groups[getTotalPageCount() > 1 ? "Document View" : "Continue"] {
-      inputPrompts.drawHorizontal(
-        prompts: prompts,
-        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-        origin: (Float(WIDTH) - 56, 12),
-        anchor: .bottomRight
-      )
-    }
+    promptList.group = getTotalPageCount() > 1 ? .documentView : .`continue`
+    promptList.draw()
   }
 }
 

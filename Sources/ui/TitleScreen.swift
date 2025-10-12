@@ -18,7 +18,7 @@ final class TitleScreen: RenderLoop {
 
   private let backgroundImage = Image("UI/title_screen.png")
 
-  private let inputPrompts = InputPrompts()
+  private let promptList = PromptList(.menuRoot, axis: .horizontal)
 
   // Animation state
   private var animationTime: Float = 0.0
@@ -195,13 +195,6 @@ final class TitleScreen: RenderLoop {
     versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
 
     // Draw input prompts
-    if let prompts = InputPromptGroups.groups["Menu Root"] {
-      inputPrompts.drawHorizontal(
-        prompts: prompts,
-        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-        origin: (Float(WIDTH) - 56, 12),
-        anchor: .bottomRight
-      )
-    }
+    promptList.draw()
   }
 }

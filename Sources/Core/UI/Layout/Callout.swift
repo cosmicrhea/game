@@ -10,12 +10,14 @@ public enum CalloutIcon: String, CaseIterable {
   case location
 }
 
-/// Positioning options for callouts.
-public enum CalloutPosition {
-  /// Position at the top-left of the target area with optional Y offset.
-  case topLeft(yOffset: Float = 0)
-  /// Position at the center of the target area with optional Y offset.
-  case center(yOffset: Float = -128)
+/// Semantic callout styles for different use cases.
+public enum CalloutStyle {
+  /// Objective callout - top-left with Y offset for stacking
+  case objective(offset: Float = 0)
+  /// Tutorial callout - centered on screen
+  case tutorial
+  /// Prompt list callout - bottom-right
+  case promptList
 }
 
 /// Fade effect options for callout edges.
@@ -39,8 +41,8 @@ public struct Callout {
   public var icon: CalloutIcon?
 
   // Layout/appearance
-  /// Position of the callout relative to its target area.
-  public var position: CalloutPosition = .topLeft()
+  /// Style of the callout determining position and behavior.
+  public var style: CalloutStyle = .objective()
   /// Fade effect applied to the callout edges.
   public var fade: CalloutFade = .right
   /// Ratio of the callout width used for fade effects (0.0 to 1.0).
@@ -81,12 +83,22 @@ public struct Callout {
   /// - Parameters:
   ///   - text: The text content to display.
   ///   - icon: Optional icon to display alongside the text.
-  public init(_ text: String, icon: CalloutIcon? = nil) {
+  ///   - style: The callout style determining position and behavior.
+  public init(_ text: String, icon: CalloutIcon? = nil, style: CalloutStyle = .objective()) {
     self.text = text
     self.icon = icon
+    self.style = style
     self.visible = true
     self.targetVisible = true
     self.animationProgress = 1
+  }
+
+  /// Computed size of the callout for future multi-line support.
+  public var size: Size {
+    let textWidth = text.size(with: Callout.defaultStyle).width
+    let iconWidth: Float = icon != nil ? 20 + iconTextGap : 0
+    let totalWidth = iconWidth + textWidth + iconPaddingX * 2
+    return Size(totalWidth, 36)
   }
 
   /// Updates the callout's animation state for the current frame.
@@ -105,11 +117,9 @@ public struct Callout {
     }
   }
 
-  /// Draws the callout within the specified rectangle.
-  /// - Parameters:
-  ///   - rect: The rectangle to draw the callout within.
-  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  @MainActor public mutating func draw(in rect: Rect, context: GraphicsContext? = nil) {
+  /// Draws the callout using its style to determine position and behavior.
+  /// - Parameter context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
+  @MainActor public mutating func draw(context: GraphicsContext? = nil) {
     // Update icon cache if needed
     if cachedIcon == nil, let icon = icon, let path = iconResourcePath(icon) {
       cachedIcon = Image(path)
@@ -118,107 +128,106 @@ public struct Callout {
     // Early out if fully hidden
     if !visible && animationProgress <= 0 { return }
 
-    // Compute base center by anchor
+    // Determine position and rect based on style
+    let (rect, fade): (Rect, CalloutFade) = {
+      switch style {
+      case .objective(let offset):
+        let w = Float(WIDTH) / 3
+        let h: Float = 36
+        let topMargin: Float = 96
+        let origin = Point(0, Float(HEIGHT) - h - topMargin - offset)
+        return (Rect(origin: origin, size: Size(w, h)), .right)
+      case .tutorial:
+        let w = Float(WIDTH) / 3
+        let h: Float = 36
+        let origin = Point(Float(WIDTH) * 0.5 - w * 0.5, Float(HEIGHT) * 0.5 - h * 0.5 - 128)
+        return (Rect(origin: origin, size: Size(w, h)), .both)
+      case .promptList:
+        let w = Float(WIDTH) * 0.8
+        let h: Float = 56
+        let origin = Point(Float(WIDTH) - w, -2)
+        return (Rect(origin: origin, size: Size(w, h)), .left)
+      }
+    }()
+
+    // Compute base center
     let px = rect.origin.x
     let py = rect.origin.y
     let w = rect.size.width
     let h = rect.size.height
-
-    let baseCenter: (x: Float, y: Float) = {
-      switch position {
-      case .topLeft(let yOffset):
-        return (px + w * 0.5, py - h * 0.5 + yOffset - 180)
-      case .center(let yOffset):
-        return (px, py + yOffset)
-      }
-    }()
+    let baseCenter = (px + w * 0.5, py + h * 0.5)
 
     // Configure fades
     let fadeWidth = max(0, fadeWidthRatio) * w
-    let leftWidth: Float = (fade == .left || fade == .both) ? fadeWidth : 0
-    let rightWidth: Float = (fade == .right || fade == .both) ? fadeWidth : 0
+    let leftWidth: Float = (fade == .left || fade == .both) ? fadeWidth : -1.0
+    let rightWidth: Float = (fade == .right || fade == .both) ? fadeWidth : -1.0
 
     // Draw background via screen effect (uses GL under the hood)
     effect.draw { program in
       program.setVec2("uRectSize", value: (w, h))
-      program.setVec2("uRectCenter", value: (baseCenter.x, baseCenter.y))
-      if leftWidth > 0 { program.setFloat("uLeftFadeWidth", value: leftWidth) }
-      if rightWidth > 0 { program.setFloat("uRightFadeWidth", value: rightWidth) }
+      program.setVec2("uRectCenter", value: (baseCenter.0, baseCenter.1))
+      program.setFloat("uLeftFadeWidth", value: leftWidth)
+      program.setFloat("uRightFadeWidth", value: rightWidth)
       program.setFloat("uAnimationAlpha", value: animationProgress)
     }
 
-    // Content layout with slide animation (only for non-centered callouts)
-    let left = baseCenter.x - w * 0.5
+    // Content layout with slide animation (only for objectives)
+    let left = baseCenter.0 - w * 0.5
     let slideDistance: Float = w * 0.1
     let animatedContentX: Float = {
-      switch position {
-      case .center:
-        // No slide animation for centered callouts
-        return left + iconPaddingX
-      case .topLeft:
-        // Apply slide animation for top-left positioned callouts
+      switch style {
+      case .objective:
+        // Apply slide animation for objectives
         return left + iconPaddingX - slideDistance * (1.0 - animationProgress)
+      case .tutorial, .promptList:
+        // No slide animation for other styles
+        return left + iconPaddingX
       }
     }()
     var contentX = animatedContentX
 
-    // Icon
-    if let iconImage = cachedIcon {
+    // Icon (skip for promptList style)
+    if case .promptList = style {
+      // Skip icon for promptList
+    } else if let iconImage = cachedIcon {
       let iconSize: Size = Size(20, 20)
       let iconRect = Rect(
         x: contentX,
-        y: baseCenter.y - iconSize.height * 0.5,
+        y: baseCenter.1 - iconSize.height * 0.5,
         width: iconSize.width,
         height: iconSize.height
       )
-      iconImage.draw(in: iconRect, context: context)
+      // Apply animation alpha to icon
+      let iconTint = Color(1.0, 1.0, 1.0, animationProgress)
+      iconImage.draw(in: iconRect, tint: iconTint, context: context)
       contentX += iconSize.width + iconTextGap
     }
 
-    // Label positioning based on callout position
-    let lineTopY = baseCenter.y + Callout.defaultStyle.fontSize * 0.5
+    // Label positioning based on style
+    let lineTopY = baseCenter.1 + Callout.defaultStyle.fontSize * 0.5
     var labelPoint: Point
     var labelStyle = Callout.defaultStyle
     labelStyle.color.alpha *= animationProgress
 
-    switch position {
-    case .center:
+    switch style {
+    case .tutorial:
       // Center the text within the callout
       let textWidth = text.size(with: labelStyle).width
       let totalContentWidth = (cachedIcon != nil ? 20 + iconTextGap : 0) + textWidth
-      let contentStartX = baseCenter.x - totalContentWidth * 0.5
+      let contentStartX = baseCenter.0 - totalContentWidth * 0.5
       let textX = contentStartX + (cachedIcon != nil ? 20 + iconTextGap : 0)
       labelPoint = Point(textX, lineTopY)
-    case .topLeft:
+    case .objective, .promptList:
       // Use the existing left-aligned positioning
       labelPoint = Point(contentX, lineTopY)
     }
 
-    text.draw(at: labelPoint, style: labelStyle, context: context)
-  }
-
-  /// Convenience method to draw the callout at a logical position with a default size.
-  /// - Parameters:
-  ///   - position: The logical position for the callout.
-  ///   - size: The size of the callout area; defaults to `Size(520, 44)`.
-  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  @MainActor public mutating func draw(
-    at position: CalloutPosition,
-    size: Size = Size(Float(WIDTH) / 3, 36),
-    context: GraphicsContext? = nil
-  ) {
-    self.position = position
-    let viewportH = Float(HEIGHT)
-    let origin: Point = {
-      switch position {
-      case .topLeft:
-        return Point(0, viewportH)
-      case .center:
-        return Point(Float(WIDTH) * 0.5, viewportH * 0.5)
-      }
-    }()
-    let rect = Rect(origin: origin, size: size)
-    draw(in: rect, context: context)
+    // Don't draw text for promptList style
+    if case .promptList = style {
+      // Skip text for promptList
+    } else {
+      text.draw(at: labelPoint, style: labelStyle, context: context)
+    }
   }
 
   private func iconResourcePath(_ icon: CalloutIcon) -> String? {

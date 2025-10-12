@@ -43,7 +43,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     float u_borderSoftness  = (uBorderSoftness   > 0.0) ? uBorderSoftness  : 0.75;
 
     // Fade on the right side of the rectangle (in pixels)
-    float u_rightFadeWidth  = (uRightFadeWidth   > 0.0) ? uRightFadeWidth  : (u_rectSize.x / 3.0);
+    float u_rightFadeWidth  = uRightFadeWidth;
 
     // Background (captured screen)
     vec2 uv        = fragCoord.xy / iResolution.xy;
@@ -59,7 +59,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 
     // Right-side fade factor
     float distFromRight = halfSize.x - p.x; // inside the box: 0 at right edge, increases to the left
-    float rightFade     = (u_rightFadeWidth > 0.0) ? clamp(distFromRight / u_rightFadeWidth, 0.0, 1.0) : 1.0;
+    float rightFade     = (uRightFadeWidth > 0.0) ? clamp(distFromRight / uRightFadeWidth, 0.0, 1.0) : 1.0;
 
     // Left-side fade factor
     float distFromLeft  = halfSize.x + p.x; // 0 at left edge, increases to the right

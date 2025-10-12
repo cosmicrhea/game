@@ -2,8 +2,8 @@ import Foundation
 import OrderedCollections
 import STBRectPack
 
-final class InputPromptsDemo: RenderLoop {
-  private lazy var promptRenderer = InputPrompts()
+final class PromptListDemo: RenderLoop {
+  private lazy var promptRenderer = PromptList(axis: .horizontal)
   private let titleStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 18, color: .white)
 
   // Helper function to measure the actual width of a group

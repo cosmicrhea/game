@@ -5,7 +5,7 @@ import GLMath
 /// Demo for testing the global screen fade system
 @MainActor
 final class FadeDemo: RenderLoop {
-  private let inputPrompts = InputPrompts()
+  private let promptList = PromptList(.menu, axis: .horizontal)
   private var screenFade = ScreenFadeFBO.shared
 
   init() {
