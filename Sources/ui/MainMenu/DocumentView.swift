@@ -34,11 +34,11 @@ struct Document: Sendable {
 }
 
 final class DocumentView: RenderLoop {
-  private static let backgroundOpacity: Float = 1/3
+  private static let backgroundOpacity: Float = 1 / 3
 
   let document: Document
 
-  // Completion callback for when document is finished
+  /// Completion callback for when document is finished.
   var onDocumentFinished: (() -> Void)?
 
   private let caretLeft = Caret(direction: .left)
@@ -314,10 +314,9 @@ final class DocumentView: RenderLoop {
     }
 
     // Draw the input prompts
-    if let prompts = InputPromptGroups.groups[getTotalPageCount() > 1 ? "Document Viewer" : "Continue"] {
+    if let prompts = InputPromptGroups.groups[getTotalPageCount() > 1 ? "Document View" : "Continue"] {
       inputPrompts.drawHorizontal(
         prompts: prompts,
-        inputSource: .keyboardMouse,
         windowSize: (Int32(WIDTH), Int32(HEIGHT)),
         origin: (Float(WIDTH) - 56, 12),
         anchor: .bottomRight

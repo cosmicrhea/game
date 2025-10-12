@@ -108,10 +108,9 @@ final class MainLoop: RenderLoop {
   }
 
   func drawDebugInputPrompts() {
-    if let prompts = InputPromptGroups.groups["Item Viewer"] {
+    if let prompts = InputPromptGroups.groups["Item View"] {
       inputPrompts.drawHorizontal(
         prompts: prompts,
-        inputSource: .keyboardMouse,
         windowSize: (Int32(WIDTH), Int32(HEIGHT)),
         origin: (Float(WIDTH) - 56, 12),
         anchor: .bottomRight

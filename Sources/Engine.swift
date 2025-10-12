@@ -152,16 +152,16 @@ final class Engine {
   private func setupLoops() {
     loops = [
       MainLoop(),
-      SlotDemo(),
+      // SlotDemo(),
       SlotGridDemo(),
-      ContextMenuDemo(),
       // CalloutDemo(),
       TitleScreen(),
       LibraryView(),
       DocumentDemo(),
       MapView(),
 
-      // InputPromptsDemo(),
+      InputPromptsDemo(),
+
       // FontsDemo(),
       // PathDemo(),
       // TextEffectsDemo(),
@@ -182,7 +182,7 @@ final class Engine {
 
     currentLoopIndex = config.currentLoopIndex
     activeLoop = loops[currentLoopIndex]
-    print("🎯 Running loop: \(type(of: activeLoop))")
+    //print("🎯 Running loop: \(type(of: activeLoop))")
     activeLoop.onAttach(window: window)
 
     // Schedule CLI actions relative to current time
@@ -238,6 +238,10 @@ final class Engine {
       UISound.select()
       cycleLoops(+1)
 
+    case .f19, .f9, .home:
+      UISound.select()
+      cycleInputSources()
+
     #if EDITOR
       case .backslash:
         UISound.select()
@@ -271,6 +275,15 @@ final class Engine {
       // Notify the editor that the loop has changed
       NotificationCenter.default.post(name: .loopChanged, object: nil)
     #endif
+  }
+
+  private func cycleInputSources() {
+    let allSources = InputSource.allCases
+    let currentIndex = allSources.firstIndex(of: InputSource.player1) ?? 0
+    let nextIndex = (currentIndex + 1) % allSources.count
+    InputSource.player1 = allSources[nextIndex]
+
+    //print("🎮 InputSource.player1 switched to: \(InputSource.player1.rawValue)")
   }
 
   private func runMainLoop() {

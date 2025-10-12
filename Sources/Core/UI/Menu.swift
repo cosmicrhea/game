@@ -3,25 +3,33 @@ import GL
 import GLFW
 import GLMath
 
+// MARK: - MenuAnchor Enum
+public enum MenuAnchor {
+  case topLeft, top, topRight
+  case left, center, right
+  case bottomLeft, bottom, bottomRight
+}
+
+// MARK: - Menu Item
+public struct MenuItem {
+  public let id: String
+  public let label: String
+  public let icon: String?
+  public let isEnabled: Bool
+  public let action: () -> Void
+
+  public init(id: String, label: String, icon: String? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+    self.id = id
+    self.label = label
+    self.icon = icon
+    self.isEnabled = isEnabled
+    self.action = action
+  }
+}
+
 /// A modal context menu that can pop up anywhere on screen
 @MainActor
-public class ContextMenu {
-  // MARK: - Menu Item
-  public struct MenuItem {
-    public let id: String
-    public let label: String
-    public let icon: String?
-    public let isEnabled: Bool
-    public let action: () -> Void
-
-    public init(id: String, label: String, icon: String? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
-      self.id = id
-      self.label = label
-      self.icon = icon
-      self.isEnabled = isEnabled
-      self.action = action
-    }
-  }
+public class Menu {
 
   // MARK: - Properties
   public private(set) var isVisible: Bool = false
@@ -31,6 +39,7 @@ public class ContextMenu {
   // MARK: - Positioning
   public var appearsAtMousePosition: Bool = false
   public var anchor: MenuAnchor = .topRight
+  public var offset: Point = Point(0, 0)
 
   // MARK: - Animation
   public var showDuration: Float = 0.1
@@ -48,7 +57,7 @@ public class ContextMenu {
   private let minWidth: Float = 120.0
 
   // MARK: - Colors
-  public var backgroundColor = Color(0.15, 0.15, 0.15, 0.95)
+  public var backgroundColor = Color(0.35, 0.35, 0.35, 0.75)
   public var selectedItemColor = Color(0.25, 0.25, 0.25, 0.95)
   public var disabledItemColor = Color(0.1, 0.1, 0.1, 0.7)
   public var textColor = Color.white
@@ -188,7 +197,7 @@ public class ContextMenu {
       return true
     case .right, .d:
       return true
-    case .enter:
+    case .space, .enter:
       if selectedIndex < menuItems.count {
         let item = menuItems[selectedIndex]
         if item.isEnabled {
@@ -216,25 +225,20 @@ public class ContextMenu {
     let menuHeight = Float(menuItems.count) * itemHeight
 
     // Draw background panel (flipped - panel appears above the trigger point)
-    let centerPos = Point(
+    let centerPosition = Point(
       position.x + menuWidth * 0.5,
       position.y - menuHeight * 0.5  // Flipped: subtract instead of add
     )
 
     // Calculate fade alpha based on animation
     let fadeAlpha = isVisible ? animationProgress : (1.0 - animationProgress)
-    let currentBackgroundColor = Color(
-      backgroundColor.red,
-      backgroundColor.green,
-      backgroundColor.blue,
-      backgroundColor.alpha * fadeAlpha
-    )
+    let currentBackgroundColor = backgroundColor.withAlphaComponent(fadeAlpha)
 
     panelEffect.draw { shader in
       shader.setVec2("uPanelSize", value: (menuWidth, menuHeight))
-      shader.setVec2("uPanelCenter", value: (centerPos.x, centerPos.y))
+      shader.setVec2("uPanelCenter", value: (centerPosition.x, centerPosition.y))
       shader.setFloat("uBorderThickness", value: 2.0)
-      shader.setFloat("uCornerRadius", value: 6.0)
+      shader.setFloat("uCornerRadius", value: 7.0)
       shader.setFloat("uNoiseScale", value: 0.02)
       shader.setFloat("uNoiseStrength", value: 0.1)
 
@@ -385,7 +389,7 @@ public class ContextMenu {
       finalY = triggerPosition.y - triggerSize.height  // Bottom of menu aligns with bottom of trigger
     }
 
-    return Point(finalX, finalY)
+    return Point(finalX + offset.x, finalY + offset.y)
   }
 
   private func calculateMenuWidth() -> Float {
@@ -399,11 +403,4 @@ public class ContextMenu {
 
     return maxWidth
   }
-}
-
-// MARK: - MenuAnchor Enum
-public enum MenuAnchor {
-  case topLeft, top, topRight
-  case left, center, right
-  case bottomLeft, bottom, bottomRight
 }

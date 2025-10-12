@@ -49,7 +49,7 @@ extension Color {
 
   public static let indigo = Color(0.3098, 0.2745, 0.8980, 1)
   public static let amber = Color(0.9608, 0.6196, 0.0431, 1)
-  public static let amber800 = Color(0.6, 0.4, 0.05, 1)  // Dark amber
+  public static let amber800 = Color(0.6, 0.4, 0.05, 1)
   public static let teal = Color(0.0784, 0.7216, 0.6510, 1)
   public static let orange = Color(0.9765, 0.4510, 0.0863, 1)
   public static let purple = Color(0.6588, 0.3333, 0.9686, 1)
@@ -60,9 +60,18 @@ extension Color {
   public static let gray300 = Color(0.7059, 0.7333, 0.7804, 1)
   public static let gray500 = Color(0.4196, 0.4471, 0.5020, 1)
   public static let gray700 = Color(0.2706, 0.2902, 0.3294, 1)
-  public static let gray900 = Color(0.0667, 0.0941, 0.1529, 1)
+  public static let gray900 = Color(0.0667, 0.0667, 0.0667, 1)
 
   // Blueprint colors
   public static let blueprintBackground = Color(0.05, 0.08, 0.15, 1)  // Dark blue
   public static let blueprintGrid = Color(0.7, 0.8, 0.9, 1)  // Light blue
+
+  // Slot colors
+  public static let slotBackground = Color(0.2, 0.2, 0.2, 1)
+  public static let slotBorder = Color(0.5, 0.6, 0.6, 1)
+  public static let slotBorderHighlight = Color(0.7, 0.7, 0.7, 1)
+  public static let slotBorderShadow = Color(0.2, 0.2, 0.2, 1)
+  public static let slotActive = Color(0.47, 0.47, 0.47, 1)
+  public static let slotSelected = Color(0.32, 0.32, 0.32, 1)
+  public static let slotHovered = Color(0.22, 0.22, 0.22, 1)
 }

@@ -1,11 +1,15 @@
 /// Represents different input sources for the game.
-public enum InputSource: String, CaseIterable {
+public enum InputSource: String, CaseIterable, Sendable {
   /// Keyboard and mouse input.
   case keyboardMouse
   /// PlayStation controller input.
   case playstation
   /// Xbox controller input.
   case xbox
+}
+
+extension InputSource {
+  nonisolated(unsafe) public static var player1 = Self.keyboardMouse
 }
 
 extension InputSource {

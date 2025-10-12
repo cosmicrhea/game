@@ -67,13 +67,13 @@ extension TextStyle {
 
   static let contextMenu = TextStyle(
     fontName: "Creato Display Medium",
-    fontSize: 16,
+    fontSize: 24,
     color: .white
   )
 
   static let contextMenuDisabled = TextStyle(
     fontName: "Creato Display Medium",
-    fontSize: 16,
+    fontSize: 24,
     color: .gray500
   )
 

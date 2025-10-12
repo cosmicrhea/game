@@ -6,10 +6,13 @@ import GLMath
 @MainActor
 public final class SlotGrid {
   // MARK: - Configuration
-  public let columns: Int
-  public let rows: Int
-  public let slotSize: Float
-  public let spacing: Float
+  public var columns: Int
+  public var rows: Int
+  public var slotSize: Float
+  public var spacing: Float
+  public var cornerRadius: Float
+  public var radialGradientStrength: Float
+  public var selectionWraps: Bool
 
   // MARK: - State
   public private(set) var gridPosition: Point = Point(0, 0)
@@ -20,42 +23,69 @@ public final class SlotGrid {
   private var slotEffect = GLScreenEffect("Common/Slot")
 
   // MARK: - Colors
-  public var slotColor = Color(0.1, 0.1, 0.1)
-  public var borderColor = Color(0.4, 0.4, 0.4)
-  public var borderHighlight = Color(0.6, 0.6, 0.6)
-  public var borderShadow = Color(0.2, 0.2, 0.2)
+  public var slotColor = Color.slotBackground
+  public var borderColor = Color.slotBorder
+  public var borderHighlight = Color.slotBorderHighlight
+  public var borderShadow = Color.slotBorderShadow
 
   // MARK: - Slot Properties
   public var borderThickness: Float = 8.0
-  public var cornerRadius: Float = 12.0
-  public var radialGradientStrength: Float = 0.3
   public var noiseScale: Float = 0.02
   public var noiseStrength: Float = 0.3
 
   // MARK: - Tinting
-  public var tint: Color? = nil  // Optional tint color for slots
-
-  // MARK: - Selection Behavior
-  /// Whether selection wraps around edges.
-  public var selectionWraps: Bool = false
+  public var tint: Color? = nil
 
   // MARK: - Selection Colors
-  public var selectedSlotColor = Color(0.15, 0.15, 0.15)
-  public var hoveredSlotColor = Color(0.12, 0.12, 0.12)
+  public var selectedSlotColor = Color.slotSelected
+  public var hoveredSlotColor = Color.slotHovered
+
+  // MARK: - Context Menu
+  public var slotMenu: SlotMenu
+  public var onSlotAction: ((SlotAction, Int) -> Void)?
+
+  public init(config: GridConfiguration) {
+    self.columns = config.columns
+    self.rows = config.rows
+    self.slotSize = config.cellSize
+    self.spacing = config.spacing
+    self.cornerRadius = config.cornerRadius
+    self.radialGradientStrength = config.radialGradientStrength
+    self.selectionWraps = config.selectionWraps
+    // Start selection in bottom-left corner (now index 0)
+    self.selectedIndex = 0
+
+    self.slotMenu = SlotMenu()
+    self.slotMenu.offset = Point(2, 0)  // 2px right offset
+    self.slotMenu.onAction = { [weak self] action, slotIndex in
+      self?.onSlotAction?(action, slotIndex)
+    }
+  }
 
   public init(
     columns: Int,
     rows: Int,
     slotSize: Float = 80.0,
-    spacing: Float = 2.0
+    spacing: Float = 2.0,
+    cornerRadius: Float = 3.0,
+    radialGradientStrength: Float = 0.6,
+    selectionWraps: Bool = false
   ) {
     self.columns = columns
     self.rows = rows
     self.slotSize = slotSize
     self.spacing = spacing
-
+    self.cornerRadius = cornerRadius
+    self.radialGradientStrength = radialGradientStrength
+    self.selectionWraps = selectionWraps
     // Start selection in bottom-left corner (now index 0)
     self.selectedIndex = 0
+
+    self.slotMenu = SlotMenu()
+    self.slotMenu.offset = Point(3, 0)
+    self.slotMenu.onAction = { [weak self] action, slotIndex in
+      self?.onSlotAction?(action, slotIndex)
+    }
   }
 
   // MARK: - Public Methods
@@ -137,6 +167,7 @@ public final class SlotGrid {
 
   /// Move selection in a direction
   /// Returns true if the selection actually moved, false if it hit an edge and wrapping is disabled
+  @discardableResult
   public func moveSelection(direction: Direction) -> Bool {
     let currentCol = selectedIndex % columns
     let currentRow = selectedIndex / columns
@@ -188,21 +219,124 @@ public final class SlotGrid {
     return false
   }
 
+  // MARK: - Input Handling
+
+  /// Handle keyboard input for grid navigation and menu
+  public func handleKey(_ key: Keyboard.Key) -> Bool {
+    // Handle menu navigation if menu is visible
+    if slotMenu.isVisible {
+      if slotMenu.handleKey(key) {
+        return true
+      }
+    }
+
+    switch key {
+    case .w, .up:
+      return moveSelection(direction: .down)  // W/Up moves down
+    case .s, .down:
+      return moveSelection(direction: .up)  // S/Down moves up
+    case .a, .left:
+      return moveSelection(direction: .left)
+    case .d, .right:
+      return moveSelection(direction: .right)
+    case .enter:
+      // Show menu for selected slot
+      showMenuForSelectedSlot()
+      return true
+    case .escape:
+      if slotMenu.isVisible {
+        slotMenu.hide()
+        return true
+      }
+    default:
+      return false
+    }
+    return false
+  }
+
+  /// Handle mouse movement for hover effects and menu
+  public func handleMouseMove(at position: Point) {
+    if slotMenu.isVisible {
+      slotMenu.updateMouse(at: position)
+    } else {
+      updateHover(at: position)
+    }
+  }
+
+  /// Handle mouse click for selection and menu
+  public func handleMouseClick(at position: Point) -> Bool {
+    if slotMenu.isVisible {
+      // Handle menu click
+      if slotMenu.handleClick(at: position) {
+        // Menu item was clicked, menu is now hidden
+        return true
+      } else {
+        // Clicked outside menu, hide it
+        slotMenu.hide()
+        return false
+      }
+    } else {
+      // Select slot and show menu
+      if let slotIndex = slotIndex(at: position) {
+        setSelected(slotIndex)
+        showMenuForSlot(slotIndex, at: position)
+        return true
+      }
+    }
+    return false
+  }
+
+  // MARK: - Menu Management
+
+  /// Show menu for the currently selected slot
+  private func showMenuForSelectedSlot() {
+    let slotPosition = slotPosition(at: selectedIndex)
+    let slotCenter = Point(
+      slotPosition.x + slotSize * 0.5,
+      slotPosition.y + slotSize * 0.5
+    )
+    showMenuForSlot(selectedIndex, at: slotCenter, openedWithKeyboard: true)
+  }
+
+  /// Show menu for a specific slot
+  private func showMenuForSlot(_ slotIndex: Int, at position: Point, openedWithKeyboard: Bool = false) {
+    let slotPosition = slotPosition(at: slotIndex)
+    let slotCenter = Point(
+      slotPosition.x + slotSize * 0.5,
+      slotPosition.y + slotSize * 0.5
+    )
+    slotMenu.showForSlot(
+      at: slotCenter,
+      slotIndex: slotIndex,
+      slotPosition: slotPosition,
+      availableActions: [.use, .inspect, .combine, .discard],
+      openedWithKeyboard: openedWithKeyboard,
+      slotSize: Size(slotSize, slotSize)
+    )
+    UISound.select()
+  }
+
+  /// Update menu animations
+  public func update(deltaTime: Float) {
+    slotMenu.update(deltaTime: deltaTime)
+  }
+
   // MARK: - Rendering
 
-  /// Draw the slot grid
+  /// Draw the slot grid and menu
   public func draw() {
     for i in 0..<(columns * rows) {
-      let slotPos = slotPosition(at: i)
-      let centerPos = Point(
-        slotPos.x + slotSize * 0.5,
-        slotPos.y + slotSize * 0.5
+      let slotPosition = slotPosition(at: i)
+      let centerPosition = Point(
+        slotPosition.x + slotSize * 0.5,
+        slotPosition.y + slotSize * 0.5
       )
 
       // Determine slot color based on state
       var currentSlotColor = slotColor
       if i == selectedIndex {
-        currentSlotColor = selectedSlotColor
+        // Use active color when menu is open, selected color otherwise
+        currentSlotColor = slotMenu.isVisible ? Color.slotActive : selectedSlotColor
       } else if i == hoveredIndex {
         currentSlotColor = hoveredSlotColor
       }
@@ -220,7 +354,7 @@ public final class SlotGrid {
       // Draw the slot
       slotEffect.draw { shader in
         shader.setVec2("uPanelSize", value: (slotSize, slotSize))
-        shader.setVec2("uPanelCenter", value: (centerPos.x, centerPos.y))
+        shader.setVec2("uPanelCenter", value: (centerPosition.x, centerPosition.y))
         shader.setFloat("uBorderThickness", value: borderThickness)
         shader.setFloat("uCornerRadius", value: cornerRadius)
         shader.setFloat("uNoiseScale", value: noiseScale)
@@ -236,6 +370,9 @@ public final class SlotGrid {
         shader.setVec3("uBorderShadow", value: (x: borderShadow.red, y: borderShadow.green, z: borderShadow.blue))
       }
     }
+
+    // Draw the context menu
+    slotMenu.draw()
   }
 }
 

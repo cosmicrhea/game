@@ -201,7 +201,7 @@ extension Rect {
   ///   - distance: The distance from the edge to divide at.
   ///   - edge: The edge to divide from.
   /// - Returns: A tuple containing the slice (the divided portion) and the remainder.
-  public func divided(atDistance distance: Float, from edge: CGRectEdge) -> (slice: Rect, remainder: Rect) {
+  public func divided(atDistance distance: Float, from edge: RectEdge) -> (slice: Rect, remainder: Rect) {
     switch edge {
     case .minXEdge:
       let slice = Rect(x: origin.x, y: origin.y, width: distance, height: size.height)
@@ -283,7 +283,7 @@ extension Rect {
 }
 
 /// Edge enumeration for rectangle division operations.
-public enum CGRectEdge {
+public enum RectEdge {
   case minXEdge
   case minYEdge
   case maxXEdge

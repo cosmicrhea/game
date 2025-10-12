@@ -33,7 +33,7 @@ final class TextEffectsDemo: RenderLoop {
         )
       ),
       (
-        "Document Viewer",
+        "Document View",
         TextStyle(
           fontName: "Creato Display Medium",
           fontSize: 24,

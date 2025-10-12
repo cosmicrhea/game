@@ -4,7 +4,7 @@ import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
-  name: "Glass",
+  name: "Red Glass",
 
   platforms: [
     .macOS(.v13),
@@ -13,14 +13,14 @@ let package = Package(
   ],
 
   products: [
-    .executable(name: "Glass", targets: ["Glass"])
+    .executable(name: "Red Glass", targets: ["Glass"])
   ],
 
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
-    .package(url: "https://github.com/swiftlang/swift-markdown.git", branch: "main"),
+    .package(url: "https://github.com/swiftlang/swift-markdown", branch: "main"),
     .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
     .package(url: "https://github.com/apple/swift-syntax", from: "509.0.0"),
 
@@ -34,9 +34,11 @@ let package = Package(
     .package(path: "../glass-deps/gl-math"),
     .package(path: "../glass-deps/glfw-swift"),
     .package(path: "../glass-deps/jolt"),
+    .package(path: "../glass-deps/libtess2"),
+    .package(path: "../glass-deps/nanosvg"),
+    .package(path: "../glass-deps/stb-perlin"),
     .package(path: "../glass-deps/stb-rect-pack"),
     .package(path: "../glass-deps/stb-truetype"),
-    // .package(path: "../glass-deps/swift-cross-ui"),
   ],
 
   targets: [
@@ -62,11 +64,11 @@ let package = Package(
         .product(name: "GLMath", package: "gl-math"),
         .product(name: "GLFW", package: "glfw-swift"),
         .product(name: "Jolt", package: "jolt"),
+        .product(name: "Tess", package: "libtess2"),
+        .product(name: "NanoSVG", package: "nanosvg"),
+        .product(name: "STBPerlin", package: "stb-perlin"),
         .product(name: "STBRectPack", package: "stb-rect-pack"),
         .product(name: "STBTrueType", package: "stb-truetype"),
-
-        // .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
-        // .product(name: "DefaultBackend", package: "swift-cross-ui"),
       ],
 
       path: "./",
@@ -75,6 +77,7 @@ let package = Package(
         // "Documentation",
         "Sources/Assets",
         "Sources/Core/EditorMacros",
+        "Plugins",
         "NOTES.md",
       ],
 
@@ -101,6 +104,10 @@ let package = Package(
 
       linkerSettings: [
         .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
+      ],
+
+      plugins: [
+        .plugin(name: "VersionGenerator")
       ]
     ),
 
@@ -112,6 +119,12 @@ let package = Package(
         .product(name: "Collections", package: "swift-collections"),
       ],
       path: "Sources/Core/EditorMacros",
+    ),
+
+    .plugin(
+      name: "VersionGenerator",
+      capability: .buildTool(),
+      path: "Plugins"
     ),
   ]
 )

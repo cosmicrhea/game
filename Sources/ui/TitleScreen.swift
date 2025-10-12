@@ -1,22 +1,12 @@
-//
-//  TitleScreen.swift
-//  Glass
-//
-//  Created by Freya Alminde on 10/11/25.
-//
-
-import GL
 import GLFW
-//import CGLFW3
-import GLMath
-
-struct MenuItem {
-  var title: String
-  var disabled: Bool = false
-}
 
 final class TitleScreen: RenderLoop {
   private var deltaTime: Float = 0.0
+
+  struct MenuItem {
+    var title: String
+    var disabled: Bool = false
+  }
 
   private var selectedIndex: Int = 0
   private let menuItems = [
@@ -52,16 +42,11 @@ final class TitleScreen: RenderLoop {
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
-    case .up, .w:
-      cycleSelection(direction: -1)
-    case .down, .s:
-      cycleSelection(direction: +1)
-    case .enter, .space:
-      handleMenuSelection()
-    case .escape:
-      break
-    default:
-      break
+    case .up, .w: cycleSelection(direction: -1)
+    case .down, .s: cycleSelection(direction: +1)
+    case .enter, .space: handleMenuSelection()
+    case .escape: break
+    default: break
     }
   }
 
@@ -204,9 +189,7 @@ final class TitleScreen: RenderLoop {
     }
 
     // Draw version text in bottom left corner
-    //    let versionText = "Version 0.40 • Everything is subject to change"
-    let versionText = "v0.41"
-    //    let versionSize = versionText.size(with: .version)
+    let versionText = "v\(Engine.versionString)"
     let versionX: Float = 56
     let versionY: Float = 20
     versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
@@ -215,7 +198,6 @@ final class TitleScreen: RenderLoop {
     if let prompts = InputPromptGroups.groups["Menu Root"] {
       inputPrompts.drawHorizontal(
         prompts: prompts,
-        inputSource: .keyboardMouse,
         windowSize: (Int32(WIDTH), Int32(HEIGHT)),
         origin: (Float(WIDTH) - 56, 12),
         anchor: .bottomRight

@@ -17,6 +17,8 @@ class MapView: RenderLoop {
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid
 
+  private let inputPrompts = InputPrompts()
+
   func update(deltaTime: Float) {
     // Update any animations or effects
     // For now, just a placeholder
@@ -32,6 +34,15 @@ class MapView: RenderLoop {
       shader.setColor("uBackgroundColor", value: backgroundColor)
       shader.setColor("uGridColor", value: gridColor)
       shader.setFloat("uGridThickness", value: gridThickness)
+    }
+
+    if let prompts = InputPromptGroups.groups["Map View"] {
+      inputPrompts.drawHorizontal(
+        prompts: prompts,
+        windowSize: (Int32(WIDTH), Int32(HEIGHT)),
+        origin: (Float(WIDTH) - 56, 12),
+        anchor: .bottomRight
+      )
     }
   }
 }

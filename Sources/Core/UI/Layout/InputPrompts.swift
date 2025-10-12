@@ -16,9 +16,9 @@ public final class InputPrompts {
   /// Target icon height in pixels. If set, icons are scaled to this height preserving aspect.
   public var targetIconHeight: Float? = 32
   /// Icon opacity (0.0 = transparent, 1.0 = opaque)
-  public var iconOpacity: Float = 0.75
+  public var iconOpacity: Float = 0.5
   /// Label color (R, G, B, A)
-  public var labelColor: (Float, Float, Float, Float) = (1, 1, 1, 0.95)
+  public var labelColor: (Float, Float, Float, Float) = (1, 1, 1, 0.6)
 
   private let textStyle: TextStyle
 
@@ -114,7 +114,7 @@ public final class InputPrompts {
       let groupTop = y + (maxHeight - groupHeight) * 0.5
       let iconY = groupTop + (groupHeight - maxIconHeight) * 0.5
       let labelBaselineY =
-        groupTop + (groupHeight - lineHeight) * 0.5 + textStyle.fontSize * 0.8 + labelBaselineOffset
+        groupTop + (groupHeight - lineHeight) * 0.5 + textStyle.fontSize * 0.9 + labelBaselineOffset
 
       var iconX = x
       for (i, name) in g.iconNames.enumerated() {
@@ -125,6 +125,7 @@ public final class InputPrompts {
           atlas.draw(
             name: name,
             in: Rect(x: iconX, y: dy, width: drawSize.w, height: drawSize.h),
+            tint: .white.withAlphaComponent(iconOpacity),
             context: GraphicsContext.current
           )
           iconX += drawSize.w
@@ -207,7 +208,7 @@ public final class InputPrompts {
       let groupTop = y + (maxHeight - m.height) * 0.5
       let iconY = groupTop + (m.height - m.maxIconHeight) * 0.5
       let labelBaselineY =
-        groupTop + (m.height - lineHeight) * 0.5 + textStyle.fontSize * 0.8 + labelBaselineOffset
+        groupTop + (m.height - lineHeight) * 0.5 + textStyle.fontSize * 0.9 + labelBaselineOffset
 
       var iconX = x
       for (i, name) in g.iconNames.enumerated() {
@@ -218,6 +219,7 @@ public final class InputPrompts {
           atlas.draw(
             name: name,
             in: Rect(x: iconX, y: dy, width: drawSize.w, height: drawSize.h),
+            tint: .white.withAlphaComponent(iconOpacity),
             context: GraphicsContext.current
           )
           iconX += drawSize.w
@@ -257,7 +259,7 @@ public final class InputPrompts {
   /// Ordered overload: preserves explicit label ordering using OrderedDictionary
   public func drawHorizontal(
     prompts: OrderedDictionary<String, [[String]]>,
-    inputSource: InputSource,
+    inputSource: InputSource = .player1,
     windowSize: (w: Int32, h: Int32),
     origin: (x: Float, y: Float),
     anchor: Anchor

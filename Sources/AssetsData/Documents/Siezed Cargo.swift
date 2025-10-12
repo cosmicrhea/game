@@ -1,7 +1,7 @@
 extension Document {
   static let siezedCargo = Document(
     id: "SIEZED_CARGO",
-    displayName: "Siezed Cargo",
+    displayName: "Cargo Memo",
     image: Image("Items/Documents/siezed_cargo.png"),
 
     frontMatter: """
@@ -35,11 +35,11 @@ extension Document {
       """
       Flagged Irregularities:
 
-      - Weight discrepancy: Declared 720 kg, actual 1190 kg
+      - Weight discrepancy: Declared 720 kg, actual 1190 kg.
 
-      - Seal tampering on 6 of 24 containers
+      - Seal tampering on 6 of 24 containers.
 
-      - Internal radiation spike logged at Øresund checkpoint
+      - Internal radiation spike logged at Øresund checkpoint.
       """,
       // "Markings on crate interiors resemble fractal growth patterns — not consistent with packing materials."
 

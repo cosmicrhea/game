@@ -1,6 +1,6 @@
-# Glass
+# glAss
 
-Glass is a survival horror game for Mac, PC, and consoles. Taking place in Denmark, you play as [Name], an agent for the DDIS.
+The game is a survival horror game for Mac, PC, and consoles. Taking place in Denmark, you play as [Name], an agent for the DDIS.
 
 ## Story & Location Overview
 
@@ -189,7 +189,7 @@ Protag is popping the trunk of the stranded car. There's not much in there.
 Dan… Where’s the standard loadout?
 
 [PARTNER]
-I– I didn’t lack it. We’ve been at the farm all week. I—i—i didn’t pack it today.
+I– I didn’t pack it. We’ve been at the farm all week. I—i—i didn’t pack it today.
 
 [PROTAG]
 Dan…

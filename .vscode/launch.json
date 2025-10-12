@@ -35,6 +35,24 @@
       "name": "Release glAss()",
       "program": "${workspaceFolder:glass}/.build/release/glAss()",
       "preLaunchTask": "swift: Build Release glAss()"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Debug Red Glass",
+      "program": "${workspaceFolder:glass}/.build/debug/Red Glass",
+      "preLaunchTask": "swift: Build Debug Red Glass"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Release Red Glass",
+      "program": "${workspaceFolder:glass}/.build/release/Red Glass",
+      "preLaunchTask": "swift: Build Release Red Glass"
     }
   ]
 }
