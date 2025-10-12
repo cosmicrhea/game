@@ -35,6 +35,10 @@ public final class SlotGrid {
   // MARK: - Tinting
   public var tint: Color? = nil  // Optional tint color for slots
 
+  // MARK: - Selection Behavior
+  /// Whether selection wraps around edges.
+  public var selectionWraps: Bool = false
+
   // MARK: - Selection Colors
   public var selectedSlotColor = Color(0.15, 0.15, 0.15)
   public var hoveredSlotColor = Color(0.12, 0.12, 0.12)
@@ -132,7 +136,8 @@ public final class SlotGrid {
   }
 
   /// Move selection in a direction
-  public func moveSelection(direction: Direction) {
+  /// Returns true if the selection actually moved, false if it hit an edge and wrapping is disabled
+  public func moveSelection(direction: Direction) -> Bool {
     let currentCol = selectedIndex % columns
     let currentRow = selectedIndex / columns
 
@@ -141,19 +146,46 @@ public final class SlotGrid {
 
     switch direction {
     case .up:
-      newRow = min(rows - 1, currentRow + 1)
+      if currentRow < rows - 1 {
+        newRow = currentRow + 1
+      } else if selectionWraps {
+        newRow = 0  // Wrap to bottom row
+      } else {
+        return false  // Hit top edge, no wrapping
+      }
     case .right:
-      newCol = min(columns - 1, currentCol + 1)
+      if currentCol < columns - 1 {
+        newCol = currentCol + 1
+      } else if selectionWraps {
+        newCol = 0  // Wrap to leftmost column
+      } else {
+        return false  // Hit right edge, no wrapping
+      }
     case .down:
-      newRow = max(0, currentRow - 1)
+      if currentRow > 0 {
+        newRow = currentRow - 1
+      } else if selectionWraps {
+        newRow = rows - 1  // Wrap to top row
+      } else {
+        return false  // Hit bottom edge, no wrapping
+      }
     case .left:
-      newCol = max(0, currentCol - 1)
+      if currentCol > 0 {
+        newCol = currentCol - 1
+      } else if selectionWraps {
+        newCol = columns - 1  // Wrap to rightmost column
+      } else {
+        return false  // Hit left edge, no wrapping
+      }
     }
 
     let newIndex = newRow * columns + newCol
     if newIndex != selectedIndex {
       selectedIndex = newIndex
+      UISound.navigate()
+      return true
     }
+    return false
   }
 
   // MARK: - Rendering

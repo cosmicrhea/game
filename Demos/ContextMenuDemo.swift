@@ -84,6 +84,9 @@ final class ContextMenuDemo: RenderLoop {
       spacing = max(0, spacing - 1)
       slotGrid = SlotGrid(columns: gridColumns, rows: gridRows, slotSize: slotSize, spacing: spacing)
       recenterGrid()
+    case .t:
+      // Toggle selection wrapping
+      slotGrid.selectionWraps.toggle()
     case .r:
       // Reset
       gridColumns = 4
@@ -153,6 +156,7 @@ final class ContextMenuDemo: RenderLoop {
       "Menu: WASD/Arrows to navigate, ENTER to select",
       "ESC: Close menu or exit",
       "+/-: Change spacing",
+      "T: Toggle selection wrapping",
       "R: Reset",
     ]
 
@@ -168,6 +172,7 @@ final class ContextMenuDemo: RenderLoop {
     let info = [
       "Grid: \(gridColumns)x\(gridRows)",
       "Spacing: \(Int(spacing))px",
+      "Selection Wraps: \(slotGrid.selectionWraps ? "ON" : "OFF")",
       "Selected: \(slotGrid.selectedIndex)",
       "Hovered: \(slotGrid.hoveredIndex?.description ?? "none")",
       "Menu: \(slotMenu.isVisible ? "Visible" : "Hidden")",
@@ -211,6 +216,7 @@ final class ContextMenuDemo: RenderLoop {
       slotSize: Size(slotSize, slotSize)
     )
     menuTriggeredSlot = slotIndex
+    UISound.select()
   }
 
   private func handleSlotAction(_ action: SlotMenu.SlotAction, slotIndex: Int) {

@@ -19,7 +19,7 @@
       }
     }
 
-    @StateObject private var loopManager = LoopManager(initialLoop: activeLoop)
+    @StateObject private var loopManager = LoopManager(initialLoop: Engine.shared.activeLoop)
 
     var body: some View {
       VStack {
@@ -37,21 +37,21 @@
           }
         }
         .formStyle(.grouped)
-//        .padding(.horizontal, -9)
-//        .padding(.top, -3)
+        //        .padding(.horizontal, -9)
+        //        .padding(.top, -3)
         .frame(width: 320)
         .fixedSize()
-//        .padding(.bottom, 3)
+        //        .padding(.bottom, 3)
         .scrollDisabled(true)
         .scrollContentBackground(.hidden)
-//        .background(.ultraThinMaterial)
-//        .clipShape(RoundedRectangle(cornerRadius: 7))
-//        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.ultraThickMaterial))
+        //        .background(.ultraThinMaterial)
+        //        .clipShape(RoundedRectangle(cornerRadius: 7))
+        //        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.ultraThickMaterial))
         .padding(5)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .onReceive(NotificationCenter.default.publisher(for: .loopChanged)) { _ in
-        loopManager.currentLoop = activeLoop
+        loopManager.currentLoop = Engine.shared.activeLoop
       }
     }
   }

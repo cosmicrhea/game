@@ -139,12 +139,12 @@ final class TitleScreen: RenderLoop {
     case "Give Up":
       Task { @MainActor in
         #if os(macOS)
-          window.nsWindow?.animationBehavior = .utilityWindow
-          window.nsWindow?.close()
+          Engine.shared.window.nsWindow?.animationBehavior = .utilityWindow
+          Engine.shared.window.nsWindow?.close()
           try? await Task.sleep(nanoseconds: 500_000_000)
         #endif
 
-        window.close()
+        Engine.shared.window.close()
       }
     default:
       break

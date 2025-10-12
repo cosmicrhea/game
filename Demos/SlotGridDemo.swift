@@ -81,6 +81,9 @@ final class SlotGridDemo: RenderLoop {
     case .c:
       radialGradientStrength = max(0.0, radialGradientStrength - 0.05)
       slotGrid.radialGradientStrength = radialGradientStrength
+    case .t:
+      // Toggle selection wrapping
+      slotGrid.selectionWraps.toggle()
     case .r:
       // Reset to defaults
       gridColumns = 6
@@ -133,6 +136,7 @@ final class SlotGridDemo: RenderLoop {
       "+/-: Change spacing",
       "Q/E: Corner radius",
       "Z/C: Radial gradient",
+      "T: Toggle selection wrapping",
       "Mouse: Hover & click slots",
       "R: Reset to defaults",
       "ESC: Exit",
@@ -153,6 +157,7 @@ final class SlotGridDemo: RenderLoop {
       "Spacing: \(Int(spacing))px",
       "Corner Radius: \(Int(cornerRadius))px",
       "Radial Gradient: \(String(format: "%.2f", radialGradientStrength))",
+      "Selection Wraps: \(slotGrid.selectionWraps ? "ON" : "OFF")",
       "Selected: \(slotGrid.selectedIndex)",
       "Hovered: \(slotGrid.hoveredIndex?.description ?? "none")",
     ]

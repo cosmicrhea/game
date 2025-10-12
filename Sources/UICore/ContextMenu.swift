@@ -154,6 +154,7 @@ public class ContextMenu {
       let item = menuItems[clickedIndex]
       if item.isEnabled {
         item.action()
+        UISound.select()
         hide()
         return true
       }
@@ -168,10 +169,20 @@ public class ContextMenu {
 
     switch key {
     case .up, .w:
-      selectedIndex = max(0, selectedIndex - 1)
+      if selectedIndex > 0 {
+        selectedIndex -= 1
+      } else {
+        selectedIndex = menuItems.count - 1  // Wrap to last item
+      }
+      UISound.navigate()
       return true
     case .down, .s:
-      selectedIndex = min(menuItems.count - 1, selectedIndex + 1)
+      if selectedIndex < menuItems.count - 1 {
+        selectedIndex += 1
+      } else {
+        selectedIndex = 0  // Wrap to first item
+      }
+      UISound.navigate()
       return true
     case .left, .a:
       return true
@@ -182,6 +193,7 @@ public class ContextMenu {
         let item = menuItems[selectedIndex]
         if item.isEnabled {
           item.action()
+          UISound.select()
           hide()
         }
       }

@@ -34,6 +34,8 @@ struct Document: Sendable {
 }
 
 final class DocumentView: RenderLoop {
+  private static let backgroundOpacity: Float = 1/3
+
   let document: Document
 
   // Completion callback for when document is finished
@@ -55,8 +57,8 @@ final class DocumentView: RenderLoop {
   private let pageAnimationEasing: Easing = .easeInOutCubic
 
   // Background opacity animation
-  private var targetBackgroundOpacity: Float = 0.25
-  private var currentBackgroundOpacity: Float = 0.25
+  private var targetBackgroundOpacity: Float = DocumentView.backgroundOpacity
+  private var currentBackgroundOpacity: Float = DocumentView.backgroundOpacity
   private var backgroundOpacityAnimationTime: Float = 0.0
   private var isBackgroundAnimating: Bool = false
   private let backgroundAnimationDuration: Float = 0.5
@@ -70,7 +72,7 @@ final class DocumentView: RenderLoop {
     // Initialize background opacity based on first page
     let pageText = getCurrentPageText()
     let isCurrentPageEmpty = pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    currentBackgroundOpacity = isCurrentPageEmpty ? 1.0 : 0.25
+    currentBackgroundOpacity = isCurrentPageEmpty ? 1.0 : Self.backgroundOpacity
     targetBackgroundOpacity = currentBackgroundOpacity
   }
 
@@ -179,7 +181,7 @@ final class DocumentView: RenderLoop {
   private func startBackgroundOpacityAnimation() {
     let pageText = getCurrentPageText()
     let isCurrentPageEmpty = pageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    let newTargetOpacity: Float = isCurrentPageEmpty ? 1.0 : 0.25
+    let newTargetOpacity: Float = isCurrentPageEmpty ? 1.0 : Self.backgroundOpacity
 
     if newTargetOpacity != targetBackgroundOpacity {
       targetBackgroundOpacity = newTargetOpacity

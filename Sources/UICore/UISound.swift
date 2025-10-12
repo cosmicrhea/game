@@ -3,9 +3,11 @@ import class Foundation.Bundle
 
 extension UISound {
   static func select() { play("RE_SELECT02") }
+//  static func select() { play("Minimalist10") }
   static func shutter() { play("shutter") }
 
-  static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
+//  static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
+  static func navigate() { play("Minimalist8") }
 
   static func pageTurn() { play(["page_1", "page_2", "page_3"]) }
 }
