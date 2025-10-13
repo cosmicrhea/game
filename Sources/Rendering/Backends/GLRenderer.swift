@@ -7,6 +7,7 @@ public final class GLRenderer: Renderer {
   private let imageProgram: GLProgram
   private let pathProgram: GLProgram
   private let textProgram: GLProgram
+  private let fboProgram: GLProgram
 
   // Clear color state
   private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
@@ -57,6 +58,7 @@ public final class GLRenderer: Renderer {
     self.imageProgram = try! GLProgram("UI/image", "UI/image")
     self.pathProgram = try! GLProgram("Common/path", "Common/path")
     self.textProgram = try! GLProgram("UI/text")
+    self.fboProgram = try! GLProgram("UI/fbo", "UI/fbo")
 
     // Enable depth testing
     glEnable(GL_DEPTH_TEST)
@@ -706,44 +708,29 @@ public final class GLRenderer: Renderer {
 
     print("🎨 Drawing FBO \(framebufferID) with transform: \(transform?.translation ?? Point(0,0)), alpha: \(alpha)")
 
-    // Use the image program to draw the framebuffer texture
+    // Use the FBO program to draw the framebuffer texture
     withUIContext {
-      imageProgram.use()
+      fboProgram.use()
 
-      // Set up MVP matrix (orthographic projection)
+      // Get viewport for coordinate conversion
       var viewport: [GLint] = [0, 0, 0, 0]
       glGetIntegerv(GL_VIEWPORT, &viewport)
       let W = Float(viewport[2])
       let H = Float(viewport[3])
 
       // Create orthographic projection matrix
-      let mvp = mat4(
-        vec4(2.0 / W, 0, 0, 0),
-        vec4(0, -2.0 / H, 0, 0),
-        vec4(0, 0, -2.0, 0),
-        vec4(-1, 1, -1, 1)
-      )
-      imageProgram.setMat4("uMVP", value: mvp)
+      let projection = GLMath.ortho(0, W, H, 0)
 
-      // Set tint color with alpha
-      let tintColor = Color(1.0, 1.0, 1.0, alpha)
-      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+      // Convert transform to clip space
+      let transformMatrix = transform?.toMatrix() ?? Transform2D().toMatrix()
+      let mvp = projection * transformMatrix
+      fboProgram.setMat4("uTransform", value: mvp)
 
-      // Apply transform to the rect
-      let transformedRect: Rect
-      if let transform = transform {
-        transformedRect = Rect(
-          x: rect.origin.x + transform.translation.x,
-          y: rect.origin.y + transform.translation.y,
-          width: rect.size.width * transform.scale.x,
-          height: rect.size.height * transform.scale.y
-        )
-      } else {
-        transformedRect = rect
-      }
+      // Set alpha
+      fboProgram.setFloat("uAlpha", value: alpha)
 
       // Draw the framebuffer texture
-      framebuffer.drawTexture(in: transformedRect, program: imageProgram)
+      framebuffer.drawTexture(in: rect, program: fboProgram)
     }
   }
 }

@@ -20,8 +20,8 @@ final class TitleScreenMenu: RenderLoop {
       },
       ListMenu.MenuItem(id: "options", label: "Options") {
         // Navigate to options screen
-        let optionsMenu = OptionsScreenMenu(navigationStack: self.navigationStack)
-        self.navigationStack.push(optionsMenu, direction: .forward)
+        let optionsScreen = OptionsScreen(navigationStack: self.navigationStack)
+        self.navigationStack.push(optionsScreen, direction: .forward)
       },
       ListMenu.MenuItem(id: "give_up", label: "Give Up") {
         Task { @MainActor in
@@ -68,10 +68,14 @@ final class TitleScreenMenu: RenderLoop {
 final class TitleScreen: RenderLoop {
   private let navigationStack: NavigationStack
   private let backgroundImage = Image("UI/title_screen.png")
+  private let promptList: PromptList
 
   init() {
-    // Create navigation stack with title screen background
-    navigationStack = NavigationStack(backgroundImage: backgroundImage, promptGroup: .menuRoot)
+    // Create prompt list for title screen
+    promptList = PromptList(.menuRoot)
+
+    // Create navigation stack (no background, no prompts - TitleScreen handles those)
+    navigationStack = NavigationStack()
 
     // Set the initial menu
     let titleMenu = TitleScreenMenu(navigationStack: navigationStack)
@@ -107,6 +111,10 @@ final class TitleScreen: RenderLoop {
 
     // Draw the navigation stack (which includes the menu)
     navigationStack.draw()
+
+    // Draw prompts (no animation)
+    promptList.showCalloutBackground = false
+    promptList.draw()
 
     // Draw version text in bottom left corner
     let versionText = "v\(Engine.versionString)"

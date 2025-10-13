@@ -1,7 +1,7 @@
 import GLFW
 
-/// Menu-only component for the options screen
-final class OptionsScreenMenu: RenderLoop {
+/// Simple options screen that's just a ListMenu
+final class OptionsScreen: RenderLoop {
   private let listMenu = ListMenu()
   private let navigationStack: NavigationStack
 
@@ -50,6 +50,13 @@ final class OptionsScreenMenu: RenderLoop {
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    // Handle ESC key to go back
+    if key == .escape {
+      UISound.select()
+      navigationStack.pop()
+      return
+    }
+
     listMenu.handleKeyPressed(key)
   }
 
@@ -66,53 +73,7 @@ final class OptionsScreenMenu: RenderLoop {
   }
 
   func draw() {
-    // Draw the menu using ListMenu
+    // Just draw the menu - no background, no extra stuff
     listMenu.draw()
-  }
-}
-
-/// Full options screen that renders a NavigationStack
-final class OptionsScreen: RenderLoop {
-  private let navigationStack: NavigationStack
-  private let backgroundImage = Image("UI/title_screen.png")  // Use same background for now
-
-  init() {
-    // Create navigation stack with options screen background
-    navigationStack = NavigationStack(backgroundImage: backgroundImage, promptGroup: .menuRoot)
-
-    // Set the initial menu
-    let optionsMenu = OptionsScreenMenu(navigationStack: navigationStack)
-    navigationStack.setInitialScreen(optionsMenu)
-  }
-
-  func update(deltaTime: Float) {
-    navigationStack.update(deltaTime: deltaTime)
-  }
-
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    navigationStack.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
-  }
-
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
-    navigationStack.onMouseButtonPressed(window: window, button: button, mods: mods)
-  }
-
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
-    navigationStack.onMouseMove(window: window, x: x, y: y)
-  }
-
-  func draw() {
-    // Set clear color to black
-    GraphicsContext.current?.renderer.setClearColor(.black)
-
-    let screenWidth = Float(WIDTH)
-    let screenHeight = Float(HEIGHT)
-
-    // Draw background image
-    let backgroundRect = Rect(x: 0, y: 0, width: screenWidth, height: screenHeight)
-    backgroundImage.draw(in: backgroundRect)
-
-    // Draw the navigation stack (which includes the menu)
-    navigationStack.draw()
   }
 }

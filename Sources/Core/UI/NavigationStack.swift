@@ -20,10 +20,6 @@ public class NavigationStack: RenderLoop {
   private var nextScreenFBO: UInt64?
   private var screenSize: Size = Size(0, 0)
 
-  // MARK: - Background and UI (don't animate)
-  private let backgroundImage: Image?
-  private let promptList: PromptList
-
   public enum TransitionDirection {
     case forward  // New screen slides in from right
     case backward  // New screen slides in from left
@@ -31,9 +27,7 @@ public class NavigationStack: RenderLoop {
 
   // MARK: - Initialization
 
-  public init(backgroundImage: Image? = nil, promptGroup: PromptGroup = .menuRoot) {
-    self.backgroundImage = backgroundImage
-    self.promptList = PromptList(promptGroup)
+  public init() {
   }
 
   // MARK: - Navigation Methods
@@ -72,12 +66,7 @@ public class NavigationStack: RenderLoop {
       return
     }
 
-    // Remove current screen
-    let currentScreen = screens.removeLast()
-    currentScreen.onDetach(window: Engine.shared.window)
-    print("🔙 Removed screen, remaining: \(screens.count)")
-
-    // Start transition back
+    // Start transition back (don't remove screen yet)
     transitionDirection = .backward
     isTransitioning = true
     transitionProgress = 0.0
@@ -152,10 +141,6 @@ public class NavigationStack: RenderLoop {
         screens[currentIndex].draw()
       }
     }
-
-    // Draw prompts (no animation)
-    promptList.showCalloutBackground = false
-    promptList.draw()
   }
 
   // MARK: - Private Methods
@@ -177,18 +162,43 @@ public class NavigationStack: RenderLoop {
     if transitionDirection == .forward {
       currentIndex = screens.count - 1
     } else {
-      // Already updated in pop()
+      // Remove the current screen after backward transition
+      if screens.count > 1 {
+        let removedScreen = screens.removeLast()
+        removedScreen.onDetach(window: Engine.shared.window)
+        // Update currentIndex to point to the new last screen
+        currentIndex = screens.count - 1
+        print("🔙 Removed screen after transition, remaining: \(screens.count)")
+        print("🔙 Current screen is now: \(type(of: screens.last!)) at index \(currentIndex)")
+      }
     }
   }
 
   private func drawTransition() {
-    guard screens.count >= 2 else {
-      print("🎨 Not enough screens for transition")
+    guard screens.count >= 1 else {
+      print("🎨 No screens for transition")
       return
     }
 
-    let currentScreen = screens[currentIndex]
-    let nextScreen = screens.count > currentIndex + 1 ? screens[currentIndex + 1] : screens.last!
+    let currentScreen: RenderLoop
+    let nextScreen: RenderLoop
+
+    if transitionDirection == .forward {
+      guard screens.count >= 2 else {
+        print("🎨 Not enough screens for forward transition")
+        return
+      }
+      currentScreen = screens[currentIndex]
+      nextScreen = screens.last!
+    } else {
+      guard screens.count >= 2 else {
+        print("🎨 Not enough screens for backward transition")
+        return
+      }
+      currentScreen = screens.last!  // Current screen (being removed)
+      nextScreen = screens[screens.count - 2]  // Previous screen (going back to)
+      print("🎨 Backward transition: current=\(type(of: currentScreen)), next=\(type(of: nextScreen))")
+    }
 
     // Create FBOs if they don't exist
     if currentScreenFBO == nil {
@@ -200,30 +210,46 @@ public class NavigationStack: RenderLoop {
       print("🎨 Created nextScreenFBO: \(nextScreenFBO ?? 0)")
     }
 
-    // Render current screen to FBO
-    if let currentFBO = currentScreenFBO {
-      print("🎨 Rendering current screen to FBO")
-      Engine.shared.renderer.beginFramebuffer(currentFBO)
-      currentScreen.draw()
-      Engine.shared.renderer.endFramebuffer()
-    }
-
-    // Render next screen to FBO
-    if let nextFBO = nextScreenFBO {
-      print("🎨 Rendering next screen to FBO")
-      Engine.shared.renderer.beginFramebuffer(nextFBO)
-      nextScreen.draw()
-      Engine.shared.renderer.endFramebuffer()
-    }
+    // Update next screen to ensure it's ready to render
+    nextScreen.update(deltaTime: 0.0)
 
     // Calculate eased progress
     let easedProgress = transitionEasing.apply(transitionProgress)
     print("🎨 Eased progress: \(easedProgress)")
 
+    // Update and render screens to FBOs every frame for live animations
+    nextScreen.update(deltaTime: 0.0)  // Update next screen for animations
+
+    // Render current screen to FBO
+    if let currentFBO = currentScreenFBO {
+      Engine.shared.renderer.beginFramebuffer(currentFBO)
+      currentScreen.draw()
+      Engine.shared.renderer.endFramebuffer()
+    }
+
+    // Render next screen to FBO (live update for animations)
+    if let nextFBO = nextScreenFBO {
+      Engine.shared.renderer.beginFramebuffer(nextFBO)
+      nextScreen.draw()
+      Engine.shared.renderer.endFramebuffer()
+    }
+
     // Calculate slide offsets
     let screenWidth = screenSize.width
-    let currentOffset = screenWidth * (1.0 - easedProgress)
-    let nextOffset = screenWidth * (1.0 - easedProgress)
+    let slideDistance: Float = 10.0
+
+    let currentOffset: Float
+    let nextOffset: Float
+
+    if transitionDirection == .forward {
+      // Forward: current slides left, next slides in from right
+      currentOffset = slideDistance * (1.0 - easedProgress)  // Positive = left (flipped coords)
+      nextOffset = slideDistance * (1.0 - easedProgress)  // Positive = from right
+    } else {
+      // Backward: current slides right, next slides in from left
+      currentOffset = -slideDistance * (1.0 - easedProgress)  // Negative = right (flipped coords)
+      nextOffset = -slideDistance * (1.0 - easedProgress)  // Negative = from left
+    }
 
     // Calculate alpha values
     let currentAlpha = 1.0 - easedProgress
@@ -231,6 +257,7 @@ public class NavigationStack: RenderLoop {
 
     print("🎨 Current offset: \(currentOffset), alpha: \(currentAlpha)")
     print("🎨 Next offset: \(nextOffset), alpha: \(nextAlpha)")
+    print("🎨 Next screen type: \(type(of: nextScreen))")
 
     // Draw current screen (sliding left, fading out)
     if let currentFBO = currentScreenFBO {
