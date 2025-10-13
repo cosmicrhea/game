@@ -12,7 +12,7 @@ public enum SlotAction: String, CaseIterable {
 
 /// A menu for slot interactions.
 @MainActor
-public final class SlotMenu: Menu {
+public final class SlotMenu: PopupMenu {
 
   // MARK: - Properties
   public var slotIndex: Int = 0

@@ -1,0 +1,268 @@
+import GLFW
+
+/// A navigation stack that manages multiple RenderLoops with smooth transitions
+@MainActor
+public class NavigationStack: RenderLoop {
+
+  // MARK: - Properties
+  private var screens: [RenderLoop] = []
+  private var currentIndex: Int = 0
+  private var isTransitioning: Bool = false
+
+  // MARK: - Transition Animation
+  private var transitionProgress: Float = 0.0
+  private var transitionDuration: Float = 0.5
+  private var transitionDirection: TransitionDirection = .forward
+  private let transitionEasing: Easing = .easeInOutCubic
+
+  // MARK: - FBO for transitions
+  private var currentScreenFBO: UInt64?
+  private var nextScreenFBO: UInt64?
+  private var screenSize: Size = Size(0, 0)
+
+  // MARK: - Background and UI (don't animate)
+  private let backgroundImage: Image?
+  private let promptList: PromptList
+
+  public enum TransitionDirection {
+    case forward  // New screen slides in from right
+    case backward  // New screen slides in from left
+  }
+
+  // MARK: - Initialization
+
+  public init(backgroundImage: Image? = nil, promptGroup: PromptGroup = .menuRoot) {
+    self.backgroundImage = backgroundImage
+    self.promptList = PromptList(promptGroup)
+  }
+
+  // MARK: - Navigation Methods
+
+  /// Push a new screen onto the stack
+  func push(_ screen: RenderLoop, direction: TransitionDirection = .forward) {
+    print("🚀 NavigationStack.push() called - direction: \(direction)")
+    guard !isTransitioning else {
+      print("🚀 Already transitioning, ignoring")
+      return
+    }
+
+    screens.append(screen)
+    transitionDirection = direction
+    isTransitioning = true
+    transitionProgress = 0.0
+
+    // Set up screen size for FBO
+    screenSize = Size(Float(WIDTH), Float(HEIGHT))
+    print("🚀 Screen size: \(screenSize)")
+
+    // Attach the new screen
+    screen.onAttach(window: Engine.shared.window)
+    print("🚀 Transition started")
+  }
+
+  /// Pop the current screen and go back to the previous one
+  public func pop() {
+    print("🔙 NavigationStack.pop() called - screens count: \(screens.count)")
+    guard screens.count > 1 else {
+      print("🔙 Can't pop - only one screen")
+      return
+    }
+    guard !isTransitioning else {
+      print("🔙 Can't pop - already transitioning")
+      return
+    }
+
+    // Remove current screen
+    let currentScreen = screens.removeLast()
+    currentScreen.onDetach(window: Engine.shared.window)
+    print("🔙 Removed screen, remaining: \(screens.count)")
+
+    // Start transition back
+    transitionDirection = .backward
+    isTransitioning = true
+    transitionProgress = 0.0
+    print("🔙 Started backward transition")
+  }
+
+  /// Set the initial screen
+  func setInitialScreen(_ screen: RenderLoop) {
+    screens = [screen]
+    currentIndex = 0
+    screen.onAttach(window: Engine.shared.window)
+  }
+
+  // MARK: - RenderLoop Implementation
+
+  public func update(deltaTime: Float) {
+    // Update current screen
+    if currentIndex < screens.count {
+      screens[currentIndex].update(deltaTime: deltaTime)
+    }
+
+    // Update transition
+    if isTransitioning {
+      transitionProgress += deltaTime / transitionDuration
+      print("🎬 Transition progress: \(transitionProgress)")
+
+      if transitionProgress >= 1.0 {
+        print("🎬 Transition complete")
+        completeTransition()
+      }
+    }
+  }
+
+  public func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    if isTransitioning {
+      // Don't handle input during transitions
+      return
+    }
+
+    if currentIndex < screens.count {
+      screens[currentIndex].onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+    }
+  }
+
+  public func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+    if isTransitioning {
+      return
+    }
+
+    if currentIndex < screens.count {
+      screens[currentIndex].onMouseButtonPressed(window: window, button: button, mods: mods)
+    }
+  }
+
+  public func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+    if isTransitioning {
+      return
+    }
+
+    if currentIndex < screens.count {
+      screens[currentIndex].onMouseMove(window: window, x: x, y: y)
+    }
+  }
+
+  public func draw() {
+    if isTransitioning {
+      print("🎨 Drawing transition")
+      drawTransition()
+    } else {
+      // Draw current screen
+      if currentIndex < screens.count {
+        screens[currentIndex].draw()
+      }
+    }
+
+    // Draw prompts (no animation)
+    promptList.showCalloutBackground = false
+    promptList.draw()
+  }
+
+  // MARK: - Private Methods
+
+  private func completeTransition() {
+    // Clean up FBOs
+    if let currentFBO = currentScreenFBO {
+      Engine.shared.renderer.destroyFramebuffer(currentFBO)
+    }
+    if let nextFBO = nextScreenFBO {
+      Engine.shared.renderer.destroyFramebuffer(nextFBO)
+    }
+    currentScreenFBO = nil
+    nextScreenFBO = nil
+
+    isTransitioning = false
+    transitionProgress = 0.0
+
+    if transitionDirection == .forward {
+      currentIndex = screens.count - 1
+    } else {
+      // Already updated in pop()
+    }
+  }
+
+  private func drawTransition() {
+    guard screens.count >= 2 else {
+      print("🎨 Not enough screens for transition")
+      return
+    }
+
+    let currentScreen = screens[currentIndex]
+    let nextScreen = screens.count > currentIndex + 1 ? screens[currentIndex + 1] : screens.last!
+
+    // Create FBOs if they don't exist
+    if currentScreenFBO == nil {
+      currentScreenFBO = Engine.shared.renderer.createFramebuffer(size: screenSize, scale: 1.0)
+      print("🎨 Created currentScreenFBO: \(currentScreenFBO ?? 0)")
+    }
+    if nextScreenFBO == nil {
+      nextScreenFBO = Engine.shared.renderer.createFramebuffer(size: screenSize, scale: 1.0)
+      print("🎨 Created nextScreenFBO: \(nextScreenFBO ?? 0)")
+    }
+
+    // Render current screen to FBO
+    if let currentFBO = currentScreenFBO {
+      print("🎨 Rendering current screen to FBO")
+      Engine.shared.renderer.beginFramebuffer(currentFBO)
+      currentScreen.draw()
+      Engine.shared.renderer.endFramebuffer()
+    }
+
+    // Render next screen to FBO
+    if let nextFBO = nextScreenFBO {
+      print("🎨 Rendering next screen to FBO")
+      Engine.shared.renderer.beginFramebuffer(nextFBO)
+      nextScreen.draw()
+      Engine.shared.renderer.endFramebuffer()
+    }
+
+    // Calculate eased progress
+    let easedProgress = transitionEasing.apply(transitionProgress)
+    print("🎨 Eased progress: \(easedProgress)")
+
+    // Calculate slide offsets
+    let screenWidth = screenSize.width
+    let currentOffset = screenWidth * (1.0 - easedProgress)
+    let nextOffset = screenWidth * (1.0 - easedProgress)
+
+    // Calculate alpha values
+    let currentAlpha = 1.0 - easedProgress
+    let nextAlpha = easedProgress
+
+    print("🎨 Current offset: \(currentOffset), alpha: \(currentAlpha)")
+    print("🎨 Next offset: \(nextOffset), alpha: \(nextAlpha)")
+
+    // Draw current screen (sliding left, fading out)
+    if let currentFBO = currentScreenFBO {
+      let currentTransform = Transform2D(
+        translation: Point(-currentOffset, 0),
+        rotation: 0,
+        scale: Point(1, 1)
+      )
+      print("🎨 Drawing current FBO with transform: \(currentTransform.translation)")
+      Engine.shared.renderer.drawFramebuffer(
+        currentFBO,
+        in: Rect(x: 0, y: 0, width: screenSize.width, height: screenSize.height),
+        transform: currentTransform,
+        alpha: currentAlpha
+      )
+    }
+
+    // Draw next screen (sliding in from right, fading in)
+    if let nextFBO = nextScreenFBO {
+      let nextStartX = transitionDirection == .forward ? screenWidth : -screenWidth
+      let nextTransform = Transform2D(
+        translation: Point(nextStartX - nextOffset, 0),
+        rotation: 0,
+        scale: Point(1, 1)
+      )
+      print("🎨 Drawing next FBO with transform: \(nextTransform.translation)")
+      Engine.shared.renderer.drawFramebuffer(
+        nextFBO,
+        in: Rect(x: 0, y: 0, width: screenSize.width, height: screenSize.height),
+        transform: nextTransform,
+        alpha: nextAlpha
+      )
+    }
+  }
+}

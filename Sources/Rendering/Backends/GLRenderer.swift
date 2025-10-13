@@ -1,5 +1,6 @@
 import Foundation
 import GL
+import GLMath
 import STBTrueType
 
 public final class GLRenderer: Renderer {
@@ -663,5 +664,86 @@ public final class GLRenderer: Renderer {
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
     glDeleteVertexArrays(1, &vao)
+  }
+
+  // MARK: - Framebuffer Objects (FBO)
+
+  private var framebuffers: [UInt64: GLFramebuffer] = [:]
+  private var nextFramebufferID: UInt64 = 1
+
+  public func createFramebuffer(size: Size, scale: Float) -> UInt64 {
+    let id = nextFramebufferID
+    nextFramebufferID += 1
+
+    let framebuffer = GLFramebuffer(size: size, scale: scale)
+    framebuffers[id] = framebuffer
+    return id
+  }
+
+  public func destroyFramebuffer(_ framebufferID: UInt64) {
+    framebuffers.removeValue(forKey: framebufferID)
+  }
+
+  public func beginFramebuffer(_ framebufferID: UInt64) {
+    guard let framebuffer = framebuffers[framebufferID] else { return }
+    framebuffer.bind()
+  }
+
+  public func endFramebuffer() {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+  }
+
+  public func drawFramebuffer(
+    _ framebufferID: UInt64,
+    in rect: Rect,
+    transform: Transform2D?,
+    alpha: Float
+  ) {
+    guard let framebuffer = framebuffers[framebufferID] else {
+      print("🎨 FBO not found: \(framebufferID)")
+      return
+    }
+
+    print("🎨 Drawing FBO \(framebufferID) with transform: \(transform?.translation ?? Point(0,0)), alpha: \(alpha)")
+
+    // Use the image program to draw the framebuffer texture
+    withUIContext {
+      imageProgram.use()
+
+      // Set up MVP matrix (orthographic projection)
+      var viewport: [GLint] = [0, 0, 0, 0]
+      glGetIntegerv(GL_VIEWPORT, &viewport)
+      let W = Float(viewport[2])
+      let H = Float(viewport[3])
+
+      // Create orthographic projection matrix
+      let mvp = mat4(
+        vec4(2.0 / W, 0, 0, 0),
+        vec4(0, -2.0 / H, 0, 0),
+        vec4(0, 0, -2.0, 0),
+        vec4(-1, 1, -1, 1)
+      )
+      imageProgram.setMat4("uMVP", value: mvp)
+
+      // Set tint color with alpha
+      let tintColor = Color(1.0, 1.0, 1.0, alpha)
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      // Apply transform to the rect
+      let transformedRect: Rect
+      if let transform = transform {
+        transformedRect = Rect(
+          x: rect.origin.x + transform.translation.x,
+          y: rect.origin.y + transform.translation.y,
+          width: rect.size.width * transform.scale.x,
+          height: rect.size.height * transform.scale.y
+        )
+      } else {
+        transformedRect = rect
+      }
+
+      // Draw the framebuffer texture
+      framebuffer.drawTexture(in: transformedRect, program: imageProgram)
+    }
   }
 }

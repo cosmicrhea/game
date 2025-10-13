@@ -27,9 +27,9 @@ public struct MenuItem {
   }
 }
 
-/// A modal context menu that can pop up anywhere on screen
+/// A modal popup menu that can appear anywhere on screen
 @MainActor
-public class Menu {
+public class PopupMenu {
 
   // MARK: - Properties
   public private(set) var isVisible: Bool = false

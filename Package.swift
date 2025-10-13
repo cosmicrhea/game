@@ -78,7 +78,6 @@ let package = Package(
         "Sources/Assets",
         "Sources/Core/Build",
         "Sources/Core/EditorMacros",
-        "Plugins",
         "NOTES.md",
         "TODO.md",
       ],
@@ -110,7 +109,7 @@ let package = Package(
       ],
 
       plugins: [
-        .plugin(name: "GlassBuildTools")
+        "GlassBuildTools"
       ]
     ),
 

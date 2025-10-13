@@ -82,4 +82,52 @@ public protocol Renderer {
   /// - Parameter block: The block to execute with UI context
   /// - Returns: The result of the block
   func withUIContext<T>(_ block: () throws -> T) rethrows -> T
+
+  // MARK: - Framebuffer Objects (FBO)
+
+  /// Creates a framebuffer object for off-screen rendering
+  /// - Parameters:
+  ///   - size: The size of the framebuffer
+  ///   - scale: The scale factor for the framebuffer
+  /// - Returns: A framebuffer ID that can be used for rendering
+  func createFramebuffer(size: Size, scale: Float) -> UInt64
+
+  /// Destroys a framebuffer object
+  /// - Parameter framebufferID: The ID of the framebuffer to destroy
+  func destroyFramebuffer(_ framebufferID: UInt64)
+
+  /// Begins rendering to a framebuffer
+  /// - Parameter framebufferID: The ID of the framebuffer to render to
+  func beginFramebuffer(_ framebufferID: UInt64)
+
+  /// Ends rendering to a framebuffer and returns to the main framebuffer
+  func endFramebuffer()
+
+  /// Draws a framebuffer as a texture with optional transform and alpha
+  /// - Parameters:
+  ///   - framebufferID: The ID of the framebuffer to draw
+  ///   - rect: The rectangle to draw the framebuffer in
+  ///   - transform: Optional transformation matrix (translation, rotation, scale)
+  ///   - alpha: Alpha value for blending (0.0 = transparent, 1.0 = opaque)
+  func drawFramebuffer(
+    _ framebufferID: UInt64,
+    in rect: Rect,
+    transform: Transform2D?,
+    alpha: Float
+  )
+}
+
+// MARK: - Transform2D
+
+/// A 2D transformation matrix for framebuffer rendering
+public struct Transform2D {
+  public let translation: Point
+  public let rotation: Float  // in radians
+  public let scale: Point
+
+  public init(translation: Point = Point(0, 0), rotation: Float = 0, scale: Point = Point(1, 1)) {
+    self.translation = translation
+    self.rotation = rotation
+    self.scale = scale
+  }
 }

@@ -584,6 +584,36 @@ public final class MTLRenderer: Renderer {
     return try block()
   }
 
+  // MARK: - Framebuffer Objects (FBO) - Stub Implementation
+
+  public func createFramebuffer(size: Size, scale: Float) -> UInt64 {
+    // TODO: Implement Metal framebuffer objects
+    // For now, return a dummy ID
+    return 0
+  }
+
+  public func destroyFramebuffer(_ framebufferID: UInt64) {
+    // TODO: Implement Metal framebuffer cleanup
+  }
+
+  public func beginFramebuffer(_ framebufferID: UInt64) {
+    // TODO: Implement Metal framebuffer binding
+  }
+
+  public func endFramebuffer() {
+    // TODO: Implement Metal framebuffer unbinding
+  }
+
+  public func drawFramebuffer(
+    _ framebufferID: UInt64,
+    in rect: Rect,
+    transform: Transform2D?,
+    alpha: Float
+  ) {
+    // TODO: Implement Metal framebuffer drawing
+    // For now, this is a no-op
+  }
+
 }
 
 // MARK: - Uniform Structures

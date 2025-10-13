@@ -1,7 +1,7 @@
 import GLFW
 
-/// Menu-only component for the title screen
-final class TitleScreenMenu: RenderLoop {
+/// Menu-only component for the options screen
+final class OptionsScreenMenu: RenderLoop {
   private let listMenu = ListMenu()
   private let navigationStack: NavigationStack
 
@@ -12,26 +12,33 @@ final class TitleScreenMenu: RenderLoop {
 
   private func setupMenu() {
     let menuItems = [
-      ListMenu.MenuItem(id: "new_game", label: "New Game") {
-        print("Starting new game...")
+      ListMenu.MenuItem(id: "controls", label: "Controls") {
+        print("Opening controls settings...")
+        // TODO: Navigate to controls submenu
       },
-      ListMenu.MenuItem(id: "continue", label: "Continue", isEnabled: false) {
-        print("Loading saved game...")
+      ListMenu.MenuItem(id: "camera", label: "Camera") {
+        print("Opening camera settings...")
+        // TODO: Navigate to camera submenu
       },
-      ListMenu.MenuItem(id: "options", label: "Options") {
-        // Navigate to options screen
-        let optionsMenu = OptionsScreenMenu(navigationStack: self.navigationStack)
-        self.navigationStack.push(optionsMenu, direction: .forward)
+      ListMenu.MenuItem(id: "display", label: "Display") {
+        print("Opening display settings...")
+        // TODO: Navigate to display submenu
       },
-      ListMenu.MenuItem(id: "give_up", label: "Give Up") {
-        Task { @MainActor in
-          #if os(macOS)
-            Engine.shared.window.nsWindow?.animationBehavior = .utilityWindow
-            Engine.shared.window.nsWindow?.close()
-            try? await Task.sleep(nanoseconds: 500_000_000)
-          #endif
-          Engine.shared.window.close()
-        }
+      ListMenu.MenuItem(id: "audio", label: "Audio") {
+        print("Opening audio settings...")
+        // TODO: Navigate to audio submenu
+      },
+      ListMenu.MenuItem(id: "language", label: "Language") {
+        print("Opening language settings...")
+        // TODO: Navigate to language submenu
+      },
+      ListMenu.MenuItem(id: "graphics", label: "Graphics") {
+        print("Opening graphics settings...")
+        // TODO: Navigate to graphics submenu
+      },
+      ListMenu.MenuItem(id: "back", label: "Back") {
+        // Go back using navigation stack
+        self.navigationStack.pop()
       },
     ]
 
@@ -64,18 +71,18 @@ final class TitleScreenMenu: RenderLoop {
   }
 }
 
-/// Full title screen that renders a NavigationStack
-final class TitleScreen: RenderLoop {
+/// Full options screen that renders a NavigationStack
+final class OptionsScreen: RenderLoop {
   private let navigationStack: NavigationStack
-  private let backgroundImage = Image("UI/title_screen.png")
+  private let backgroundImage = Image("UI/title_screen.png")  // Use same background for now
 
   init() {
-    // Create navigation stack with title screen background
+    // Create navigation stack with options screen background
     navigationStack = NavigationStack(backgroundImage: backgroundImage, promptGroup: .menuRoot)
 
     // Set the initial menu
-    let titleMenu = TitleScreenMenu(navigationStack: navigationStack)
-    navigationStack.setInitialScreen(titleMenu)
+    let optionsMenu = OptionsScreenMenu(navigationStack: navigationStack)
+    navigationStack.setInitialScreen(optionsMenu)
   }
 
   func update(deltaTime: Float) {
@@ -107,11 +114,5 @@ final class TitleScreen: RenderLoop {
 
     // Draw the navigation stack (which includes the menu)
     navigationStack.draw()
-
-    // Draw version text in bottom left corner
-    let versionText = "v\(Engine.versionString)"
-    let versionX: Float = 56
-    let versionY: Float = 20
-    versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
   }
 }
