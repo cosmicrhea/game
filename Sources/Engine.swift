@@ -52,12 +52,6 @@ final class Engine {
   private var currentLoopIndex: Int = 0
   private var cli: CLIOptions!
 
-  // Computed properties for external access
-  var wireframeMode: Bool {
-    get { config.wireframeMode }
-    set { config.wireframeMode = newValue }
-  }
-
   #if EDITOR
     private var editorHostingView: NSHostingView<EditorView>?
   #endif
@@ -151,16 +145,18 @@ final class Engine {
 
   private func setupLoops() {
     loops = [
+      SVGDemo(),
+
       MainLoop(),
       // SlotDemo(),
       SlotGridDemo(),
-      CalloutDemo(),
       TitleScreen(),
-      LibraryView(),
+      //      LibraryView(),
       DocumentDemo(),
       MapView(),
 
-      PromptListDemo(),
+      //      CalloutDemo(),
+      //      PromptListDemo(),
 
       // FontsDemo(),
       // PathDemo(),

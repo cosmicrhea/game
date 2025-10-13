@@ -18,7 +18,7 @@ final class TitleScreen: RenderLoop {
 
   private let backgroundImage = Image("UI/title_screen.png")
 
-  private let promptList = PromptList(.menuRoot, axis: .horizontal)
+  private let promptList = PromptList(.menuRoot)
 
   // Animation state
   private var animationTime: Float = 0.0
@@ -195,6 +195,7 @@ final class TitleScreen: RenderLoop {
     versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
 
     // Draw input prompts
+    promptList.showCalloutBackground = false
     promptList.draw()
   }
 }

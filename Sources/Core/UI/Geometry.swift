@@ -77,10 +77,10 @@ public struct EdgeInsets: Equatable, Hashable, Sendable {
   public var top: Float
   /// The inset for the left edge.
   public var left: Float
-  /// The inset for the right edge.
-  public var right: Float
   /// The inset for the bottom edge.
   public var bottom: Float
+  /// The inset for the right edge.
+  public var right: Float
 
   /// Creates new edge insets with the specified values.
   /// - Parameters:
@@ -100,8 +100,8 @@ public struct EdgeInsets: Equatable, Hashable, Sendable {
   public init(_ value: Float) {
     self.top = value
     self.left = value
-    self.right = value
     self.bottom = value
+    self.right = value
   }
 
   /// Edge insets with zero values for all edges.

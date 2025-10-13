@@ -23,7 +23,7 @@ final class CalloutDemo: RenderLoop {
     tutorialCallout = Callout("Press WASD to move", style: .tutorial)
 
     // Create prompt list callout
-    var promptList = Callout("Press Space to continue", style: .promptList)
+    var promptList = Callout(style: .promptList())
     promptList.fade = .left
     promptListCallout = promptList
   }

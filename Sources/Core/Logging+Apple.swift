@@ -21,7 +21,7 @@ public struct OSLogHandler: LogHandler {
       combinedPrettyMetadata = self.prettify(
         self.metadata.merging(metadataOverride) {
           return $1
-        }
+        } 
       )
     }
 

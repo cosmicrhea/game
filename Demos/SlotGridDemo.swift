@@ -5,21 +5,21 @@ import GLMath
 /// Demo for testing the slot grid component with context menu support
 @MainActor
 final class SlotGridDemo: RenderLoop {
-  private let promptList = PromptList(.menu, axis: .horizontal)
+  private let promptList = PromptList(.menu)
   private var slotGrid: SlotGrid
 
   // Grid configuration
   private var gridColumns = 4
-  private var gridRows = 5
+  private var gridRows = 2
   private var slotSize: Float = 80.0
   private var spacing: Float = 4.0
 
   // Slot appearance controls
   private var cornerRadius: Float = 12.0
-  private var radialGradientStrength: Float = 0.3
+  private var radialGradientStrength: Float = 0.7
 
-  // Grid position - centered on X, slightly above center on Y
-  private var gridPosition = Point(0, 0)  // Will be calculated in init
+  // Grid position
+  private var gridPosition: Point = .zero
 
   // Menu state
   private var lastAction: String = "No action yet"

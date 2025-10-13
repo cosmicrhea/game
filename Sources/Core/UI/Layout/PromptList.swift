@@ -23,6 +23,7 @@ public final class PromptList {
   private let textStyle: TextStyle
   public var group: PromptGroup?
   public var axis: Axis
+  public var showCalloutBackground: Bool = false
 
   public init(_ group: PromptGroup? = nil, axis: Axis = .horizontal) {
     self.textStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 24, color: .white)
@@ -37,6 +38,33 @@ public final class PromptList {
 
   private var lineHeight: Float {
     return textStyle.fontSize * 1.2
+  }
+
+  /// Computed size of the prompt list based on current group and axis
+  @MainActor public var size: Size {
+    guard let group = group else { return Size.zero }
+    let prompts = PromptGroup.prompts[group] ?? [:]
+    return size(for: prompts, inputSource: .player1)
+  }
+
+  /// Calculate size for given prompts and input source
+  public func size(for prompts: OrderedDictionary<String, [[String]]>, inputSource: InputSource = .player1) -> Size {
+    var groups: [Row] = []
+    for (label, options) in prompts {
+      if let icons = chooseIcons(for: inputSource, from: options) {
+        groups.append(Row(iconNames: icons, label: label))
+      }
+    }
+
+    let (totalWidth, maxHeight, _) = calculateTotalMetrics(groups)
+
+    switch axis {
+    case .horizontal:
+      return Size(totalWidth, maxHeight)
+    case .vertical:
+      let totalHeight = maxHeight + Float(max(0, groups.count - 1)) * rowSpacing
+      return Size(Float(WIDTH) / 3, totalHeight)  // Use same width as vertical layout
+    }
   }
 
   /// Does a single icon name match the given input source by prefix?
@@ -294,53 +322,42 @@ public final class PromptList {
     anchor: Anchor
   ) {
     let windowSize = (Int32(WIDTH), Int32(HEIGHT))
-    drawHorizontal(
-      prompts: prompts,
-      inputSource: inputSource,
-      windowSize: windowSize,
-      origin: (origin.x, origin.y),
-      anchor: anchor
-    )
-  }
-
-  /// Draw vertically at specific coordinates
-  public func drawVertical(
-    prompts: OrderedDictionary<String, [[String]]>,
-    inputSource: InputSource = .player1,
-    origin: Point,
-    anchor: Anchor
-  ) {
-    let windowSize = (Int32(WIDTH), Int32(HEIGHT))
     var groups: [Row] = []
     for (label, options) in prompts {
       if let icons = chooseIcons(for: inputSource, from: options) {
         groups.append(Row(iconNames: icons, label: label))
       }
     }
-    drawVertical(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), anchor: anchor)
+
+    switch axis {
+    case .horizontal:
+      drawHorizontal(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), anchor: anchor)
+    case .vertical:
+      drawVertical(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), anchor: anchor)
+    }
   }
 
   /// Draw with default bottom-right positioning (convenience)
   @MainActor public func draw() {
     guard let group = group else { return }
     let prompts = PromptGroup.prompts[group] ?? [:]
+    let origin = Point(Float(WIDTH) - 56, 12)
 
-    switch axis {
-    case .horizontal:
-      draw(
-        prompts: prompts,
-        inputSource: .player1,
-        origin: Point(Float(WIDTH) - 56, 12),
-        anchor: .bottomRight
-      )
-    case .vertical:
-      drawVertical(
-        prompts: prompts,
-        inputSource: .player1,
-        origin: Point(Float(WIDTH) - 56, 12),
-        anchor: .bottomRight
-      )
+    // Draw callout background if enabled
+    if showCalloutBackground {
+      let promptSize = size(for: prompts, inputSource: .player1)
+      let calloutWidth = promptSize.width + 128
+      var callout = Callout(style: .promptList(width: calloutWidth))
+      callout.draw()
     }
+
+    // Draw the prompt list
+    draw(
+      prompts: prompts,
+      inputSource: .player1,
+      origin: origin,
+      anchor: .bottomRight
+    )
   }
 }
 

@@ -79,10 +79,12 @@ let package = Package(
         "Sources/Core/EditorMacros",
         "Plugins",
         "NOTES.md",
+        "TODO.md",
       ],
 
       resources: [
         .copy("Assets/Actors"),
+        .copy("Assets/Audio"),
         .copy("Assets/Common"),
         .copy("Assets/Effects"),
         .copy("Assets/Fonts"),

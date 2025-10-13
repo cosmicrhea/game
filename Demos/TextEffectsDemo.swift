@@ -171,7 +171,7 @@ final class TextEffectsDemo: RenderLoop {
       )
 
       // Draw debug rectangle if needed
-      if Engine.shared.wireframeMode {
+      if Config.current.wireframeMode {
         Debug.drawRect(
           x: screenX, y: screenY, width: effect.width, height: effect.height,
           windowSize: ws, lineWidth: 1.0

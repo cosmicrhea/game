@@ -89,7 +89,7 @@ final class PromptListDemo: RenderLoop {
           prompts: group.prompts, inputSource: source, windowSize: ws, origin: (rightX, y), anchor: .bottomRight)
       }
 
-      if Engine.shared.wireframeMode {
+      if Config.current.wireframeMode {
         // Draw debug rectangle around the packed group
         Debug.drawRect(
           x: screenX, y: screenY, width: Float(group.width), height: Float(group.height),

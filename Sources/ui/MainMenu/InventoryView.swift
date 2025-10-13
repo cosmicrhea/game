@@ -3,7 +3,7 @@ import GLFW
 import GLMath
 
 class InventoryView: RenderLoop {
-  private let promptList = PromptList(.menu, axis: .horizontal)
+  private let promptList = PromptList(.menu)
 
   func draw() {
     promptList.draw()

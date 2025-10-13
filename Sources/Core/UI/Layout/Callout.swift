@@ -16,8 +16,8 @@ public enum CalloutStyle {
   case objective(offset: Float = 0)
   /// Tutorial callout - centered on screen
   case tutorial
-  /// Prompt list callout - bottom-right
-  case promptList
+  /// Prompt list callout - bottom-right with custom width
+  case promptList(width: Float = Float(WIDTH) / 3)
 }
 
 /// Fade effect options for callout edges.
@@ -46,7 +46,7 @@ public struct Callout {
   /// Fade effect applied to the callout edges.
   public var fade: CalloutFade = .right
   /// Ratio of the callout width used for fade effects (0.0 to 1.0).
-  public var fadeWidthRatio: Float = 1.0 / 3.0
+  public var fadeWidthRatio: Float = 1 / 3
   /// Horizontal padding between the callout edge and icon.
   public var iconPaddingX: Float = 48
   /// Gap between icon and text content.
@@ -84,7 +84,7 @@ public struct Callout {
   ///   - text: The text content to display.
   ///   - icon: Optional icon to display alongside the text.
   ///   - style: The callout style determining position and behavior.
-  public init(_ text: String, icon: CalloutIcon? = nil, style: CalloutStyle = .objective()) {
+  public init(_ text: String = "", icon: CalloutIcon? = nil, style: CalloutStyle = .objective()) {
     self.text = text
     self.icon = icon
     self.style = style
@@ -142,10 +142,10 @@ public struct Callout {
         let h: Float = 36
         let origin = Point(Float(WIDTH) * 0.5 - w * 0.5, Float(HEIGHT) * 0.5 - h * 0.5 - 128)
         return (Rect(origin: origin, size: Size(w, h)), .both)
-      case .promptList:
-        let w = Float(WIDTH) * 0.8
-        let h: Float = 56
-        let origin = Point(Float(WIDTH) - w, -2)
+      case .promptList(let width):
+        let w = width
+        let h: Float = 57
+        let origin = Point(Float(WIDTH) - w, 0)
         return (Rect(origin: origin, size: Size(w, h)), .left)
       }
     }()
@@ -158,7 +158,14 @@ public struct Callout {
     let baseCenter = (px + w * 0.5, py + h * 0.5)
 
     // Configure fades
-    let fadeWidth = max(0, fadeWidthRatio) * w
+    let fadeWidth: Float = {
+      switch style {
+      case .promptList:
+        return 50.0  // Fixed 50px fade for prompt list
+      case .objective, .tutorial:
+        return max(0, fadeWidthRatio) * w  // Use ratio for other styles
+      }
+    }()
     let leftWidth: Float = (fade == .left || fade == .both) ? fadeWidth : -1.0
     let rightWidth: Float = (fade == .right || fade == .both) ? fadeWidth : -1.0
 
@@ -169,6 +176,15 @@ public struct Callout {
       program.setFloat("uLeftFadeWidth", value: leftWidth)
       program.setFloat("uRightFadeWidth", value: rightWidth)
       program.setFloat("uAnimationAlpha", value: animationProgress)
+
+      // Control border drawing based on style
+      let drawBorders: Float =
+        switch style {
+        case .objective, .tutorial: 1.0
+        case .promptList: 1.0
+        }
+
+      program.setFloat("uDrawBorders", value: drawBorders)
     }
 
     // Content layout with slide animation (only for objectives)

@@ -13,6 +13,7 @@ uniform float uBorderSoftness;   // pixels
 uniform float uRightFadeWidth;   // pixels
 uniform float uLeftFadeWidth;    // pixels
 uniform float uAnimationAlpha;    // animation progress [0,1]
+uniform float uDrawBorders;       // 1.0 to draw borders, 0.0 to skip
 
 // SDF for an axis-aligned box with sharp corners
 float boxSDF(vec2 position, vec2 halfSize)
@@ -87,7 +88,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
         distToHorizontalEdge
     );
 
-    float borderAlpha = min(u_borderColor.a, borderBand * insideX) * lateralFade * animationAlpha;
+    float borderAlpha = min(u_borderColor.a, borderBand * insideX) * lateralFade * animationAlpha * uDrawBorders;
 
     // Layer: background -> fill -> borders
     vec4 withFill    = mix(baseColor, u_fillColor, fillAlpha);

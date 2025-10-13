@@ -53,7 +53,7 @@ public final class GLRenderer: Renderer {
   // MARK: - Renderer
 
   public init() {
-    self.imageProgram = try! GLProgram("UI/text", "UI/image")
+    self.imageProgram = try! GLProgram("UI/image", "UI/image")
     self.pathProgram = try! GLProgram("Common/path", "Common/path")
     self.textProgram = try! GLProgram("UI/text")
 

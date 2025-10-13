@@ -9,10 +9,10 @@ class MapView: RenderLoop {
   @Editable(range: 8.0...64.0) var gridCellSize: Float = 32.0
   @Editable(range: 0.5...3.0) var gridThickness: Float = 1.0
   @Editable(range: 0.1...3.0) var gridScale: Float = 1.0
-  @Editable var gridOpacity: Float = 0.8
+  @Editable var gridOpacity: Float = 0.1
 
-  @Editable var vignetteStrength: Float = 0.8
-  @Editable var vignetteRadius: Float = 0.9
+  @Editable var vignetteStrength: Float = 0.7
+  @Editable var vignetteRadius: Float = 1.0
 
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid

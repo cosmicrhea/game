@@ -64,7 +64,7 @@ final class DocumentView: RenderLoop {
   private let backgroundAnimationDuration: Float = 0.5
   private let backgroundAnimationEasing: Easing = .easeInOutCubic
 
-  private let promptList = PromptList(.documentView, axis: .horizontal)
+  private let promptList = PromptList(.documentView)
 
   init(document: Document) {
     self.document = document
@@ -218,7 +218,7 @@ final class DocumentView: RenderLoop {
     // mainSection.frame(with: .rose)
 
     // 2. Position chevrons on left and right sides, centered vertically
-    let arrowY: Float = Float(HEIGHT) / 2
+    let arrowY: Float = Float(HEIGHT) / 2 - caretRight.image.naturalSize.width * 0.25
     let leftArrowX: Float = sectionX
     let rightArrowX: Float = sectionX + sectionWidth - (caretRight.image.naturalSize.width * 0.5 * 1.5)
 
