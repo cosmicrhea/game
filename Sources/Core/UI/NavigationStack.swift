@@ -11,7 +11,7 @@ public class NavigationStack: RenderLoop {
 
   // MARK: - Transition Animation
   private var transitionProgress: Float = 0.0
-  private var transitionDuration: Float = 0.5
+  private var transitionDuration: Float = 0.3
   private var transitionDirection: TransitionDirection = .forward
   private let transitionEasing: Easing = .easeInOutCubic
 
