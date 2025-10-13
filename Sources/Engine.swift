@@ -150,7 +150,7 @@ final class Engine {
       MainLoop(),
       // SlotDemo(),
       SlotGridDemo(),
-      TitleScreen(),  // Uses the new NavigationStack system
+      TitleScreenStack(),  // Uses the new NavigationStack system
       //      LibraryView(),
       DocumentDemo(),
       MapView(),

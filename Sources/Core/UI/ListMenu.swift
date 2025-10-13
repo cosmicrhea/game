@@ -179,7 +179,7 @@ public class ListMenu {
     let menuItemHeight: Float = 40
 
     for (index, _) in menuItems.enumerated() {
-      let itemY = menuStartY + Float(menuItems.count - 1 - index) * spacing
+      let itemY = menuStartY + Float(menuItems.count - 2 - index) * spacing
       let itemBounds = Rect(
         x: position.x,
         y: itemY,

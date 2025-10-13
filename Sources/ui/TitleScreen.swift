@@ -1,12 +1,12 @@
 import GLFW
 
 /// Menu-only component for the title screen
-final class TitleScreenMenu: RenderLoop {
+final class TitleScreen: Screen {
   private let listMenu = ListMenu()
-  private let navigationStack: NavigationStack
 
-  init(navigationStack: NavigationStack) {
-    self.navigationStack = navigationStack
+  @MainActor
+  override init() {
+    super.init()
     setupMenu()
   }
 
@@ -20,8 +20,9 @@ final class TitleScreenMenu: RenderLoop {
       },
       ListMenu.MenuItem(id: "options", label: "Options") {
         // Navigate to options screen
-        let optionsScreen = OptionsScreen(navigationStack: self.navigationStack)
-        self.navigationStack.push(optionsScreen, direction: .forward)
+        print("🎯 TitleScreen: Options selected, navigationStack: \(self.navigationStack != nil ? "present" : "nil")")
+        self.navigate(to: OptionsScreen())
+        print("🎯 TitleScreen: navigate() called")
       },
       ListMenu.MenuItem(id: "give_up", label: "Give Up") {
         Task { @MainActor in
@@ -38,34 +39,34 @@ final class TitleScreenMenu: RenderLoop {
     listMenu.setItems(menuItems)
   }
 
-  func update(deltaTime: Float) {
+  override func update(deltaTime: Float) {
     listMenu.update(deltaTime: deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  override func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     listMenu.handleKeyPressed(key)
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
     if button == .left {
       let mousePosition = Point(Float(window.mouse.position.x), Float(HEIGHT) - Float(window.mouse.position.y))
       listMenu.handleMouseClick(at: mousePosition)
     }
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  override func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
     let mousePosition = Point(Float(x), Float(HEIGHT) - Float(y))
     listMenu.handleMouseMove(at: mousePosition)
   }
 
-  func draw() {
+  override func draw() {
     // Draw the menu using ListMenu
     listMenu.draw()
   }
 }
 
 /// Full title screen that renders a NavigationStack
-final class TitleScreen: RenderLoop {
+final class TitleScreenStack: RenderLoop {
   private let navigationStack: NavigationStack
   private let backgroundImage = Image("UI/title_screen.png")
   private let promptList: PromptList
@@ -78,7 +79,7 @@ final class TitleScreen: RenderLoop {
     navigationStack = NavigationStack()
 
     // Set the initial menu
-    let titleMenu = TitleScreenMenu(navigationStack: navigationStack)
+    let titleMenu = TitleScreen()
     navigationStack.setInitialScreen(titleMenu)
   }
 
@@ -112,7 +113,8 @@ final class TitleScreen: RenderLoop {
     // Draw the navigation stack (which includes the menu)
     navigationStack.draw()
 
-    // Draw prompts (no animation)
+    // Draw prompts (no animation) - set group based on navigation state
+    promptList.group = navigationStack.isAtRoot ? .menuRoot : .menu
     promptList.showCalloutBackground = false
     promptList.draw()
 

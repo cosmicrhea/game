@@ -20,6 +20,13 @@ public class NavigationStack: RenderLoop {
   private var nextScreenFBO: UInt64?
   private var screenSize: Size = Size(0, 0)
 
+  // MARK: - Navigation State
+
+  /// Whether we're at the root screen (only one screen in the stack, or transitioning back to root)
+  var isAtRoot: Bool {
+    return screens.count <= 1 || (isTransitioning && transitionDirection == .backward && screens.count <= 2)
+  }
+
   public enum TransitionDirection {
     case forward  // New screen slides in from right
     case backward  // New screen slides in from left
@@ -33,12 +40,15 @@ public class NavigationStack: RenderLoop {
   // MARK: - Navigation Methods
 
   /// Push a new screen onto the stack
-  func push(_ screen: RenderLoop, direction: TransitionDirection = .forward) {
+  func push(_ screen: Screen, direction: TransitionDirection = .forward) {
     print("🚀 NavigationStack.push() called - direction: \(direction)")
     guard !isTransitioning else {
       print("🚀 Already transitioning, ignoring")
       return
     }
+
+    // Inject navigation stack into the screen
+    screen.navigationStack = self
 
     screens.append(screen)
     transitionDirection = direction
@@ -73,8 +83,36 @@ public class NavigationStack: RenderLoop {
     print("🔙 Started backward transition")
   }
 
+  /// Replace the current screen with a new one
+  func replace(_ screen: Screen) {
+    print("🔄 NavigationStack.replace() called")
+    guard !isTransitioning else {
+      print("🔄 Can't replace - already transitioning")
+      return
+    }
+
+    // Inject navigation stack into the screen
+    screen.navigationStack = self
+
+    // Replace the current screen
+    if currentIndex < screens.count {
+      screens[currentIndex] = screen
+    } else {
+      screens.append(screen)
+    }
+
+    // Start transition
+    transitionDirection = .forward
+    isTransitioning = true
+    transitionProgress = 0.0
+    print("🔄 Started replace transition")
+  }
+
   /// Set the initial screen
-  func setInitialScreen(_ screen: RenderLoop) {
+  func setInitialScreen(_ screen: Screen) {
+    // Inject navigation stack into the initial screen
+    screen.navigationStack = self
+
     screens = [screen]
     currentIndex = 0
     screen.onAttach(window: Engine.shared.window)
@@ -210,15 +248,12 @@ public class NavigationStack: RenderLoop {
       print("🎨 Created nextScreenFBO: \(nextScreenFBO ?? 0)")
     }
 
-    // Update next screen to ensure it's ready to render
-    nextScreen.update(deltaTime: 0.0)
-
     // Calculate eased progress
     let easedProgress = transitionEasing.apply(transitionProgress)
     print("🎨 Eased progress: \(easedProgress)")
 
-    // Update and render screens to FBOs every frame for live animations
-    nextScreen.update(deltaTime: 0.0)  // Update next screen for animations
+    // Update next screen for live animations during transition
+    nextScreen.update(deltaTime: 0.016)  // Use a small delta time for animations
 
     // Render current screen to FBO
     if let currentFBO = currentScreenFBO {
@@ -229,9 +264,12 @@ public class NavigationStack: RenderLoop {
 
     // Render next screen to FBO (live update for animations)
     if let nextFBO = nextScreenFBO {
+      print("🎨 Rendering next screen to FBO: \(nextFBO)")
       Engine.shared.renderer.beginFramebuffer(nextFBO)
       nextScreen.draw()
       Engine.shared.renderer.endFramebuffer()
+    } else {
+      print("🎨 No next FBO to render to!")
     }
 
     // Calculate slide offsets
@@ -243,12 +281,12 @@ public class NavigationStack: RenderLoop {
 
     if transitionDirection == .forward {
       // Forward: current slides left, next slides in from right
-      currentOffset = slideDistance * (1.0 - easedProgress)  // Positive = left (flipped coords)
-      nextOffset = slideDistance * (1.0 - easedProgress)  // Positive = from right
+      currentOffset = slideDistance * easedProgress  // Start at 0, move to slideDistance
+      nextOffset = slideDistance * easedProgress  // Start at 0, move to slideDistance (but next screen starts at slideDistance)
     } else {
       // Backward: current slides right, next slides in from left
-      currentOffset = -slideDistance * (1.0 - easedProgress)  // Negative = right (flipped coords)
-      nextOffset = -slideDistance * (1.0 - easedProgress)  // Negative = from left
+      currentOffset = -slideDistance * easedProgress  // Start at 0, move to -slideDistance
+      nextOffset = -slideDistance * easedProgress  // Start at 0, move to -slideDistance (but next screen starts at -slideDistance)
     }
 
     // Calculate alpha values
@@ -277,19 +315,22 @@ public class NavigationStack: RenderLoop {
 
     // Draw next screen (sliding in from right, fading in)
     if let nextFBO = nextScreenFBO {
-      let nextStartX = transitionDirection == .forward ? screenWidth : -screenWidth
+      let nextStartX = transitionDirection == .forward ? slideDistance : -slideDistance
+      let nextX = nextStartX - nextOffset
       let nextTransform = Transform2D(
-        translation: Point(nextStartX - nextOffset, 0),
+        translation: Point(nextX, 0),
         rotation: 0,
         scale: Point(1, 1)
       )
-      print("🎨 Drawing next FBO with transform: \(nextTransform.translation)")
+      print("🎨 Next screen: startX=\(nextStartX), offset=\(nextOffset), finalX=\(nextX), alpha=\(nextAlpha)")
       Engine.shared.renderer.drawFramebuffer(
         nextFBO,
         in: Rect(x: 0, y: 0, width: screenSize.width, height: screenSize.height),
         transform: nextTransform,
         alpha: nextAlpha
       )
+    } else {
+      print("🎨 No next FBO available!")
     }
   }
 }
