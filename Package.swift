@@ -7,7 +7,8 @@ let package = Package(
   name: "Red Glass",
 
   platforms: [
-    .macOS(.v13),
+    // .macOS(.v13), // FIXME: build assimp for v13
+    .macOS(.v15),
     .custom("Linux", versionString: "6"),
     .custom("Windows", versionString: "10"),
   ],

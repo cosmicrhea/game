@@ -139,7 +139,7 @@
               //        } onEditingChanged: { editing in
               //          print("editing \(property.displayName): \(editing)")
               //        }
-              .onChange(of: localValue) { newValue in
+              .onChange(of: localValue) { _, newValue in
                 property.setValue(Float(newValue))
                 //          UISound.select()
               }

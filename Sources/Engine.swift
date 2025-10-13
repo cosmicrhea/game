@@ -12,8 +12,10 @@ import unistd
 
 /// The width of the game window in pixels.
 public let WIDTH = 1280
+//public let WIDTH = 1800
 /// The height of the game window in pixels.
 public let HEIGHT = 720
+//public let HEIGHT = 1126
 
 /// Command-line interface options for the Glass engine.
 struct CLIOptions: ParsableArguments {
@@ -145,13 +147,14 @@ final class Engine {
 
   private func setupLoops() {
     loops = [
-      SVGDemo(),
+      TitleScreenStack(),  // Uses the new NavigationStack system
+      // SVGDemo(),
 
       MainLoop(),
       // SlotDemo(),
-      SlotGridDemo(),
-      TitleScreenStack(),  // Uses the new NavigationStack system
+      // SlotGridDemo(),
       //      LibraryView(),
+      InventoryView(),
       DocumentDemo(),
       MapView(),
 

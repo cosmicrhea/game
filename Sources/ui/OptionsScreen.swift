@@ -46,20 +46,30 @@ final class OptionsScreen: Screen {
   }
 
   override func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    // Handle ESC key to go back
-    if key == .escape {
+    switch key {
+    case .escape:
+      // ESC key to go back
       UISound.select()
       back()
-      return
-    }
 
-    listMenu.handleKeyPressed(key)
+    default:
+      listMenu.handleKeyPressed(key)
+    }
   }
 
   override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
-    if button == .left {
+    switch button {
+    case .left:
       let mousePosition = Point(Float(window.mouse.position.x), Float(HEIGHT) - Float(window.mouse.position.y))
       listMenu.handleMouseClick(at: mousePosition)
+
+    case .right:
+      // Right click to go back
+      UISound.select()
+      back()
+
+    default:
+      break
     }
   }
 
