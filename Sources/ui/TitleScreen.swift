@@ -15,22 +15,24 @@ final class TitleScreen: Screen {
       ListMenu.MenuItem(id: "new_game", label: "New Game") {
         print("Starting new game...")
       },
+
       ListMenu.MenuItem(id: "continue", label: "Continue", isEnabled: false) {
         print("Loading saved game...")
       },
+
       ListMenu.MenuItem(id: "options", label: "Options") {
         // Navigate to options screen
-        print("🎯 TitleScreen: Options selected, navigationStack: \(self.navigationStack != nil ? "present" : "nil")")
         self.navigate(to: OptionsScreen())
-        print("🎯 TitleScreen: navigate() called")
       },
+
       ListMenu.MenuItem(id: "give_up", label: "Give Up") {
         Task { @MainActor in
           #if os(macOS)
             Engine.shared.window.nsWindow?.animationBehavior = .utilityWindow
             Engine.shared.window.nsWindow?.close()
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            await Task.sleep(0.5)
           #endif
+
           Engine.shared.window.close()
         }
       },
@@ -70,6 +72,8 @@ final class TitleScreenStack: RenderLoop {
   private let navigationStack: NavigationStack
   private let backgroundImage = Image("UI/title_screen.png")
   private let promptList: PromptList
+  private let vignetteEffect = GLScreenEffect("Effects/TitleScreenVignette")
+  private var animatedVignetteStrength: Float = 0.0
 
   init() {
     // Create prompt list for title screen
@@ -85,6 +89,14 @@ final class TitleScreenStack: RenderLoop {
 
   func update(deltaTime: Float) {
     navigationStack.update(deltaTime: deltaTime)
+
+    // Animate vignette strength based on navigation state
+    let targetVignetteStrength: Float = navigationStack.isAtRoot ? 0.0 : 0.6
+    let vignetteSpeed: Float = 3.0  // Animation speed
+
+    // Smooth interpolation towards target
+    let vignetteDelta = (targetVignetteStrength - animatedVignetteStrength) * vignetteSpeed * deltaTime
+    animatedVignetteStrength += vignetteDelta
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -109,6 +121,12 @@ final class TitleScreenStack: RenderLoop {
     // Draw background image
     let backgroundRect = Rect(x: 0, y: 0, width: screenWidth, height: screenHeight)
     backgroundImage.draw(in: backgroundRect)
+
+    // Draw vignette effect - smoothly animated
+    if animatedVignetteStrength > 0.0 {
+      // Apply vignette effect using the shader
+      vignetteEffect.draw(["amount": animatedVignetteStrength])
+    }
 
     // Draw the navigation stack (which includes the menu)
     navigationStack.draw()

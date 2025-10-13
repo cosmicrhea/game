@@ -41,9 +41,7 @@ public class NavigationStack: RenderLoop {
 
   /// Push a new screen onto the stack
   func push(_ screen: Screen, direction: TransitionDirection = .forward) {
-    print("🚀 NavigationStack.push() called - direction: \(direction)")
     guard !isTransitioning else {
-      print("🚀 Already transitioning, ignoring")
       return
     }
 
@@ -57,22 +55,17 @@ public class NavigationStack: RenderLoop {
 
     // Set up screen size for FBO
     screenSize = Size(Float(WIDTH), Float(HEIGHT))
-    print("🚀 Screen size: \(screenSize)")
 
     // Attach the new screen
     screen.onAttach(window: Engine.shared.window)
-    print("🚀 Transition started")
   }
 
   /// Pop the current screen and go back to the previous one
   public func pop() {
-    print("🔙 NavigationStack.pop() called - screens count: \(screens.count)")
     guard screens.count > 1 else {
-      print("🔙 Can't pop - only one screen")
       return
     }
     guard !isTransitioning else {
-      print("🔙 Can't pop - already transitioning")
       return
     }
 
@@ -80,14 +73,11 @@ public class NavigationStack: RenderLoop {
     transitionDirection = .backward
     isTransitioning = true
     transitionProgress = 0.0
-    print("🔙 Started backward transition")
   }
 
   /// Replace the current screen with a new one
   func replace(_ screen: Screen) {
-    print("🔄 NavigationStack.replace() called")
     guard !isTransitioning else {
-      print("🔄 Can't replace - already transitioning")
       return
     }
 
@@ -105,7 +95,6 @@ public class NavigationStack: RenderLoop {
     transitionDirection = .forward
     isTransitioning = true
     transitionProgress = 0.0
-    print("🔄 Started replace transition")
   }
 
   /// Set the initial screen
@@ -129,10 +118,8 @@ public class NavigationStack: RenderLoop {
     // Update transition
     if isTransitioning {
       transitionProgress += deltaTime / transitionDuration
-      print("🎬 Transition progress: \(transitionProgress)")
 
       if transitionProgress >= 1.0 {
-        print("🎬 Transition complete")
         completeTransition()
       }
     }
@@ -171,7 +158,6 @@ public class NavigationStack: RenderLoop {
 
   public func draw() {
     if isTransitioning {
-      print("🎨 Drawing transition")
       drawTransition()
     } else {
       // Draw current screen
@@ -206,15 +192,12 @@ public class NavigationStack: RenderLoop {
         removedScreen.onDetach(window: Engine.shared.window)
         // Update currentIndex to point to the new last screen
         currentIndex = screens.count - 1
-        print("🔙 Removed screen after transition, remaining: \(screens.count)")
-        print("🔙 Current screen is now: \(type(of: screens.last!)) at index \(currentIndex)")
       }
     }
   }
 
   private func drawTransition() {
     guard screens.count >= 1 else {
-      print("🎨 No screens for transition")
       return
     }
 
@@ -223,34 +206,28 @@ public class NavigationStack: RenderLoop {
 
     if transitionDirection == .forward {
       guard screens.count >= 2 else {
-        print("🎨 Not enough screens for forward transition")
         return
       }
       currentScreen = screens[currentIndex]
       nextScreen = screens.last!
     } else {
       guard screens.count >= 2 else {
-        print("🎨 Not enough screens for backward transition")
         return
       }
       currentScreen = screens.last!  // Current screen (being removed)
       nextScreen = screens[screens.count - 2]  // Previous screen (going back to)
-      print("🎨 Backward transition: current=\(type(of: currentScreen)), next=\(type(of: nextScreen))")
     }
 
     // Create FBOs if they don't exist
     if currentScreenFBO == nil {
       currentScreenFBO = Engine.shared.renderer.createFramebuffer(size: screenSize, scale: 1.0)
-      print("🎨 Created currentScreenFBO: \(currentScreenFBO ?? 0)")
     }
     if nextScreenFBO == nil {
       nextScreenFBO = Engine.shared.renderer.createFramebuffer(size: screenSize, scale: 1.0)
-      print("🎨 Created nextScreenFBO: \(nextScreenFBO ?? 0)")
     }
 
     // Calculate eased progress
     let easedProgress = transitionEasing.apply(transitionProgress)
-    print("🎨 Eased progress: \(easedProgress)")
 
     // Update next screen for live animations during transition
     nextScreen.update(deltaTime: 0.016)  // Use a small delta time for animations
@@ -264,16 +241,13 @@ public class NavigationStack: RenderLoop {
 
     // Render next screen to FBO (live update for animations)
     if let nextFBO = nextScreenFBO {
-      print("🎨 Rendering next screen to FBO: \(nextFBO)")
       Engine.shared.renderer.beginFramebuffer(nextFBO)
       nextScreen.draw()
       Engine.shared.renderer.endFramebuffer()
     } else {
-      print("🎨 No next FBO to render to!")
     }
 
     // Calculate slide offsets
-    let screenWidth = screenSize.width
     let slideDistance: Float = 10.0
 
     let currentOffset: Float
@@ -293,10 +267,6 @@ public class NavigationStack: RenderLoop {
     let currentAlpha = 1.0 - easedProgress
     let nextAlpha = easedProgress
 
-    print("🎨 Current offset: \(currentOffset), alpha: \(currentAlpha)")
-    print("🎨 Next offset: \(nextOffset), alpha: \(nextAlpha)")
-    print("🎨 Next screen type: \(type(of: nextScreen))")
-
     // Draw current screen (sliding left, fading out)
     if let currentFBO = currentScreenFBO {
       let currentTransform = Transform2D(
@@ -304,7 +274,6 @@ public class NavigationStack: RenderLoop {
         rotation: 0,
         scale: Point(1, 1)
       )
-      print("🎨 Drawing current FBO with transform: \(currentTransform.translation)")
       Engine.shared.renderer.drawFramebuffer(
         currentFBO,
         in: Rect(x: 0, y: 0, width: screenSize.width, height: screenSize.height),
@@ -322,7 +291,6 @@ public class NavigationStack: RenderLoop {
         rotation: 0,
         scale: Point(1, 1)
       )
-      print("🎨 Next screen: startX=\(nextStartX), offset=\(nextOffset), finalX=\(nextX), alpha=\(nextAlpha)")
       Engine.shared.renderer.drawFramebuffer(
         nextFBO,
         in: Rect(x: 0, y: 0, width: screenSize.width, height: screenSize.height),
@@ -330,7 +298,6 @@ public class NavigationStack: RenderLoop {
         alpha: nextAlpha
       )
     } else {
-      print("🎨 No next FBO available!")
     }
   }
 }

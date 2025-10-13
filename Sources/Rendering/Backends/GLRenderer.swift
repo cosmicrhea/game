@@ -181,6 +181,7 @@ public final class GLRenderer: Renderer {
     tint: Color?
   ) {
     //print("GLRenderer.drawImageRegion: textureID=\(textureID), rect=\(rect), uv=\(uv)")
+
     let x = rect.origin.x
     let y = rect.origin.y
     let w = rect.size.width
@@ -702,11 +703,9 @@ public final class GLRenderer: Renderer {
     alpha: Float
   ) {
     guard let framebuffer = framebuffers[framebufferID] else {
-      print("🎨 FBO not found: \(framebufferID)")
+      logger.error("🎨 FBO not found: \(framebufferID)")
       return
     }
-
-    print("🎨 Drawing FBO \(framebufferID) with transform: \(transform?.translation ?? Point(0,0)), alpha: \(alpha)")
 
     // Use the FBO program to draw the framebuffer texture
     withUIContext {

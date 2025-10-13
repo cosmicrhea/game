@@ -36,10 +36,6 @@ final class OptionsScreen: Screen {
         print("Opening graphics settings...")
         // TODO: Navigate to graphics submenu
       },
-      ListMenu.MenuItem(id: "back", label: "Back") {
-        // Go back using navigation
-        self.back()
-      },
     ]
 
     listMenu.setItems(menuItems)

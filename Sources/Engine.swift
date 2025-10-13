@@ -178,7 +178,6 @@ final class Engine {
 
     currentLoopIndex = config.currentLoopIndex
     activeLoop = loops[currentLoopIndex]
-    //print("🎯 Running loop: \(type(of: activeLoop))")
     activeLoop.onAttach(window: window)
 
     // Schedule CLI actions relative to current time
@@ -278,8 +277,6 @@ final class Engine {
     let currentIndex = allSources.firstIndex(of: InputSource.player1) ?? 0
     let nextIndex = (currentIndex + 1) % allSources.count
     InputSource.player1 = allSources[nextIndex]
-
-    //print("🎮 InputSource.player1 switched to: \(InputSource.player1.rawValue)")
   }
 
   private func runMainLoop() {
