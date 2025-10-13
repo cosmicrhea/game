@@ -2,7 +2,7 @@ import Foundation
 import PackagePlugin
 
 @main
-struct VersionGenerator: BuildToolPlugin {
+struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
   func createBuildCommands(context: PluginContext, target: Target) async throws -> [Command] {
     let outputFile = context.pluginWorkDirectoryURL.appendingPathComponent("Version.swift")
     let scriptFile = context.pluginWorkDirectoryURL.appendingPathComponent("generate_version.sh")

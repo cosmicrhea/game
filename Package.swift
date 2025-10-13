@@ -71,11 +71,12 @@ let package = Package(
         .product(name: "STBTrueType", package: "stb-truetype"),
       ],
 
-      path: "./",
+      path: ".",
 
       exclude: [
         // "Documentation",
         "Sources/Assets",
+        "Sources/Core/Build",
         "Sources/Core/EditorMacros",
         "Plugins",
         "NOTES.md",
@@ -109,7 +110,7 @@ let package = Package(
       ],
 
       plugins: [
-        .plugin(name: "VersionGenerator")
+        .plugin(name: "GlassBuildTools")
       ]
     ),
 
@@ -124,9 +125,9 @@ let package = Package(
     ),
 
     .plugin(
-      name: "VersionGenerator",
+      name: "GlassBuildTools",
       capability: .buildTool(),
-      path: "Plugins"
+      path: "Sources/Core/Build"
     ),
   ]
 )
