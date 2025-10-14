@@ -18,6 +18,14 @@ extension Image {
       let url = baseURL.appendingPathComponent(path)
       if let data = try? Data(contentsOf: url) {
         let ext = url.pathExtension.lowercased()
+
+        // Handle SVG files
+        if ext == "svg" {
+          self = Image(svgData: data, pixelScale: pixelScale, targetSize: size, strokeWidth: strokeWidth)
+          return
+        }
+
+        // Handle other image formats
         let raw = Array(data)
         let loaded: ImageFormats.Image<ImageFormats.RGBA>?
         if ext == "png" {

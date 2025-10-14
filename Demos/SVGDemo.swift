@@ -40,7 +40,7 @@ final class SVGDemo: RenderLoop {
   private func loadImages() {
     svgData.removeAll()
     for path in svgPaths {
-      let image = Image(svgPath: path, pixelScale: 1.0, targetSize: Size(iconSize, iconSize), strokeWidth: strokeWidth)
+      let image = Image(path, size: Size(iconSize, iconSize), strokeWidth: strokeWidth)
       let name = URL(fileURLWithPath: path).lastPathComponent.replacingOccurrences(of: ".svg", with: "")
       svgData.append((image: image, name: name))
     }
