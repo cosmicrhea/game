@@ -74,7 +74,7 @@ public final class MTLRenderer: Renderer {
   public func beginFrame(windowSize: Size) {
     // Update viewport size from window size
     currentViewportSize = windowSize
-    
+
     // Get next drawable from the layer
     guard let drawable = metalLayer.nextDrawable() else {
       print("MTLRenderer: Failed to get next drawable")
@@ -600,6 +600,11 @@ public final class MTLRenderer: Renderer {
 
   public func endFramebuffer() {
     // TODO: Implement Metal framebuffer unbinding
+  }
+
+  public func getFramebufferTextureID(_ framebufferID: UInt64) -> UInt64? {
+    // TODO: Implement Metal framebuffer texture ID retrieval
+    return nil
   }
 
   public func drawFramebuffer(

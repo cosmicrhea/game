@@ -104,6 +104,11 @@ public protocol Renderer {
   /// Ends rendering to a framebuffer and returns to the main framebuffer
   func endFramebuffer()
 
+  /// Gets the texture ID from a framebuffer
+  /// - Parameter framebufferID: The ID of the framebuffer
+  /// - Returns: The texture ID of the framebuffer, or nil if not found
+  func getFramebufferTextureID(_ framebufferID: UInt64) -> UInt64?
+
   /// Draws a framebuffer as a texture with optional transform and alpha
   /// - Parameters:
   ///   - framebufferID: The ID of the framebuffer to draw

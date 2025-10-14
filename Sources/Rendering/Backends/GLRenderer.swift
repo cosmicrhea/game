@@ -725,6 +725,11 @@ public final class GLRenderer: Renderer {
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
   }
 
+  public func getFramebufferTextureID(_ framebufferID: UInt64) -> UInt64? {
+    guard let framebuffer = framebuffers[framebufferID] else { return nil }
+    return framebuffer.getTextureID()
+  }
+
   public func drawFramebuffer(
     _ framebufferID: UInt64,
     in rect: Rect,

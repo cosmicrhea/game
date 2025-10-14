@@ -198,6 +198,7 @@ public final class Engine {
   private func setupInputHandlers() {
     window.keyInputHandler = { [weak self] window, key, scancode, state, mods in
       guard let self = self else { return }
+      self.activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onKeyPressed(window: window, key: key, scancode: Int32(scancode), mods: mods)
         handleGlobalDebugCommand(key: key)
@@ -218,6 +219,7 @@ public final class Engine {
 
     window.mouseButtonHandler = { [weak self] window, button, state, mods in
       guard let self = self else { return }
+      self.activeLoop.onMouseButton(window: window, button: button, state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onMouseButtonPressed(window: window, button: button, mods: mods)
       }

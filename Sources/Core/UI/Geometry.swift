@@ -16,8 +16,45 @@ public struct Point: Equatable, Hashable, Sendable {
     self.y = y
   }
 
+  /// A concise string representation of the point.
+  public var description: String {
+    return "Point(x: \(x), y: \(y))"
+  }
+
   /// A point at the origin (0, 0).
   public static let zero = Point(0, 0)
+
+  // MARK: - Arithmetic Operators
+
+  public static func + (lhs: Point, rhs: Point) -> Point { Point(lhs.x + rhs.x, lhs.y + rhs.y) }
+  public static func - (lhs: Point, rhs: Point) -> Point { Point(lhs.x - rhs.x, lhs.y - rhs.y) }
+  public static func * (lhs: Point, rhs: Float) -> Point { Point(lhs.x * rhs, lhs.y * rhs) }
+  public static func / (lhs: Point, rhs: Float) -> Point { Point(lhs.x / rhs, lhs.y / rhs) }
+
+  public static func += (lhs: inout Point, rhs: Point) {
+    lhs.x += rhs.x
+    lhs.y += rhs.y
+  }
+  public static func -= (lhs: inout Point, rhs: Point) {
+    lhs.x -= rhs.x
+    lhs.y -= rhs.y
+  }
+  public static func *= (lhs: inout Point, rhs: Float) {
+    lhs.x *= rhs
+    lhs.y *= rhs
+  }
+  public static func /= (lhs: inout Point, rhs: Float) {
+    lhs.x /= rhs
+    lhs.y /= rhs
+  }
+
+  /// Returns the distance between two points.
+  /// - Parameter other: The other point.
+  /// - Returns: The distance between the two points.
+  public func distance(to other: Point) -> Float {
+    let distance = self - other
+    return (distance.x * distance.x + distance.y * distance.y).squareRoot()
+  }
 }
 
 /// A 2D size with floating-point dimensions.
@@ -36,6 +73,11 @@ public struct Size: Equatable, Hashable, Sendable {
     self.height = height
   }
 
+  /// A concise string representation of the size.
+  public var description: String {
+    return "Size(width: \(width) × height: \(height))"
+  }
+
   /// A size with zero width and height.
   public static let zero = Size(0, 0)
 }
@@ -46,6 +88,26 @@ public struct Rect: Equatable, Hashable, Sendable, CustomStringConvertible {
   public var origin: Point
   /// The size of the rectangle.
   public var size: Size
+
+  // MARK: - Convenience Properties
+
+  /// The minimum x-coordinate of the rectangle.
+  public var minX: Float { origin.x }
+  /// The minimum y-coordinate of the rectangle.
+  public var minY: Float { origin.y }
+  /// The maximum x-coordinate of the rectangle.
+  public var maxX: Float { origin.x + size.width }
+  /// The maximum y-coordinate of the rectangle.
+  public var maxY: Float { origin.y + size.height }
+  /// The x-coordinate of the rectangle's center.
+  public var midX: Float { origin.x + size.width / 2 }
+  /// The y-coordinate of the rectangle's center.
+  public var midY: Float { origin.y + size.height / 2 }
+
+  /// The width of the rectangle.
+  public var width: Float { size.width }
+  /// The height of the rectangle.
+  public var height: Float { size.height }
 
   /// A concise string representation of the rectangle.
   public var description: String {
@@ -74,6 +136,12 @@ public struct Rect: Equatable, Hashable, Sendable, CustomStringConvertible {
 
   /// A rectangle at the origin with zero size.
   public static let zero = Rect(origin: .zero, size: .zero)
+
+  /// A rectangle at infinity with zero size.
+  public static let null = Rect(origin: Point(.infinity, .infinity), size: .zero)
+
+  /// A rectangle at origin with virtually infinite size.
+  public static let infinite = Rect(origin: .zero, size: Size(.greatestFiniteMagnitude, .greatestFiniteMagnitude))
 }
 
 /// Edge insets for rectangles, specifying how much to inset each edge.

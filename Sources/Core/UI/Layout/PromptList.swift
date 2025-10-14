@@ -14,7 +14,7 @@ public final class PromptList {
   /// Fine-tune vertical alignment of labels (positive moves down)
   public var labelBaselineOffset: Float = -14
   /// Target icon height in pixels. If set, icons are scaled to this height preserving aspect.
-  public var targetIconHeight: Float? = 32
+  public var targetIconHeight: Float? = 40
   /// Icon opacity (0.0 = transparent, 1.0 = opaque)
   public var iconOpacity: Float = 0.5
   /// Label color (R, G, B, A)

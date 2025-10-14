@@ -51,6 +51,51 @@ extension Image {
     self = Image.uploadToGL(pixels: bytes, width: width, height: height, pixelScale: pixelScale)
   }
 
+  /// Creates an Image by rendering to an offscreen framebuffer.
+  /// - Parameters:
+  ///   - size: The size of the offscreen image
+  ///   - pixelScale: Scale factor for the image (default: 1.0)
+  ///   - renderBlock: A closure that renders content to the offscreen framebuffer
+  @MainActor
+  public init(size: Size, pixelScale: Float = 1.0, renderBlock: () -> Void) {
+    print("Creating offscreen image with size: \(size)")
+
+    // Create a framebuffer for offscreen rendering
+    let framebufferID = Engine.shared.renderer.createFramebuffer(size: size, scale: pixelScale)
+    print("Created framebuffer ID: \(framebufferID)")
+
+    // Begin rendering to the framebuffer
+    Engine.shared.renderer.beginFramebuffer(framebufferID)
+
+    // Clear the framebuffer
+    Engine.shared.renderer.setClearColor(.clear)
+
+    // Create a GraphicsContext for offscreen rendering
+    let offscreenContext = GraphicsContext(renderer: Engine.shared.renderer, scale: pixelScale)
+    GraphicsContext.withContext(offscreenContext) {
+      renderBlock()
+    }
+
+    // End framebuffer rendering
+    Engine.shared.renderer.endFramebuffer()
+
+    // Create an Image from the framebuffer texture
+    guard let textureID = Engine.shared.renderer.getFramebufferTextureID(framebufferID) else {
+      print("Failed to get framebuffer texture ID, using fallback")
+      // Fallback to a 1x1 white pixel if framebuffer fails
+      self = Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
+      return
+    }
+
+    print("Got texture ID: \(textureID)")
+    self = Image(
+      textureID: textureID,
+      naturalSize: size,
+      pixelScale: pixelScale,
+      framebufferID: framebufferID
+    )
+  }
+
   /// Upload RGBA8 pixels to GL and return a GPU-backed Image.
   public static func uploadToGL(pixels: [UInt8], width: Int, height: Int, pixelScale: Float = 1.0) -> Image {
     var tex: GLuint = 0
@@ -78,6 +123,7 @@ extension Image {
       textureID: UInt64(tex),
       naturalSize: Size(Float(width), Float(height)),
       pixelScale: pixelScale,
+      framebufferID: nil,
       pixelBytes: pixels,
       pixelWidth: width,
       pixelHeight: height

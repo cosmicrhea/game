@@ -89,6 +89,10 @@ public final class GLFramebuffer {
     glViewport(0, 0, GLsizei(size.width * scale), GLsizei(size.height * scale))
   }
 
+  public func getTextureID() -> UInt64 {
+    return UInt64(texture)
+  }
+
   func drawTexture(in rect: Rect, program: GLProgram) {
     // Create quad vertices for the framebuffer texture
     let x = rect.origin.x
