@@ -143,7 +143,7 @@ final class SlotDemo: RenderLoop {
 
     for (index, instruction) in instructions.enumerated() {
       instruction.draw(
-        at: Point(20, Float(HEIGHT) - 20 - Float(index * 25)),
+        at: Point(20, Float(Engine.viewportSize.height) - 20 - Float(index * 25)),
         style: TextStyle(fontName: "Determination", fontSize: 18, color: .white),
         anchor: .topLeft
       )
@@ -160,7 +160,9 @@ final class SlotDemo: RenderLoop {
 
     for (index, line) in info.enumerated() {
       line.draw(
-        at: Point(Float(WIDTH) - 20, Float(HEIGHT) - 20 - Float(index * 20)),
+        at: Point(
+          Float(Engine.viewportSize.width) - 20,
+          Float(Engine.viewportSize.height) - 20 - Float(index * 20)),
         style: TextStyle(fontName: "Determination", fontSize: 16, color: .white),
         anchor: .topRight
       )

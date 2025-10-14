@@ -44,6 +44,7 @@ public struct Color: Sendable, Equatable {
 extension Color {
   public static let white = Color(1, 1, 1, 1)
   public static let black = Color(0, 0, 0, 1)
+  public static let red = Color(1, 0, 0, 1)
   public static let magenta = Color(1, 0, 1, 1)
   public static let clear = Color(0, 0, 0, 0)
 

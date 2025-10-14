@@ -41,11 +41,16 @@ public struct Size: Equatable, Hashable, Sendable {
 }
 
 /// A 2D rectangle with floating-point coordinates and dimensions.
-public struct Rect: Equatable, Hashable, Sendable {
+public struct Rect: Equatable, Hashable, Sendable, CustomStringConvertible {
   /// The origin point of the rectangle.
   public var origin: Point
   /// The size of the rectangle.
   public var size: Size
+
+  /// A concise string representation of the rectangle.
+  public var description: String {
+    return "Rect(origin: (\(origin.x), \(origin.y)), size: (\(size.width) × \(size.height)))"
+  }
 
   /// Creates a new rectangle with the specified origin and size.
   /// - Parameters:

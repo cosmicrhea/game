@@ -115,7 +115,7 @@ public class ListMenu {
   public func draw() {
     guard !menuItems.isEmpty else { return }
 
-    let screenHeight = Float(HEIGHT)
+    let screenHeight = Float(Engine.viewportSize.height)
     let menuStartY = screenHeight - 64 - (Float(menuItems.count) * spacing)
 
     for (index, item) in menuItems.enumerated() {
@@ -174,7 +174,7 @@ public class ListMenu {
   }
 
   private func getItemIndexAt(_ mousePosition: Point) -> Int? {
-    let screenHeight = Float(HEIGHT)
+    let screenHeight = Float(Engine.viewportSize.height)
     let menuStartY = screenHeight - 64 - (Float(menuItems.count) * spacing)
     let menuItemHeight: Float = 40
 

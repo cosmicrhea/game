@@ -7,6 +7,9 @@ private enum Credits {
   // Modeling
   // Aleksandr Sagidullin
   // https://sketchfab.com/3d-models/work-gloves-991e775b6b5b4fdab682af56d08bb119
+  // binh6675
+  // https://sketchfab.com/binh6675
+
 }
 
 final class CreditsScreen: RenderLoop {

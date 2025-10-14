@@ -17,7 +17,7 @@ public enum CalloutStyle {
   /// Tutorial callout - centered on screen
   case tutorial
   /// Prompt list callout - bottom-right with custom width
-  case promptList(width: Float = Float(WIDTH) / 3)
+  case promptList(width: Float = Engine.viewportSize.width / 3)
 }
 
 /// Fade effect options for callout edges.
@@ -132,20 +132,22 @@ public struct Callout {
     let (rect, fade): (Rect, CalloutFade) = {
       switch style {
       case .objective(let offset):
-        let w = Float(WIDTH) / 3
+        let w = Float(Engine.viewportSize.width) / 3
         let h: Float = 36
         let topMargin: Float = 96
-        let origin = Point(0, Float(HEIGHT) - h - topMargin - offset)
+        let origin = Point(0, Float(Engine.viewportSize.height) - h - topMargin - offset)
         return (Rect(origin: origin, size: Size(w, h)), .right)
       case .tutorial:
-        let w = Float(WIDTH) / 3
+        let w = Float(Engine.viewportSize.width) / 3
         let h: Float = 36
-        let origin = Point(Float(WIDTH) * 0.5 - w * 0.5, Float(HEIGHT) * 0.5 - h * 0.5 - 128)
+        let origin = Point(
+          Float(Engine.viewportSize.width) * 0.5 - w * 0.5,
+          Float(Engine.viewportSize.height) * 0.5 - h * 0.5 - 128)
         return (Rect(origin: origin, size: Size(w, h)), .both)
       case .promptList(let width):
         let w = width
         let h: Float = 57
-        let origin = Point(Float(WIDTH) - w, 0)
+        let origin = Point(Float(Engine.viewportSize.width) - w, 0)
         return (Rect(origin: origin, size: Size(w, h)), .left)
       }
     }()

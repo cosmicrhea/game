@@ -4,7 +4,7 @@ import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
-  name: "Red Glass",
+  name: "Game",
 
   platforms: [
     // .macOS(.v13), // FIXME: build assimp for v13
@@ -14,7 +14,7 @@ let package = Package(
   ],
 
   products: [
-    .executable(name: "Red Glass", targets: ["Glass"])
+    .executable(name: "Game", targets: ["Glass"])
   ],
 
   dependencies: [

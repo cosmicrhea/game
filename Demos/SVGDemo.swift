@@ -4,20 +4,20 @@ import GLMath
 
 /// Demo showcasing SVG loading and rendering capabilities
 @MainActor
-public struct SVGDemo: RenderLoop {
-  private var svgImages: [String: Image] = [:]
-  private var imageNames: [String] = []
+final class SVGDemo: RenderLoop {
+  private var svgData: [(image: Image, name: String)] = []
+  private var iconSize: Float = 64.0
+  private let iconSizes: [Float] = [16, 24, 32, 48, 64, 80, 96, 112, 128]
+  private var currentSizeIndex: Int = 4  // Start at 64
+  private var svgPaths: [String] = []  // Store original paths for reloading
 
-  public init() {
-    loadAllTestIcons()
-  }
+  // Stroke width controls
+  private var strokeWidth: Float? = nil  // nil = use original
+  private let strokeWidths: [Float?] = [nil, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0]
+  private var currentStrokeIndex: Int = 0  // Start at nil (original)
 
-  /// Load all SVG icons from the test directory
-  private mutating func loadAllTestIcons() {
-    guard let bundleURL = Bundle.module.url(forResource: "UI/Icons/test", withExtension: nil) else {
-      logger.error("SVGDemo: Could not find test icons directory")
-      return
-    }
+  init() {
+    guard let bundleURL = Bundle.module.url(forResource: "UI/Icons/test", withExtension: nil) else { return }
 
     let fileManager = FileManager.default
     do {
@@ -27,101 +27,107 @@ public struct SVGDemo: RenderLoop {
       for svgURL in svgFiles {
         let relativePath = "UI/Icons/test/\(svgURL.lastPathComponent)"
         if Image.validateSVG(svgPath: relativePath) {
-          let image = Image(svgPath: relativePath, pixelScale: 1.0, targetSize: Size(64, 64))
-          svgImages[relativePath] = image
-          imageNames.append(relativePath)
+          svgPaths.append(relativePath)
         }
       }
 
-      logger.info("SVGDemo: Loaded \(imageNames.count) SVG icons from test directory")
+      loadImages()
     } catch {
-      logger.error("SVGDemo: Failed to read test icons directory: \(error)")
+      // Silently handle errors
     }
   }
 
-  /// Update the demo state
-  public mutating func update(deltaTime: Float) {
-    // No cycling needed - we'll show all icons in a grid
+  private func loadImages() {
+    svgData.removeAll()
+    for path in svgPaths {
+      let image = Image(svgPath: path, pixelScale: 1.0, targetSize: Size(iconSize, iconSize), strokeWidth: strokeWidth)
+      let name = URL(fileURLWithPath: path).lastPathComponent.replacingOccurrences(of: ".svg", with: "")
+      svgData.append((image: image, name: name))
+    }
   }
 
-  /// Render the current SVG demo
-  public func draw() {
-    guard !imageNames.isEmpty else { return }
-
-    // Multi-size grid layout for test icons
-    let screenWidth: Float = 1200.0
-    let padding: Float = 16.0
-    let sizes: [Float] = [24, 32, 48, 72]
-
-    // Calculate grid layout
-    let maxIconsPerRow = Int((screenWidth - padding) / (Float(sizes.max()!) + padding))
-    let iconsPerSize = min(imageNames.count, maxIconsPerRow)
-
-    for (sizeIndex, size) in sizes.enumerated() {
-      let startY =
-        Float(sizeIndex) * (Float(iconsPerSize) * (size + padding) / Float(maxIconsPerRow) + padding * 2) + padding
-
-      for (index, imageName) in imageNames.prefix(iconsPerSize).enumerated() {
-        guard let image = svgImages[imageName] else { continue }
-
-        let col = index % maxIconsPerRow
-        let x = Float(col) * (size + padding) + padding
-        let y = startY
-
-        // Draw the image at the calculated position with white tint
-        let rect = Rect(origin: Point(x, y), size: Size(size, size))
-        image.draw(in: rect, tint: .white)
+  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    switch key {
+    case .minus:
+      if currentSizeIndex > 0 {
+        currentSizeIndex -= 1
+        iconSize = iconSizes[currentSizeIndex]
+        loadImages()  // Reload images at new size
+        UISound.select()
       }
-    }
-  }
-
-  /// Draw information about the current image
-  private func drawImageInfo(currentImageName: String, image: Image) {
-    // This would typically use a text rendering system
-    // For now, just log the information
-    logger.debug(
-      "SVGDemo: Displaying \(currentImageName) (\(Int(image.naturalSize.width))x\(Int(image.naturalSize.height)))")
-  }
-
-  /// Test SVG loading with different methods
-  public static func testSVGLoading() {
-    logger.info("SVGDemo: Testing SVG loading methods")
-
-    // Test standard SVG loading
-    if let testSVGPath = findTestSVG() {
-      logger.info("SVGDemo: Testing standard SVG loading")
-      let standardImage = Image(svgPath: testSVGPath, pixelScale: 1.0)
-      logger.info("SVGDemo: Standard loading result: \(standardImage.naturalSize)")
-
-      // Test tessellation loading
-      logger.info("SVGDemo: Testing tessellation SVG loading")
-      let tessellatedImage = Image(svgPath: testSVGPath, pixelScale: 1.0, targetSize: Size(64, 64))
-      logger.info("SVGDemo: Tessellation loading result: \(tessellatedImage.naturalSize)")
-
-      // Test validation
-      let isValid = Image.validateSVG(svgPath: testSVGPath)
-      logger.info("SVGDemo: SVG validation result: \(isValid)")
-    } else {
-      logger.warning("SVGDemo: No test SVG found")
-    }
-  }
-
-  /// Find a test SVG file to use for testing
-  private static func findTestSVG() -> String? {
-    let testPaths = [
-      "UI/Icons/callouts/chevron.svg",
-      "UI/Icons/callouts/info.svg",
-      "UI/Icons/callouts/location.svg",
-      "UI/Icons/carets/caret-down.svg",
-      "UI/Icons/debug/camera.svg",
-    ]
-
-    for path in testPaths {
-      if Image.validateSVG(svgPath: path) {
-        return path
+    case .equal:
+      if currentSizeIndex < iconSizes.count - 1 {
+        currentSizeIndex += 1
+        iconSize = iconSizes[currentSizeIndex]
+        loadImages()  // Reload images at new size
+        UISound.select()
       }
+    case .q:  // Q key - decrease stroke width
+      if currentStrokeIndex > 0 {
+        currentStrokeIndex -= 1
+        strokeWidth = strokeWidths[currentStrokeIndex]
+        loadImages()  // Reload images with new stroke width
+        UISound.select()
+      }
+    case .e:  // E key - increase stroke width
+      if currentStrokeIndex < strokeWidths.count - 1 {
+        currentStrokeIndex += 1
+        strokeWidth = strokeWidths[currentStrokeIndex]
+        loadImages()  // Reload images with new stroke width
+        UISound.select()
+      }
+    default:
+      break
+    }
+  }
+
+  func draw() {
+    guard !svgData.isEmpty else { return }
+    guard GraphicsContext.current != nil else { return }
+
+    let padding: Float = 32.0
+    let iconsPerRow = 8
+    let textStyle = TextStyle(
+      fontName: "Creato Display Bold",
+      fontSize: 13,
+      color: .gray300,
+      alignment: .center
+    )
+
+    for (index, data) in svgData.enumerated() {
+      let col = index % iconsPerRow
+      let row = index / iconsPerRow
+
+      let x = Float(col) * (iconSize + padding) + padding
+      let y = Float(row) * (iconSize + padding) + padding
+
+      let rect = Rect(origin: Point(x, y), size: Size(iconSize, iconSize))
+      data.image.draw(in: rect, tint: .white)
+
+      rect.frame(with: .rose, lineWidth: 2)
+
+      // Draw icon name underneath - manually center it
+      let textSize = data.name.size(with: textStyle)
+      let textX = x + (iconSize - textSize.width) / 2
+      let textY = y - 16
+
+      data.name.draw(
+        at: Point(textX, textY),
+        style: textStyle,
+        anchor: .bottomLeft
+      )
     }
 
-    return nil
+    // Draw current values in top-left
+    let infoStyle = TextStyle(fontName: "Determination", fontSize: 18, color: .white)
+    let strokeText = strokeWidth != nil ? "\(strokeWidth!)" : "Original"
+    let infoText =
+      "Icon Size: \(Int(iconSize))px\nStroke Width: \(strokeText)\n\nControls:\n- / + : Icon Size\nQ / E : Stroke Width"
+
+    infoText.draw(
+      at: Point(20, Float(Engine.viewportSize.height) - 20),
+      style: infoStyle,
+      anchor: .topLeft
+    )
   }
 }

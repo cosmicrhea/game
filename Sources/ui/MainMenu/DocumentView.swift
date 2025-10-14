@@ -192,7 +192,7 @@ final class DocumentView: RenderLoop {
 
   func draw() {
     // Draw reference image
-    // ref.draw(in: Rect(x: 0, y: 0, width: Float(WIDTH), height: Float(HEIGHT)), tint: .white.withAlphaComponent(0.5))
+    // ref.draw(in: Rect(x: 0, y: 0, width: Float(Engine.viewportSize.width), height: Float(Engine.viewportSize.height)), tint: .white.withAlphaComponent(0.5))
 
     GraphicsContext.current?.renderer.setClearColor(.black)
 
@@ -200,8 +200,8 @@ final class DocumentView: RenderLoop {
 
     // Draw background in the center of the screen
     let backgroundSize: Float = 360
-    let backgroundX: Float = (Float(WIDTH) - backgroundSize) / 2
-    let backgroundY: Float = (Float(HEIGHT) - backgroundSize) / 2
+    let backgroundX: Float = (Float(Engine.viewportSize.width) - backgroundSize) / 2
+    let backgroundY: Float = (Float(Engine.viewportSize.height) - backgroundSize) / 2
     let backgroundRect = Rect(x: backgroundX, y: backgroundY, width: backgroundSize, height: backgroundSize)
 
     // Use animated background opacity
@@ -209,16 +209,14 @@ final class DocumentView: RenderLoop {
 
     // 1. Create 640px wide section in the middle of the screen
     let sectionWidth: Float = 640
-    let sectionX: Float = (Float(WIDTH) - sectionWidth) / 2
-    let _: Float = 0  // sectionY
-    let _: Float = Float(HEIGHT)  // sectionHeight
-    //let mainSection = Rect(x: sectionX, y: sectionY, width: sectionWidth, height: sectionHeight)
+    let sectionX: Float = (Float(Engine.viewportSize.width) - sectionWidth) / 2
 
     // Debug draw the main section
-    // mainSection.frame(with: .rose)
+    let mainSection = Rect(x: sectionX, y: 0, width: sectionWidth, height: Engine.viewportSize.height)
+    mainSection.frame(with: .rose)
 
     // 2. Position chevrons on left and right sides, centered vertically
-    let arrowY: Float = Float(HEIGHT) / 2 - caretRight.image.naturalSize.width * 0.25
+    let arrowY: Float = Float(Engine.viewportSize.height) / 2 - caretRight.image.naturalSize.width * 0.25
     let leftArrowX: Float = sectionX
     let rightArrowX: Float = sectionX + sectionWidth - (caretRight.image.naturalSize.width * 0.5 * 1.5)
 
@@ -233,10 +231,10 @@ final class DocumentView: RenderLoop {
     // 3. Create 400px wide text area within the 640px section
     let textWidth: Float = 416
     let textAreaX: Float = sectionX + (sectionWidth - textWidth) / 2
-    let textArea = Rect(x: textAreaX, y: 0, width: textWidth, height: Float(HEIGHT))
+    let textArea = Rect(x: textAreaX, y: 0, width: textWidth, height: Float(Engine.viewportSize.height))
 
     // Debug draw the text area
-    // textArea.frame(with: .indigo)
+    textArea.frame(with: .indigo)
 
     // 4. Center text vertically using text measurement
     let currentText = getCurrentPageText()

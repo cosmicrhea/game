@@ -119,7 +119,7 @@ final class MainLoop: RenderLoop {
     )
 
     debugText.draw(
-      at: Point(24, Float(HEIGHT) - 24),
+      at: Point(24, Float(Engine.viewportSize.height) - 24),
       style: determinationStyle,
       anchor: .topLeft
     )

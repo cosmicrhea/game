@@ -102,7 +102,7 @@ final class TextEffectsDemo: RenderLoop {
     glClearColor(0.1, 0.1, 0.2, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
 
-    let ws = (Int32(WIDTH), Int32(HEIGHT))
+    let ws = (Int32(Engine.viewportSize.width), Int32(Engine.viewportSize.height))
 
     // Layout constants
     let titleHeight: Float = 24
@@ -125,8 +125,8 @@ final class TextEffectsDemo: RenderLoop {
     }
 
     // Pack rectangles using STBRectPack
-    let binWidth = WIDTH - Int(marginX * 2)
-    let binHeight = HEIGHT - Int(marginY * 2)
+    let binWidth = Int(Engine.viewportSize.width) - Int(marginX * 2)
+    let binHeight = Int(Engine.viewportSize.height) - Int(marginY * 2)
 
     let rectSizes = effectData.map { (width: Int($0.width + spacingX), height: Int($0.height + spacingY)) }
 

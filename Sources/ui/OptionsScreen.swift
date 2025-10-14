@@ -60,7 +60,8 @@ final class OptionsScreen: Screen {
   override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
     switch button {
     case .left:
-      let mousePosition = Point(Float(window.mouse.position.x), Float(HEIGHT) - Float(window.mouse.position.y))
+      let mousePosition = Point(
+        Float(window.mouse.position.x), Float(Engine.viewportSize.height) - Float(window.mouse.position.y))
       listMenu.handleMouseClick(at: mousePosition)
 
     case .right:
@@ -74,7 +75,7 @@ final class OptionsScreen: Screen {
   }
 
   override func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
-    let mousePosition = Point(Float(x), Float(HEIGHT) - Float(y))
+    let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     listMenu.handleMouseMove(at: mousePosition)
   }
 

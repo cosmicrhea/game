@@ -9,7 +9,7 @@ import struct ImageFormats.RGBA
 
 extension Image {
   /// Load an image from SPM resource path and upload to GL. Returns a GPU-backed Image.
-  public init(_ path: String, pixelScale: Float = 1.0) {
+  public init(_ path: String, size: Size? = nil, strokeWidth: Float? = nil, pixelScale: Float = 1.0) {
     var width = 1
     var height = 1
     var bytes: [UInt8] = [255, 255, 255, 255]

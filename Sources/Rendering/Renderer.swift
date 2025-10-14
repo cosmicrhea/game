@@ -2,11 +2,12 @@
 public protocol Renderer {
   // MARK: - Frame lifecycle
 
-  /// Begins a new rendering frame with the specified viewport size and scale.
-  /// - Parameters:
-  ///   - viewportSize: The size of the viewport in points.
-  ///   - scale: The scale factor for coordinate transformations.
-  func beginFrame(viewportSize: Size, scale: Float)
+  /// Begins a new rendering frame.
+  /// - Parameter windowSize: The current window size in pixels.
+  func beginFrame(windowSize: Size)
+
+  /// The current viewport size in points.
+  var viewportSize: Size { get }
 
   /// Ends the current rendering frame and presents the results.
   func endFrame()

@@ -35,7 +35,7 @@ extension Document {
       """
       MILITARY EXPERIMENTS
       
-      1960s NATO memos spoke of “mirror soldiers.” Troops that couldn’t bleed, couldn’t feel pain. Project never officially existed.
+      1980s NATO memos spoke of “mirror soldiers.” Troops that couldn’t bleed, couldn’t feel pain. Project never officially existed.
       
       But ex-soldiers in Østerbro speak of exercises where recruits “shone in the dark.”
 

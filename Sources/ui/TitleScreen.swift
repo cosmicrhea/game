@@ -51,13 +51,14 @@ final class TitleScreen: Screen {
 
   override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
     if button == .left {
-      let mousePosition = Point(Float(window.mouse.position.x), Float(HEIGHT) - Float(window.mouse.position.y))
+      let mousePosition = Point(
+        Float(window.mouse.position.x), Float(Engine.viewportSize.height) - Float(window.mouse.position.y))
       listMenu.handleMouseClick(at: mousePosition)
     }
   }
 
   override func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
-    let mousePosition = Point(Float(x), Float(HEIGHT) - Float(y))
+    let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     listMenu.handleMouseMove(at: mousePosition)
   }
 
@@ -115,8 +116,8 @@ final class TitleScreenStack: RenderLoop {
     // Set clear color to black
     GraphicsContext.current?.renderer.setClearColor(.black)
 
-    let screenWidth = Float(WIDTH)
-    let screenHeight = Float(HEIGHT)
+    let screenWidth = Float(Engine.viewportSize.width)
+    let screenHeight = Float(Engine.viewportSize.height)
 
     // Draw background image
     let backgroundRect = Rect(x: 0, y: 0, width: screenWidth, height: screenHeight)

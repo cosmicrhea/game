@@ -77,13 +77,13 @@ public final class DEPRECATED_GridLayout<T> {
   /// Handle mouse movement from RenderLoop
   public func handleMouseMove(x: Double, y: Double) {
     // Flip Y coordinate to match screen coordinates
-    let flippedY = Float(HEIGHT) - Float(y)
+    let flippedY = Float(Engine.viewportSize.height) - Float(y)
     let mousePosition = Point(Float(x), flippedY)
     lastMousePosition = mousePosition
 
     // Check if mouse is over grid
-    let totalWidth = Float(WIDTH) - (padding * 2)
-    let totalHeight = Float(HEIGHT) - (padding * 2)
+    let totalWidth = Float(Engine.viewportSize.width) - (padding * 2)
+    let totalHeight = Float(Engine.viewportSize.height) - (padding * 2)
     let gridRect = Rect(
       x: padding,
       y: padding,
@@ -123,8 +123,8 @@ public final class DEPRECATED_GridLayout<T> {
     renderer: @escaping (T, Rect, Bool, Bool) -> Void
   ) {
     // Calculate tight grid layout
-    let totalWidth = Float(WIDTH) - (padding * 2)
-    let totalHeight = Float(HEIGHT) - (padding * 2)
+    let totalWidth = Float(Engine.viewportSize.width) - (padding * 2)
+    let totalHeight = Float(Engine.viewportSize.height) - (padding * 2)
 
     // Calculate cell size based on available space and padding
     let cellWidth = (totalWidth - (Float(columns - 1) * padding)) / Float(columns)

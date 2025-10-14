@@ -21,6 +21,15 @@ public final class GLFramebuffer {
   }
 
   private func createFramebuffer() {
+    // Validate dimensions
+    let scaledWidth = Int(size.width * scale)
+    let scaledHeight = Int(size.height * scale)
+
+    if scaledWidth <= 0 || scaledHeight <= 0 {
+      print("ERROR: Invalid framebuffer dimensions: \(scaledWidth)x\(scaledHeight)")
+      return
+    }
+
     // Create framebuffer
     glGenFramebuffers(1, &fbo)
     glBindFramebuffer(GL_FRAMEBUFFER, fbo)

@@ -7,7 +7,8 @@ extension Image {
   ///   - svgPath: Path to the SVG file in the app bundle
   ///   - pixelScale: Scale factor for the image (default: 1.0)
   ///   - targetSize: Optional target size for the image (default: uses SVG's natural size)
-  public init(svgPath: String, pixelScale: Float = 1.0, targetSize: Size? = nil) {
+  ///   - strokeWidth: Optional stroke width override (default: nil, uses original)
+  public init(svgPath: String, pixelScale: Float = 1.0, targetSize: Size? = nil, strokeWidth: Float? = nil) {
     guard let url = Bundle.module.url(forResource: svgPath, withExtension: nil) else {
       logger.error("Image.init(svgPath:): Could not find SVG file at \(svgPath)")
       self = Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
@@ -20,7 +21,7 @@ extension Image {
       return
     }
 
-    self.init(svgData: data, pixelScale: pixelScale, targetSize: targetSize)
+    self.init(svgData: data, pixelScale: pixelScale, targetSize: targetSize, strokeWidth: strokeWidth)
   }
 
   /// Creates an image from SVG data using NanoSVG for parsing and SVGRasterizer for rendering.
@@ -28,9 +29,10 @@ extension Image {
   ///   - svgData: Raw SVG data
   ///   - pixelScale: Scale factor for the image (default: 1.0)
   ///   - targetSize: Optional target size for the image (default: uses SVG's natural size)
-  public init(svgData: Data, pixelScale: Float = 1.0, targetSize: Size? = nil) {
+  ///   - strokeWidth: Optional stroke width override (default: nil, uses original)
+  public init(svgData: Data, pixelScale: Float = 1.0, targetSize: Size? = nil, strokeWidth: Float? = nil) {
     // Preprocess SVG data to make strokes white for proper tinting
-    let processedData = Image.preprocessSVGForWhiteStrokes(svgData)
+    let processedData = Image.preprocessSVGForWhiteStrokes(svgData, targetSize: targetSize, strokeWidth: strokeWidth)
 
     // Parse SVG using NanoSVG Swift wrapper
     guard let svgImage = SVGImage(data: processedData) else {
@@ -93,18 +95,64 @@ extension Image {
   }
 
   /// Preprocesses SVG data to replace black strokes with white for proper tinting
-  private static func preprocessSVGForWhiteStrokes(_ svgData: Data) -> Data {
+  private static func preprocessSVGForWhiteStrokes(_ svgData: Data, targetSize: Size? = nil, strokeWidth: Float? = nil)
+    -> Data
+  {
     guard let svgString = String(data: svgData, encoding: .utf8) else {
       return svgData
     }
 
     // Replace black strokes with white
-    let processedString =
+    var processedString =
       svgString
       .replacingOccurrences(of: "stroke=\"black\"", with: "stroke=\"white\"")
       .replacingOccurrences(of: "stroke='black'", with: "stroke='white'")
       .replacingOccurrences(of: "fill=\"black\"", with: "fill=\"white\"")
       .replacingOccurrences(of: "fill='black'", with: "fill='white'")
+
+    // Override or add width/height attributes based on targetSize
+    if let targetSize = targetSize {
+      // Add or replace width and height attributes to the SVG tag
+      if let tagMatch = processedString.range(of: #"<svg[^>]*>"#, options: .regularExpression) {
+        let tag = String(processedString[tagMatch])
+        var newTag = tag
+
+        // Remove existing width/height attributes if they exist
+        newTag = newTag.replacingOccurrences(of: #"width="[^"]*""#, with: "", options: .regularExpression)
+        newTag = newTag.replacingOccurrences(of: #"height="[^"]*""#, with: "", options: .regularExpression)
+        newTag = newTag.replacingOccurrences(of: #"width='[^']*'"#, with: "", options: .regularExpression)
+        newTag = newTag.replacingOccurrences(of: #"height='[^']*'"#, with: "", options: .regularExpression)
+
+        // Add new width and height attributes
+        newTag = newTag.replacingOccurrences(
+          of: ">", with: " width=\"\(Int(targetSize.width))\" height=\"\(Int(targetSize.height))\">")
+
+        processedString = processedString.replacingOccurrences(of: tag, with: newTag)
+      }
+    }
+
+    // Override stroke-width if specified
+    if let strokeWidth = strokeWidth {
+      // Replace existing stroke-width attributes
+      processedString = processedString.replacingOccurrences(
+        of: #"stroke-width="[^"]*""#, with: "stroke-width=\"\(strokeWidth)\"", options: .regularExpression)
+      processedString = processedString.replacingOccurrences(
+        of: #"stroke-width='[^']*'"#, with: "stroke-width='\(strokeWidth)'", options: .regularExpression)
+
+      // Add stroke-width to elements that don't have it
+      processedString = processedString.replacingOccurrences(
+        of: #"<path([^>]*?)(?<!stroke-width=)([^>]*?)>"#, with: "<path$1 stroke-width=\"\(strokeWidth)\"$2>",
+        options: .regularExpression)
+      processedString = processedString.replacingOccurrences(
+        of: #"<circle([^>]*?)(?<!stroke-width=)([^>]*?)>"#, with: "<circle$1 stroke-width=\"\(strokeWidth)\"$2>",
+        options: .regularExpression)
+      processedString = processedString.replacingOccurrences(
+        of: #"<rect([^>]*?)(?<!stroke-width=)([^>]*?)>"#, with: "<rect$1 stroke-width=\"\(strokeWidth)\"$2>",
+        options: .regularExpression)
+      processedString = processedString.replacingOccurrences(
+        of: #"<line([^>]*?)(?<!stroke-width=)([^>]*?)>"#, with: "<line$1 stroke-width=\"\(strokeWidth)\"$2>",
+        options: .regularExpression)
+    }
 
     return processedString.data(using: .utf8) ?? svgData
   }

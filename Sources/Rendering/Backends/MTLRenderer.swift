@@ -19,6 +19,10 @@ public final class MTLRenderer: Renderer {
   private var currentViewportSize: Size = Size(0, 0)
   private var currentScale: Float = 1.0
 
+  public var viewportSize: Size {
+    return currentViewportSize
+  }
+
   // Metal rendering state
   private var currentCommandBuffer: MTLCommandBuffer?
   private var currentRenderPassDescriptor: MTLRenderPassDescriptor?
@@ -67,16 +71,10 @@ public final class MTLRenderer: Renderer {
     self.pathIndexBuffer = device.makeBuffer(length: 4096 * 4, options: [])  // 4096 indices * 4 bytes per index
   }
 
-  public func beginFrame(viewportSize: Size, scale: Float) {
-    self.currentViewportSize = viewportSize
-    self.currentScale = scale
-
-    // Update layer drawable size if needed
-    let newSize = CGSize(width: CGFloat(viewportSize.width), height: CGFloat(viewportSize.height))
-    if metalLayer.drawableSize != newSize {
-      metalLayer.drawableSize = newSize
-    }
-
+  public func beginFrame(windowSize: Size) {
+    // Update viewport size from window size
+    currentViewportSize = windowSize
+    
     // Get next drawable from the layer
     guard let drawable = metalLayer.nextDrawable() else {
       print("MTLRenderer: Failed to get next drawable")
@@ -112,7 +110,7 @@ public final class MTLRenderer: Renderer {
     // Set viewport
     let viewport = MTLViewport(
       originX: 0, originY: 0,
-      width: Double(viewportSize.width), height: Double(viewportSize.height),
+      width: Double(currentViewportSize.width), height: Double(currentViewportSize.height),
       znear: 0.0, zfar: 1.0
     )
     renderEncoder.setViewport(viewport)

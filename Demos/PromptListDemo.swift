@@ -20,7 +20,7 @@ final class PromptListDemo: RenderLoop {
   }
 
   func draw() {
-    let ws = (Int32(WIDTH), Int32(HEIGHT))
+    let ws = (Int32(Engine.viewportSize.width), Int32(Engine.viewportSize.height))
 
     // Layout constants
     let rowStep: Float = 40
@@ -43,8 +43,8 @@ final class PromptListDemo: RenderLoop {
     let marginY: Float = 12
     let spacingX: Float = 56  // Spacing between rectangles
     let spacingY: Float = 48  // Spacing between rectangles
-    let binWidth = WIDTH - Int(marginX * 2)  // Leave margin on both sides
-    let binHeight = HEIGHT - Int(marginY * 2)
+    let binWidth = Int(Engine.viewportSize.width) - Int(marginX * 2)  // Leave margin on both sides
+    let binHeight = Int(Engine.viewportSize.height) - Int(marginY * 2)
 
     // Add spacing to each rectangle size for packing
     let rectSizes = groupData.map { (width: Int($0.width + spacingX), height: Int($0.height + spacingY)) }
@@ -68,7 +68,7 @@ final class PromptListDemo: RenderLoop {
 
       // Convert packed coordinates to screen coordinates (bottom-right aligned)
       // Translate the entire packed block to bottom-right
-      let screenX = Float(WIDTH) - marginX - Float(packed.x + Int(group.width))
+      let screenX = Float(GraphicsContext.current?.size.width ?? 1280) - marginX - Float(packed.x + Int(group.width))
       let screenY = translateY + Float(packed.y)
 
       // Draw title

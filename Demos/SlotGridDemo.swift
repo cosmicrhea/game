@@ -28,8 +28,8 @@ final class SlotGridDemo: RenderLoop {
   private func recenterGrid() {
     let totalSize = slotGrid.totalSize
     gridPosition = Point(
-      (Float(WIDTH) - totalSize.width) * 0.5,  // Center X
-      (Float(HEIGHT) - totalSize.height) * 0.5 + 80  // Slightly above center Y
+      (Float(Engine.viewportSize.width) - totalSize.width) * 0.5,  // Center X
+      (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 80  // Slightly above center Y
     )
     slotGrid.setPosition(gridPosition)
   }
@@ -109,12 +109,12 @@ final class SlotGridDemo: RenderLoop {
     lastMouseX = x
     lastMouseY = y
     // Flip Y coordinate to match screen coordinates (top-left origin)
-    let mousePosition = Point(Float(x), Float(HEIGHT) - Float(y))
+    let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     slotGrid.handleMouseMove(at: mousePosition)
   }
 
   func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
-    let mousePosition = Point(Float(lastMouseX), Float(HEIGHT) - Float(lastMouseY))
+    let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
     if button == .left {
       _ = slotGrid.handleMouseClick(at: mousePosition)
@@ -144,7 +144,7 @@ final class SlotGridDemo: RenderLoop {
 
     for (index, instruction) in instructions.enumerated() {
       instruction.draw(
-        at: Point(20, Float(HEIGHT) - 20 - Float(index * 25)),
+        at: Point(20, Float(Engine.viewportSize.height) - 20 - Float(index * 25)),
         style: TextStyle(fontName: "Determination", fontSize: 18, color: .white),
         anchor: .topLeft
       )
@@ -166,7 +166,9 @@ final class SlotGridDemo: RenderLoop {
 
     for (index, line) in info.enumerated() {
       line.draw(
-        at: Point(Float(WIDTH) - 20, Float(HEIGHT) - 20 - Float(index * 20)),
+        at: Point(
+          Float(Engine.viewportSize.width) - 20,
+          Float(Engine.viewportSize.height) - 20 - Float(index * 20)),
         style: TextStyle(fontName: "Determination", fontSize: 16, color: .white),
         anchor: .topRight
       )

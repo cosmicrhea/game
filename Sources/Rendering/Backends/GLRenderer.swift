@@ -12,6 +12,20 @@ public final class GLRenderer: Renderer {
   // Clear color state
   private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
 
+  // Viewport state
+  private var _viewportSize: Size = Size(1280, 720)  // Default fallback
+  private var frameCount: Int = 0
+
+  public var viewportSize: Size {
+    // Try to get current viewport from OpenGL, fallback to stored value
+    var viewport: [GLint] = [0, 0, 0, 0]
+    glGetIntegerv(GL_VIEWPORT, &viewport)
+    if viewport[2] > 0 && viewport[3] > 0 {
+      return Size(Float(viewport[2]), Float(viewport[3]))
+    }
+    return _viewportSize
+  }
+
   // MARK: - UI State Management
 
   /// Execute a block with UI rendering state (no depth testing, blending enabled)
@@ -67,8 +81,14 @@ public final class GLRenderer: Renderer {
     glEnable(GL_MULTISAMPLE)
   }
 
-  public func beginFrame(viewportSize: Size, scale: Float) {
-    glViewport(0, 0, GLsizei(viewportSize.width), GLsizei(viewportSize.height))
+  public func beginFrame(windowSize: Size) {
+    // Set the viewport to match the window size
+    glViewport(0, 0, GLsizei(windowSize.width), GLsizei(windowSize.height))
+
+    // Update our stored viewport size
+    if windowSize != _viewportSize {
+      _viewportSize = windowSize
+    }
 
     // Clear the screen and set up OpenGL state
     glClearColor(clearColor.red, clearColor.green, clearColor.blue, clearColor.alpha)
@@ -419,26 +439,28 @@ public final class GLRenderer: Renderer {
       UnsafeRawPointer(bitPattern: 0)
     )
 
-    // Set up orthographic projection matrix
-    var viewport: [GLint] = [0, 0, 0, 0]
-    glGetIntegerv(GL_VIEWPORT, &viewport)
-    let W = Float(viewport[2])
-    let H = Float(viewport[3])
-    let mvp: [Float] = [
-      2 / W, 0, 0, 0,
-      0, 2 / H, 0, 0,
-      0, 0, -1, 0,
-      -1, -1, 0, 1,
-    ]
-    mvp.withUnsafeBufferPointer { buf in
-      pathProgram.setMat4("uMVP", value: buf.baseAddress!)
-    }
-
-    pathProgram.setVec4("uColor", value: (color.red, color.green, color.blue, color.alpha))
-
     // Save current state
     Self.withUIContext {
       pathProgram.use()
+
+      // Set up orthographic projection matrix AFTER using the program
+      var viewport: [GLint] = [0, 0, 0, 0]
+      glGetIntegerv(GL_VIEWPORT, &viewport)
+      let W = Float(viewport[2])
+      let H = Float(viewport[3])
+
+      let mvp: [Float] = [
+        2 / W, 0, 0, 0,
+        0, 2 / H, 0, 0,
+        0, 0, -1, 0,
+        -1, -1, 0, 1,
+      ]
+      mvp.withUnsafeBufferPointer { buf in
+        pathProgram.setMat4("uMVP", value: buf.baseAddress!)
+      }
+
+      pathProgram.setVec4("uColor", value: (color.red, color.green, color.blue, color.alpha))
+
       glBindVertexArray(vao)
       glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
       glBindVertexArray(0)
@@ -464,10 +486,16 @@ public final class GLRenderer: Renderer {
     switch anchor {
     case .topLeft:
       return Point(0, -baseline)
+    case .top:
+      return Point(-layoutResult.totalWidth / 2, -baseline)
     case .topRight:
       return Point(-layoutResult.totalWidth, -baseline)
+    case .center:
+      return Point(-layoutResult.totalWidth / 2, layoutResult.totalHeight / 2 - baseline)
     case .bottomLeft:
       return Point(0, layoutResult.totalHeight - baseline)
+    case .bottom:
+      return Point(-layoutResult.totalWidth / 2, layoutResult.totalHeight - baseline)
     case .bottomRight:
       return Point(-layoutResult.totalWidth, layoutResult.totalHeight - baseline)
     case .baselineLeft:

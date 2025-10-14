@@ -63,7 +63,7 @@ public final class PromptList {
       return Size(totalWidth, maxHeight)
     case .vertical:
       let totalHeight = maxHeight + Float(max(0, groups.count - 1)) * rowSpacing
-      return Size(Float(WIDTH) / 3, totalHeight)  // Use same width as vertical layout
+      return Size(Float(Engine.viewportSize.width) / 3, totalHeight)  // Use same width as vertical layout
     }
   }
 
@@ -302,7 +302,7 @@ public final class PromptList {
       case .topLeft, .bottomLeft:
         return origin.x
       case .topRight, .bottomRight:
-        return origin.x - Float(WIDTH) / 3  // Use same width as horizontal
+        return origin.x - Float(Engine.viewportSize.width) / 3  // Use same width as horizontal
       }
     }()
 
@@ -321,7 +321,7 @@ public final class PromptList {
     origin: Point,
     anchor: Anchor
   ) {
-    let windowSize = (Int32(WIDTH), Int32(HEIGHT))
+    let windowSize = (Int32(Engine.viewportSize.width), Int32(Engine.viewportSize.height))
     var groups: [Row] = []
     for (label, options) in prompts {
       if let icons = chooseIcons(for: inputSource, from: options) {
@@ -341,7 +341,7 @@ public final class PromptList {
   @MainActor public func draw() {
     guard let group = group else { return }
     let prompts = PromptGroup.prompts[group] ?? [:]
-    let origin = Point(Float(WIDTH) - 56, 12)
+    let origin = Point(Float(Engine.viewportSize.width) - 56, 12)
 
     // Draw callout background if enabled
     if showCalloutBackground {

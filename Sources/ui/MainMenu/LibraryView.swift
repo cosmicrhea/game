@@ -38,7 +38,7 @@ final class LibraryView: RenderLoop {
   init() {
     // Pack rectangles using RectPacking
     let binWidth = 800
-    let binHeight = HEIGHT
+    let binHeight = Int(Engine.viewportSize.height)
 
     let rectSizes = Array(
       repeating: (width: Int(itemSize + spacing), height: Int(itemSize + spacing)), count: documents.count)
@@ -54,8 +54,8 @@ final class LibraryView: RenderLoop {
     let maxY = packed.map { Float($0.y) + itemSize + spacing }.max() ?? 0
 
     // Convert packed rectangles to our Rect type and center them
-    let offsetX = (Float(WIDTH) - Float(binWidth)) / 2
-    let offsetY = (Float(HEIGHT) - maxY) / 2
+    let offsetX = (Float(Engine.viewportSize.width) - Float(binWidth)) / 2
+    let offsetY = (Float(Engine.viewportSize.height) - maxY) / 2
     packedRects = packed.map { packedRect in
       Rect(
         x: Float(packedRect.x) + offsetX + spacing / 2,
@@ -95,7 +95,7 @@ final class LibraryView: RenderLoop {
 
   func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
     // Flip Y coordinate to match screen coordinates
-    let flippedY = Float(HEIGHT) - Float(y)
+    let flippedY = Float(Engine.viewportSize.height) - Float(y)
     let mousePosition = Point(Float(x), flippedY)
 
     // Check each packed rectangle for mouse collision

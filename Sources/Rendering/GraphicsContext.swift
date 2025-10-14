@@ -9,6 +9,16 @@ public final class GraphicsContext {
   public let scale: Float
   private var clipStack: [Rect?] = [nil]
 
+  /// The current viewport size in points.
+  public var size: Size {
+    return renderer.viewportSize
+  }
+
+  /// Shortcut for viewport size - returns (0,0) if no context
+  public static var viewportSize: Size {
+    return current?.size ?? Size(0, 0)
+  }
+
   /// Creates a new graphics context with the specified renderer and scale.
   /// - Parameters:
   ///   - renderer: The renderer to use for drawing operations.

@@ -6,6 +6,7 @@ import GLMath
 final class InventoryView: RenderLoop {
   private let promptList = PromptList(.inventory)
   private var slotGrid: SlotGrid
+  private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
 
   // Mouse tracking
   private var lastMouseX: Double = 0
@@ -30,13 +31,15 @@ final class InventoryView: RenderLoop {
   private func recenterGrid() {
     let totalSize = slotGrid.totalSize
     let gridPosition = Point(
-      (Float(WIDTH) - totalSize.width) * 0.5,  // Center X
-      (Float(HEIGHT) - totalSize.height) * 0.5 + 80  // Slightly above center Y
+      (Float(Engine.viewportSize.width) - totalSize.width) * 0.5,  // Center X
+      (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 80  // Slightly above center Y
     )
     slotGrid.setPosition(gridPosition)
   }
 
   func update(deltaTime: Float) {
+    recenterGrid()
+
     // Update slot grid (includes menu animations)
     slotGrid.update(deltaTime: deltaTime)
   }
@@ -60,12 +63,12 @@ final class InventoryView: RenderLoop {
     lastMouseX = x
     lastMouseY = y
     // Flip Y coordinate to match screen coordinates (top-left origin)
-    let mousePosition = Point(Float(x), Float(HEIGHT) - Float(y))
+    let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     slotGrid.handleMouseMove(at: mousePosition)
   }
 
   func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
-    let mousePosition = Point(Float(lastMouseX), Float(HEIGHT) - Float(lastMouseY))
+    let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
     if button == .left {
       _ = slotGrid.handleMouseClick(at: mousePosition)
@@ -73,8 +76,16 @@ final class InventoryView: RenderLoop {
   }
 
   func draw() {
-    // Dark background
-    GraphicsContext.current?.renderer.setClearColor(.black)
+    // Draw ambient background
+    ambientBackground.draw { shader in
+      // Set ambient background parameters
+      shader.setVec3("uTintDark", value: (0.035, 0.045, 0.055))
+      shader.setVec3("uTintLight", value: (0.085, 0.10, 0.11))
+      shader.setFloat("uMottle", value: 0.35)
+      shader.setFloat("uGrain", value: 0.08)
+      shader.setFloat("uVignette", value: 0.35)
+      shader.setFloat("uDust", value: 0.06)
+    }
 
     // Draw the slot grid (includes menu)
     slotGrid.draw()

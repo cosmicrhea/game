@@ -54,7 +54,7 @@ public class NavigationStack: RenderLoop {
     transitionProgress = 0.0
 
     // Set up screen size for FBO
-    screenSize = Size(Float(WIDTH), Float(HEIGHT))
+    screenSize = Engine.viewportSize
 
     // Attach the new screen
     screen.onAttach(window: Engine.shared.window)

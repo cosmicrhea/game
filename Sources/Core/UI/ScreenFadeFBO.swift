@@ -165,6 +165,12 @@ public final class ScreenFadeFBO {
   }
 
   private func setupFBO(width: Int, height: Int) {
+    // Validate dimensions
+    if width <= 0 || height <= 0 {
+      print("ERROR: Invalid FBO dimensions: \(width)x\(height)")
+      return
+    }
+
     self.width = width
     self.height = height
 

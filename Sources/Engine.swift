@@ -38,9 +38,13 @@ struct CLIOptions: ParsableArguments {
 
 @main
 @MainActor
-final class Engine {
+public final class Engine {
   static let shared = Engine()
   static func main() { shared.run() }
+
+  // TODO: learn about Swift concurrency and how to use it correctly
+  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 720)
+  public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
   private var config: Config { .current }
 
@@ -100,11 +104,11 @@ final class Engine {
   }
 
   private func setupWindow() {
-    window = try! GLFWWindow(width: WIDTH, height: HEIGHT, title: "")
+    window = try! GLFWWindow(width: 1280, height: 720, title: "")
 
     #if EDITOR
       editorHostingView = NSHostingView(rootView: EditorView())
-      editorHostingView!.frame = NSRect(x: 0, y: 0, width: WIDTH, height: HEIGHT)
+      editorHostingView!.frame = NSRect(x: 0, y: 0, width: window.size.width, height: window.size.height)
       editorHostingView!.autoresizingMask = [.minXMargin, .minYMargin, .height]
       editorHostingView!.isHidden = !config.editorEnabled
       window.nsWindow?.contentView?.addSubview(editorHostingView!)
@@ -118,6 +122,8 @@ final class Engine {
     let dotCursor = Mouse.Cursor.custom(
       dotCursorImage, center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2)
     window.mouse.setCursor(to: dotCursor)
+
+    // Note: GLFW should automatically handle viewport updates, but we'll ensure it in beginFrame()
   }
 
   private func setupRenderer() {
@@ -148,7 +154,7 @@ final class Engine {
   private func setupLoops() {
     loops = [
       TitleScreenStack(),  // Uses the new NavigationStack system
-      // SVGDemo(),
+      SVGDemo(),
 
       MainLoop(),
       // SlotDemo(),
@@ -290,7 +296,8 @@ final class Engine {
 
       activeLoop.update(window: window, deltaTime: deltaTime)
 
-      renderer.beginFrame(viewportSize: Size(Float(WIDTH), Float(HEIGHT)), scale: 1)
+      Self._cachedViewportSize = Size(Float(window.size.width), Float(window.size.height))
+      renderer.beginFrame(windowSize: Size(Float(window.size.width), Float(window.size.height)))
 
       GraphicsContext.withContext(graphicsContext) {
         activeLoop.draw()
@@ -299,7 +306,7 @@ final class Engine {
       // Draw screen fade in UI context so it always appears on top
       renderer.withUIContext {
         ScreenFadeFBO.shared.update(deltaTime: deltaTime)
-        ScreenFadeFBO.shared.draw(screenSize: Size(Float(WIDTH), Float(HEIGHT)))
+        ScreenFadeFBO.shared.draw(screenSize: renderer.viewportSize)
       }
 
       renderer.endFrame()
@@ -310,7 +317,8 @@ final class Engine {
       }
 
       if requestScreenshot {
-        saveScreenshot(width: Int32(WIDTH), height: Int32(HEIGHT), path: cli.screenshot)
+        saveScreenshot(
+          width: Int32(renderer.viewportSize.width), height: Int32(renderer.viewportSize.height), path: cli.screenshot)
         requestScreenshot = false
       }
 
