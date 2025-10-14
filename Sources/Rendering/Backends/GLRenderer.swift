@@ -114,10 +114,18 @@ public final class GLRenderer: Renderer {
     in rect: Rect,
     tint: Color?
   ) {
-    let x = rect.origin.x
-    let y = rect.origin.y
-    let w = rect.size.width
-    let h = rect.size.height
+    // Apply coordinate flipping if the current GraphicsContext is flipped
+    let finalRect: Rect
+    if let context = GraphicsContext.current, context.isFlipped {
+      finalRect = context.flipRect(rect)
+    } else {
+      finalRect = rect
+    }
+
+    let x = finalRect.origin.x
+    let y = finalRect.origin.y
+    let w = finalRect.size.width
+    let h = finalRect.size.height
 
     // Quad vertices: x, y, u, v
     let verts: [Float] = [
@@ -202,10 +210,18 @@ public final class GLRenderer: Renderer {
   ) {
     //print("GLRenderer.drawImageRegion: textureID=\(textureID), rect=\(rect), uv=\(uv)")
 
-    let x = rect.origin.x
-    let y = rect.origin.y
-    let w = rect.size.width
-    let h = rect.size.height
+    // Apply coordinate flipping if the current GraphicsContext is flipped
+    let finalRect: Rect
+    if let context = GraphicsContext.current, context.isFlipped {
+      finalRect = context.flipRect(rect)
+    } else {
+      finalRect = rect
+    }
+
+    let x = finalRect.origin.x
+    let y = finalRect.origin.y
+    let w = finalRect.size.width
+    let h = finalRect.size.height
     let u0 = uv.origin.x
     let v0 = uv.origin.y
     let u1 = uv.origin.x + uv.size.width
@@ -280,6 +296,13 @@ public final class GLRenderer: Renderer {
     anchor: TextAnchor = .topLeft,
     alignment: TextAlignment = .left
   ) {
+    // Apply coordinate flipping if the current GraphicsContext is flipped
+    let finalOrigin: Point
+    if let context = GraphicsContext.current, context.isFlipped {
+      finalOrigin = context.flipPoint(origin)
+    } else {
+      finalOrigin = origin
+    }
     // Create font and layout for the default style
     guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize) else {
       return
@@ -310,7 +333,7 @@ public final class GLRenderer: Renderer {
     // Convert TextAnchor to anchor offset
     let anchorOffset = calculateTextAnchorOffset(
       layoutResult: layoutResult,
-      origin: origin,
+      origin: finalOrigin,
       anchor: anchor,
       scale: currentScale,
       font: font
@@ -323,7 +346,7 @@ public final class GLRenderer: Renderer {
 
     for (_, line) in layoutResult.lines.enumerated() {
       // Calculate proper Y position for this line using the working approach
-      let lineBaselineY = origin.y + anchorOffset.y - Float(line.baselineY) * lineHeight
+      let lineBaselineY = finalOrigin.y + anchorOffset.y - Float(line.baselineY) * lineHeight
 
       // Calculate X offset based on alignment
       let lineXOffset: Float
@@ -343,7 +366,7 @@ public final class GLRenderer: Renderer {
       let lineVertices = generateTextLineVertices(
         line: line,
         atlas: atlas,
-        origin: Point(origin.x + anchorOffset.x + lineXOffset, lineBaselineY),
+        origin: Point(finalOrigin.x + anchorOffset.x + lineXOffset, lineBaselineY),
         scale: currentScale,
         color: defaultStyle.color
       )
@@ -389,20 +412,80 @@ public final class GLRenderer: Renderer {
 
   public func setClipRect(_ rect: Rect?) {
     if let r = rect {
+      // Apply coordinate flipping if the current GraphicsContext is flipped
+      let finalRect: Rect
+      if let context = GraphicsContext.current, context.isFlipped {
+        finalRect = context.flipRect(r)
+      } else {
+        finalRect = r
+      }
+
       glEnable(GL_SCISSOR_TEST)
-      glScissor(GLint(r.origin.x), GLint(r.origin.y), GLsizei(r.size.width), GLsizei(r.size.height))
+      glScissor(
+        GLint(finalRect.origin.x), GLint(finalRect.origin.y), GLsizei(finalRect.size.width),
+        GLsizei(finalRect.size.height))
     } else {
       glDisable(GL_SCISSOR_TEST)
     }
   }
 
   public func drawPath(_ path: BezierPath, color: Color) {
-    let (vertices, indices) = path.tessellate()
+    // Apply coordinate flipping if the current GraphicsContext is flipped
+    let finalPath: BezierPath
+    if let context = GraphicsContext.current, context.isFlipped {
+      // Create a flipped version of the path
+      var newPath = BezierPath()
+      for element in path.pathElements {
+        switch element {
+        case .moveTo(let point):
+          newPath.move(to: context.flipPoint(point))
+        case .lineTo(let point):
+          newPath.addLine(to: context.flipPoint(point))
+        case .quadCurveTo(let point, let control):
+          newPath.addQuadCurve(to: context.flipPoint(point), control: context.flipPoint(control))
+        case .curveTo(let point, let control1, let control2):
+          newPath.addCurve(
+            to: context.flipPoint(point), control1: context.flipPoint(control1), control2: context.flipPoint(control2))
+        case .closePath:
+          newPath.closePath()
+        }
+      }
+      finalPath = newPath
+    } else {
+      finalPath = path
+    }
+
+    let (vertices, indices) = finalPath.tessellate()
     drawTriangles(vertices: vertices, indices: indices, color: color)
   }
 
   public func drawStroke(_ path: BezierPath, color: Color, lineWidth: Float) {
-    let (vertices, indices) = path.generateStrokeGeometry(lineWidth: lineWidth)
+    // Apply coordinate flipping if the current GraphicsContext is flipped
+    let finalPath: BezierPath
+    if let context = GraphicsContext.current, context.isFlipped {
+      // Create a flipped version of the path
+      var newPath = BezierPath()
+      for element in path.pathElements {
+        switch element {
+        case .moveTo(let point):
+          newPath.move(to: context.flipPoint(point))
+        case .lineTo(let point):
+          newPath.addLine(to: context.flipPoint(point))
+        case .quadCurveTo(let point, let control):
+          newPath.addQuadCurve(to: context.flipPoint(point), control: context.flipPoint(control))
+        case .curveTo(let point, let control1, let control2):
+          newPath.addCurve(
+            to: context.flipPoint(point), control1: context.flipPoint(control1), control2: context.flipPoint(control2))
+        case .closePath:
+          newPath.closePath()
+        }
+      }
+      finalPath = newPath
+    } else {
+      finalPath = path
+    }
+
+    let (vertices, indices) = finalPath.generateStrokeGeometry(lineWidth: lineWidth)
     guard !vertices.isEmpty && !indices.isEmpty else { return }
 
     drawTriangles(vertices: vertices, indices: indices, color: color)

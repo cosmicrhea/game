@@ -55,32 +55,35 @@ extension Image {
   /// - Parameters:
   ///   - size: The size of the offscreen image
   ///   - pixelScale: Scale factor for the image (default: 1.0)
+  ///   - isFlipped: Whether to use flipped coordinate system (default: false)
   ///   - renderBlock: A closure that renders content to the offscreen framebuffer
   @MainActor
-  public init(size: Size, pixelScale: Float = 1.0, renderBlock: () -> Void) {
+  public init(size: Size, pixelScale: Float = 1.0, isFlipped: Bool = false, renderBlock: () -> Void) {
+    guard let renderer = Engine.shared.renderer else { fatalError() }
+
     print("Creating offscreen image with size: \(size)")
 
     // Create a framebuffer for offscreen rendering
-    let framebufferID = Engine.shared.renderer.createFramebuffer(size: size, scale: pixelScale)
+    let framebufferID = renderer.createFramebuffer(size: size, scale: pixelScale)
     print("Created framebuffer ID: \(framebufferID)")
 
     // Begin rendering to the framebuffer
-    Engine.shared.renderer.beginFramebuffer(framebufferID)
+    renderer.beginFramebuffer(framebufferID)
 
     // Clear the framebuffer
-    Engine.shared.renderer.setClearColor(.clear)
+    renderer.setClearColor(.clear)
 
-    // Create a GraphicsContext for offscreen rendering
-    let offscreenContext = GraphicsContext(renderer: Engine.shared.renderer, scale: pixelScale)
+    // Create a GraphicsContext for offscreen rendering with flipped coordinates
+    let offscreenContext = GraphicsContext(renderer: renderer, scale: pixelScale, isFlipped: isFlipped)
     GraphicsContext.withContext(offscreenContext) {
       renderBlock()
     }
 
     // End framebuffer rendering
-    Engine.shared.renderer.endFramebuffer()
+    renderer.endFramebuffer()
 
     // Create an Image from the framebuffer texture
-    guard let textureID = Engine.shared.renderer.getFramebufferTextureID(framebufferID) else {
+    guard let textureID = renderer.getFramebufferTextureID(framebufferID) else {
       print("Failed to get framebuffer texture ID, using fallback")
       // Fallback to a 1x1 white pixel if framebuffer fails
       self = Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)

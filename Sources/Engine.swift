@@ -39,8 +39,8 @@ struct CLIOptions: ParsableArguments {
 @main
 @MainActor
 public final class Engine {
-  static let shared = Engine()
-  static func main() { shared.run() }
+  public static let shared = Engine()
+  public static func main() { shared.run() }
 
   // TODO: learn about Swift concurrency and how to use it correctly
   private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 720)

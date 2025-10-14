@@ -3,11 +3,14 @@ public final class GraphicsContext {
   /// The current graphics context for implicit drawing operations.
   nonisolated(unsafe) public static var current: GraphicsContext?
 
+  private var clipStack: [Rect?] = [nil]
+
   /// The underlying renderer used for drawing operations.
   public let renderer: Renderer
   /// The scale factor for coordinate transformations.
   public let scale: Float
-  private var clipStack: [Rect?] = [nil]
+  /// Whether the coordinate system is flipped (origin at top-left instead of bottom-left).
+  public let isFlipped: Bool
 
   /// The current viewport size in points.
   public var size: Size {
@@ -23,9 +26,11 @@ public final class GraphicsContext {
   /// - Parameters:
   ///   - renderer: The renderer to use for drawing operations.
   ///   - scale: The scale factor for coordinate transformations.
-  public init(renderer: Renderer, scale: Float) {
+  ///   - isFlipped: Whether the coordinate system is flipped (origin at top-left).
+  public init(renderer: Renderer, scale: Float = 1, isFlipped: Bool = false) {
     self.renderer = renderer
     self.scale = scale
+    self.isFlipped = isFlipped
   }
 
   /// Temporarily sets the current graphics context and executes the provided closure.
@@ -98,5 +103,29 @@ public final class GraphicsContext {
     var path = BezierPath()
     path.addRoundedRect(rect, cornerRadius: cornerRadius)
     drawStroke(path, color: color, lineWidth: lineWidth)
+  }
+
+  // MARK: - Coordinate System Helpers
+
+  /// Flips a Y coordinate if the context is flipped.
+  /// - Parameter y: The Y coordinate to potentially flip.
+  /// - Returns: The flipped Y coordinate if needed.
+  public func flipY(_ y: Float) -> Float {
+    return isFlipped ? size.height - y : y
+  }
+
+  /// Flips a point if the context is flipped.
+  /// - Parameter point: The point to potentially flip.
+  /// - Returns: The flipped point if needed.
+  public func flipPoint(_ point: Point) -> Point {
+    return isFlipped ? Point(point.x, size.height - point.y) : point
+  }
+
+  /// Flips a rectangle if the context is flipped.
+  /// - Parameter rect: The rectangle to potentially flip.
+  /// - Returns: The flipped rectangle if needed.
+  public func flipRect(_ rect: Rect) -> Rect {
+    return isFlipped
+      ? Rect(x: rect.origin.x, y: size.height - rect.maxY, width: rect.size.width, height: rect.size.height) : rect
   }
 }

@@ -3,131 +3,32 @@ import GL
 import GLFW
 import GLMath
 import ImageFormats
-import OrderedCollections
 
-//private protocol Credit: Sendable {}
-//extension String: Credit {}
-//extension Image: Credit {}
+private let nameStyle = TextStyle(
+  fontName: "Creato Display Bold",
+  fontSize: 24,
+  color: .white,
+  lineHeight: 1.3
+)
 
-//private struct Credit: ExpressibleByStringLiteral {
-//  var name: String?
-//  var image: Image?
-//
-//  init(stringLiteral value: String) { self.name = value }
-//  init(image: Image) { self.image = image }
-//}
+private let categoryStyle = nameStyle
+  .withColor(.gray500)
+  .withAlignment(.right)
 
-private let credits: OrderedDictionary<String, [String]> = [
-  "Producer & Designer": ["Freya from the Discord"],
-
-  "Environment Artists": [
-    // https://sketchfab.com/jintrim3
-    // https://sketchfab.com/3d-models/work-gloves-991e775b6b5b4fdab682af56d08bb119
-    "Aleksandr Sagidullin",
-
-    // https://sketchfab.com/binh6675
-    // https://sketchfab.com/3d-models/glock18c-remake-3e321ef99c854f888ab32d4729b84965
-    // https://sketchfab.com/3d-models/sigp320-pistol-1616f762a2c7467eadb78e3e006b3324
-    "binh6675",
-
-    // https://sketchfab.com/duanesmind
-    // https://sketchfab.com/3d-models/cctv-and-keypad-access-panel-dfbf3ebd9b774babbec99989f34df691
-    "Duane's Mind",
-  ],
-
-  "Sound Designers": [
-    // https://freesound.org/people/carlerichudon10/
-    // https://freesound.org/people/carlerichudon10/sounds/466375/
-    "carlerichudon10",
-
-    // https://cyrex-studios.itch.io/
-    // https://cyrex-studios.itch.io/universal-ui-soundpack
-    "Cyrex Studios",
-
-    // https://ad-sounds.itch.io/
-    // https://ad-sounds.itch.io/dialog-text-sound-effects
-    // SFX_BlackBoardSingle*.wav
-    "AD Sounds",
-
-    // https://freesound.org/people/spy15/
-    // https://freesound.org/people/spy15/sounds/270873/
-    // shutter.wav
-    "spy15",
-  ],
-
-  "Asset Pipeline Programming": [
-    // Assimp
-    "Christian Treffs"
-  ],
-
-  "Physics Programming": [
-    // Jolt
-    "Amer Koleci and Contributors",
-
-    // SwiftGL
-    "David Turnbull",
-  ],
-
-  "Graphics Programming": [
-    // NanoSVG
-    "Mikko Mononen"
-  ],
-
-  "Frameworks Programming": [
-    // swift-image-formats
-    "stackotter",
-
-    // glfw-swift
-    "ThePotatoKing55",
-  ],
-
-  "Compression Programming": [
-    // zlib
-    "Jean-loup Gailly",
-    "Mark Adler",
-  ],
-]
-
-private let logos = [
-  Image("UI/Credits/Blender.png"),
-  Image("UI/Credits/glTF.png"),
-  Image("UI/Credits/Jolt.png"),
-  Image("UI/Credits/OpenGL.png"),
-  Image("UI/Credits/Recast.png"),
-  Image("UI/Credits/Swift.png"),
-  Image("UI/Credits/Xcode.png"),
-]
+private let sectionGap: Float = 0
+private let initialScrollOffset = Engine.viewportSize.height * 1.2
 
 final class CreditsScreen: RenderLoop {
   private let promptList = PromptList(.skip)
 
-  private let sectionGap: Float = 0
-
   // Animation state
-  private var scrollOffset: Float = Engine.viewportSize.height
-  private var scrollSpeed: Float = 24.0  // pixels per second
+  private var scrollOffset: Float = initialScrollOffset
+  private var scrollSpeed: Float = 72.0  // pixels per second
   private var scrollTurbo: Bool = false
   private var totalContentHeight: Float = 0.0
-  private var screenHeight: Float = 0.0
 
   // Offscreen rendering
   private var creditsImage: Image?
-
-  // Text styles
-  private let categoryStyle = TextStyle(
-    fontName: "Creato Display Bold",
-    fontSize: 24,
-    color: .gray500,
-    alignment: .right,
-    lineHeight: 1.3
-  )
-
-  private let nameStyle = TextStyle(
-    fontName: "Creato Display Medium",
-    fontSize: 24,
-    color: .white,
-    lineHeight: 1.3
-  )
 
   func onKey(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
     if key == .space { scrollTurbo = state == .pressed }
@@ -138,32 +39,29 @@ final class CreditsScreen: RenderLoop {
   }
 
   func update(deltaTime: Float) {
-    screenHeight = Engine.viewportSize.height
-
-    // Calculate total content height
-    calculateTotalContentHeight()
-
     // Create offscreen image if not exists
     if creditsImage == nil {
+      // Calculate total content height only once when creating the image
+      calculateTotalContentHeight()
       createCreditsImage()
     }
 
     // Update scroll position
     scrollOffset -= scrollSpeed * (scrollTurbo ? 16 : 1) * deltaTime
-    print("scrollOffset: \(scrollOffset); totalContentHeight: \(totalContentHeight); screenHeight: \(screenHeight)")
 
-    // Loop back to start when the bottom of the credits image hits the top of the screen
-    // The bottom of the image is at: scrollOffset + totalContentHeight
-    // The top of the screen is at: screenHeight
-    if scrollOffset < -totalContentHeight {
-      scrollOffset = screenHeight
+    // Loop back to start when the credits have scrolled completely off screen
+    // The image is drawn at yPosition = screenHeight - scrollOffset
+    // When the entire image has scrolled past the top of the screen, reset
+    let screenHeight = Engine.viewportSize.height
+    if scrollOffset < -totalContentHeight - screenHeight {
+      scrollOffset = initialScrollOffset
     }
   }
 
   private func calculateTotalContentHeight() {
     var height: Float = 0.0
 
-    for (category, names) in credits {
+    for (category, names) in CreditsData.credits {
       // Get actual height of category text
       let categoryBounds = category.boundingRect(with: categoryStyle)
       // Get actual height of names as multiline string
@@ -173,7 +71,14 @@ final class CreditsScreen: RenderLoop {
       height += sectionGap  // Space between sections
     }
 
-    totalContentHeight = height
+    // Add logo grid height
+    let logoSize: Float = 96.0
+    let logoSpacing: Float = 24.0
+    let totalRows = CreditsData.logos.count
+    let logoGridHeight = Float(totalRows) * logoSize + Float(totalRows - 1) * logoSpacing + logoSpacing * 2
+    print(
+      "logoGridHeight: \(logoGridHeight), totalRows: \(totalRows)")
+    totalContentHeight = height + logoGridHeight
   }
 
   func draw() {
@@ -183,9 +88,8 @@ final class CreditsScreen: RenderLoop {
     // Draw the offscreen credits image with scrolling
     if let creditsImage = creditsImage {
       let screenHeight = Engine.viewportSize.height
-      let imageHeight = creditsImage.naturalSize.height
       let yPosition = screenHeight - scrollOffset
-      let drawPoint = Point(0, yPosition)
+      let drawPoint = Point(0, yPosition.rounded(.down))
 
       creditsImage.draw(at: drawPoint)
     }
@@ -197,7 +101,7 @@ final class CreditsScreen: RenderLoop {
     var maxCategoryWidth: Float = 0.0
     var maxNameWidth: Float = 0.0
 
-    for (category, names) in credits {
+    for (category, names) in CreditsData.credits {
       // Find widest category
       let categoryBounds = category.boundingRect(with: categoryStyle)
       maxCategoryWidth = max(maxCategoryWidth, categoryBounds.size.width)
@@ -213,19 +117,27 @@ final class CreditsScreen: RenderLoop {
   }
 
   private func createCreditsImage() {
-    let currentScreenHeight = Engine.viewportSize.height
-    let imageHeight = totalContentHeight  // Just the content height, no padding needed
+    let imageHeight = totalContentHeight * 1.5  // Make it taller to ensure logos fit
     let imageSize = Size(Engine.viewportSize.width, imageHeight)
 
-    creditsImage = Image(size: imageSize, pixelScale: 1.0) {
-      // Render all credits content to the offscreen image
+    creditsImage = Image(size: imageSize, pixelScale: 1.0, isFlipped: true) {
+      // Render all credits content to the offscreen image with flipped coordinates
       self.renderCreditsContent()
+    }
+
+    // Save the offscreen image for debugging
+    if let image = creditsImage {
+      do {
+        try image.write(toFile: "/tmp/credits_debug.png")
+        print("Saved credits image to /tmp/credits_debug.png")
+      } catch {
+        print("Failed to save credits image: \(error)")
+      }
     }
   }
 
   private func renderCreditsContent() {
     let screenWidth = Float(Engine.viewportSize.width)
-    let imageHeight = totalContentHeight
 
     // Calculate column widths
     let (leftColumnWidth, rightColumnWidth) = calculateColumnWidths()
@@ -238,10 +150,11 @@ final class CreditsScreen: RenderLoop {
 
     print(
       "Column positions: left=\(leftColumnX), right=\(rightColumnX), widths: \(leftColumnWidth)x\(rightColumnWidth)")
+    print("GraphicsContext isFlipped: \(GraphicsContext.current?.isFlipped ?? false)")
 
-    var currentY: Float = imageHeight  // Start from top of the image (OpenGL Y=0 is bottom)
+    var currentY: Float = 0  // Start at the top of the image (Y=0 in flipped coordinates)
 
-    for (category, names) in credits {
+    for (category, names) in CreditsData.credits {
       print("Drawing category: '\(category)' at Y: \(currentY)")
 
       // Draw category (gray text, right-aligned in left column)
@@ -266,11 +179,67 @@ final class CreditsScreen: RenderLoop {
         anchor: .topLeft
       )
       let namesBounds = namesText.boundingRect(with: nameStyle, wrapWidth: Float.greatestFiniteMagnitude)
-      nameY -= namesBounds.size.height
+      nameY += namesBounds.size.height
 
-      // Move to next section - go down (subtract Y in OpenGL)
-      let totalNamesHeight = currentY - nameY
-      currentY -= categoryBounds.size.height + totalNamesHeight + sectionGap
+      // Move to next section - go down (add Y in flipped coordinates)
+      let totalNamesHeight = nameY - currentY
+      currentY += categoryBounds.size.height + totalNamesHeight + sectionGap
+    }
+
+    // Add logo grid at the end
+    renderLogoGrid(currentY: currentY)
+  }
+
+  private func renderLogoGrid(currentY: Float) {
+    let logoSize: Float = 96.0  // Increased from 64.0
+    let logoSpacing: Float = 24.0  // Increased proportionally
+    let screenWidth = Engine.viewportSize.width
+
+    // Position logos at the END of the credits (after currentY)
+    // With flipped context, we can use normal Y coordinates (top-left origin)
+    let logoStartY = currentY + logoSpacing * 2  // Start below the last credit
+
+    for (rowIndex, logoRow) in CreditsData.logos.enumerated() {
+      // Calculate the actual width needed for this row based on logo aspect ratios
+      var rowWidth: Float = 0
+      var logoWidths: [Float] = []
+
+      for logo in logoRow {
+        let logoAspectRatio = logo.naturalSize.width / logo.naturalSize.height
+        let logoWidth = logoSize * logoAspectRatio
+        logoWidths.append(logoWidth)
+        rowWidth += logoWidth
+      }
+
+      // Add spacing between logos
+      if logoRow.count > 1 {
+        rowWidth += Float(logoRow.count - 1) * logoSpacing
+      }
+
+      let rowStartX = (screenWidth - rowWidth) / 2  // Center the row
+
+      var currentX = rowStartX
+      for (colIndex, logo) in logoRow.enumerated() {
+        let x = currentX
+        let y = logoStartY + Float(rowIndex) * (logoSize + logoSpacing)
+
+        // Move to next logo position
+        currentX += logoWidths[colIndex] + logoSpacing
+
+        // Draw the logo image at its natural aspect ratio
+        // Constrain by height so wide logos can be wide
+        let logoAspectRatio = logo.naturalSize.width / logo.naturalSize.height
+        let logoHeight = logoSize  // Always use the full height
+        let logoWidth = logoSize * logoAspectRatio  // Let width scale naturally
+
+        // Position the logo at the calculated position (no additional centering needed)
+        let logoX = x
+        let logoY = y + (logoSize - logoHeight) / 2  // Only center vertically within the row height
+
+        let logoRect = Rect(x: logoX, y: logoY, width: logoWidth, height: logoHeight)
+        logo.draw(in: logoRect)
+      }
     }
   }
+
 }
