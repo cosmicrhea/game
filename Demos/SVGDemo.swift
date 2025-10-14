@@ -104,7 +104,9 @@ final class SVGDemo: RenderLoop {
       let rect = Rect(origin: Point(x, y), size: Size(iconSize, iconSize))
       data.image.draw(in: rect, tint: .white)
 
-      rect.frame(with: .rose, lineWidth: 2)
+      if Config.current.wireframeMode {
+        rect.frame(with: .rose, lineWidth: 2)
+      }
 
       // Draw icon name underneath - manually center it
       let textSize = data.name.size(with: textStyle)

@@ -6,7 +6,7 @@ extension Document {
 
     pages: [
       """
-      An ID card attached to a lanyard. “82951” is written on the back.“
+      An ID card attached to a lanyard. “82951” is written on the back.
       """,
 
       "",

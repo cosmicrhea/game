@@ -18,6 +18,8 @@ public struct TextStyle: Sendable {
   public var color: Color
   /// Text alignment.
   public var alignment: TextAlignment
+  /// Line height multiplier. If nil, uses font's natural line height.
+  public var lineHeight: Float?
 
   // Stroke properties
   /// Width of the stroke in points. If 0, no stroke is applied.
@@ -39,6 +41,7 @@ public struct TextStyle: Sendable {
   ///   - fontSize: Size of the font in points.
   ///   - color: Color of the text.
   ///   - alignment: Text alignment.
+  ///   - lineHeight: Line height multiplier. If nil, uses font's natural line height.
   ///   - strokeWidth: Width of the stroke in points. If 0, no stroke is applied.
   ///   - strokeColor: Color of the stroke.
   ///   - shadowWidth: Blur radius of the shadow in points. If 0, no shadow is applied.
@@ -49,6 +52,7 @@ public struct TextStyle: Sendable {
     fontSize: Float,
     color: Color,
     alignment: TextAlignment = .left,
+    lineHeight: Float? = nil,
     strokeWidth: Float = 0,
     strokeColor: Color = .clear,
     shadowWidth: Float = 0,
@@ -59,6 +63,7 @@ public struct TextStyle: Sendable {
     self.fontSize = fontSize
     self.color = color
     self.alignment = alignment
+    self.lineHeight = lineHeight
     self.strokeWidth = strokeWidth
     self.strokeColor = strokeColor
     self.shadowWidth = shadowWidth
@@ -75,6 +80,7 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: self.color,
       alignment: alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
@@ -92,6 +98,7 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
@@ -109,6 +116,7 @@ public struct TextStyle: Sendable {
       fontSize: fontSize,
       color: self.color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
@@ -126,6 +134,7 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: self.color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
@@ -145,6 +154,7 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: self.color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: strokeWidth,
       strokeColor: strokeColor,
       shadowWidth: self.shadowWidth,
@@ -165,11 +175,30 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: self.color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
       shadowWidth: shadowWidth,
       shadowOffset: shadowOffset,
       shadowColor: shadowColor
+    )
+  }
+
+  /// Creates a new text style with a different line height.
+  /// - Parameter lineHeight: The new line height multiplier to use.
+  /// - Returns: A new TextStyle with the specified line height.
+  public func withLineHeight(_ lineHeight: Float?) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      lineHeight: lineHeight,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor
     )
   }
 
@@ -182,6 +211,7 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: self.color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: strokeColor,
       shadowWidth: self.shadowWidth,
@@ -199,6 +229,7 @@ public struct TextStyle: Sendable {
       fontSize: self.fontSize,
       color: self.color,
       alignment: self.alignment,
+      lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
@@ -492,14 +523,13 @@ extension AttributedString {
       return Rect(origin: Point(0, 0), size: Size(0, 0))
     }
 
-    let layout = TextLayout(font: font.getTrueTypeFont(), scale: 1.0)
-    let lineHeight = font.lineHeight
+    let layout = TextLayout(font: font, scale: 1.0)
 
-    // Layout the text
+    // Layout the text using TextStyle (respects lineHeight)
     let layoutResult = layout.layout(
       string,
-      wrapWidth: wrapWidth,
-      lineHeight: lineHeight
+      style: defaultStyle,
+      wrapWidth: wrapWidth
     )
 
     return Rect(

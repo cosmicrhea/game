@@ -285,7 +285,7 @@ public final class GLRenderer: Renderer {
       return
     }
 
-    let layout = TextLayout(font: font.getTrueTypeFont(), scale: 1.0)
+    let layout = TextLayout(font: font, scale: 1.0)
 
     // Get current viewport size from OpenGL
     var viewport: [GLint] = [0, 0, 0, 0]
@@ -294,14 +294,15 @@ public final class GLRenderer: Renderer {
 
     let text = attributedString.string
     let currentScale: Float = 1.0
-    let lineHeight = font.lineHeight * currentScale
 
-    // Layout the text
+    // Layout the text using TextStyle (respects lineHeight)
     let layoutResult = layout.layout(
       text,
-      wrapWidth: wrapWidth,
-      lineHeight: lineHeight
+      style: defaultStyle,
+      wrapWidth: wrapWidth
     )
+
+    let lineHeight = layoutResult.lineHeight * currentScale
 
     // Ensure we have an atlas for the required glyphs
     guard let atlas = GlyphAtlas.build(for: text, font: font.getTrueTypeFont()) else { return }

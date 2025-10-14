@@ -153,7 +153,8 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      TitleScreenStack(),  // Uses the new NavigationStack system
+      CreditsScreen(),
+      TitleScreenStack(),
       SVGDemo(),
 
       MainLoop(),

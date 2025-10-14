@@ -2,6 +2,7 @@ import Foundation
 import OrderedCollections
 
 public enum PromptGroup: String, CaseIterable {
+  case skip
   case inventory
   case itemPickup = "Item Pickup"
   case menuRoot = "Menu Root"
@@ -13,6 +14,9 @@ public enum PromptGroup: String, CaseIterable {
   case mapView = "Map View"
 
   @MainActor public static let prompts: OrderedDictionary<PromptGroup, OrderedDictionary<String, [[String]]>> = [
+    .skip: [
+      "Skip": [["keyboard_tab_icon"], ["xbox_button_color_x"], ["playstation_button_color_square"]]
+    ],
     .inventory: [
       "Move": [["keyboard_option"], ["xbox_button_color_x"], ["playstation_button_color_square"]],
       "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],

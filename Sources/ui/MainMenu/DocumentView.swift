@@ -16,6 +16,7 @@ extension Document {
     .photoC,
     //.testResults, // TODO: redaction style
     .glasportReport,
+    .idCard,
     nil,
     .photoD,
     nil,
@@ -211,9 +212,11 @@ final class DocumentView: RenderLoop {
     let sectionWidth: Float = 640
     let sectionX: Float = (Float(Engine.viewportSize.width) - sectionWidth) / 2
 
-    // Debug draw the main section
-    let mainSection = Rect(x: sectionX, y: 0, width: sectionWidth, height: Engine.viewportSize.height)
-    mainSection.frame(with: .rose)
+    if Config.current.wireframeMode {
+      // Debug draw the main section
+      let mainSection = Rect(x: sectionX, y: 0, width: sectionWidth, height: Engine.viewportSize.height)
+      mainSection.frame(with: .rose)
+    }
 
     // 2. Position chevrons on left and right sides, centered vertically
     let arrowY: Float = Float(Engine.viewportSize.height) / 2 - caretRight.image.naturalSize.width * 0.25
@@ -233,8 +236,10 @@ final class DocumentView: RenderLoop {
     let textAreaX: Float = sectionX + (sectionWidth - textWidth) / 2
     let textArea = Rect(x: textAreaX, y: 0, width: textWidth, height: Float(Engine.viewportSize.height))
 
-    // Debug draw the text area
-    textArea.frame(with: .indigo)
+    if Config.current.wireframeMode {
+      // Debug draw the text area
+      textArea.frame(with: .indigo)
+    }
 
     // 4. Center text vertically using text measurement
     let currentText = getCurrentPageText()

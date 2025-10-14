@@ -3,10 +3,10 @@ import STBTrueType
 
 /// Handles text layout, line wrapping, and measurement
 public final class TextLayout {
-  private let font: TrueTypeFont
+  private let font: Font
   private let scale: Float
 
-  init(font: TrueTypeFont, scale: Float = 1.0) {
+  init(font: Font, scale: Float = 1.0) {
     self.font = font
     self.scale = scale
   }
@@ -46,6 +46,16 @@ public final class TextLayout {
     )
   }
 
+  /// Layout text with TextStyle (uses TextStyle lineHeight if available)
+  func layout(
+    _ text: String,
+    style: TextStyle,
+    wrapWidth: Float? = nil
+  ) -> LayoutResult {
+    let effectiveLineHeight = (style.lineHeight ?? 1.0) * font.lineHeight
+    return layout(text, wrapWidth: wrapWidth, lineHeight: effectiveLineHeight)
+  }
+
   /// Measure the width of a string
   func measureWidth(_ text: String) -> Float {
     var width: Float = 0
@@ -65,7 +75,7 @@ public final class TextLayout {
       }
 
       let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
-      width += font.getAdvance(for: codepoint, next: next) * scale
+      width += font.getTrueTypeFont().getAdvance(for: codepoint, next: next) * scale
       i += 1
     }
 
@@ -74,18 +84,70 @@ public final class TextLayout {
 
   // MARK: - Private Methods
 
+  private func processNewlines(_ text: String) -> [Line] {
+    var lines: [Line] = []
+    var currentLine = ""
+    var currentStart = text.startIndex
+    var currentIndex = text.startIndex
+
+    while currentIndex < text.endIndex {
+      let char = text[currentIndex]
+
+      if char == "\n" {
+        // Found a newline - finalize current line
+        if !currentLine.isEmpty {
+          lines.append(
+            createLine(
+              text: currentLine,
+              startIndex: currentStart,
+              endIndex: currentIndex,
+              baselineY: Float(lines.count)
+            ))
+        } else {
+          // Empty line
+          lines.append(
+            createLine(
+              text: "",
+              startIndex: currentIndex,
+              endIndex: currentIndex,
+              baselineY: Float(lines.count)
+            ))
+        }
+
+        currentLine = ""
+        currentIndex = text.index(after: currentIndex)
+        currentStart = currentIndex
+        continue
+      }
+
+      // Add character to current line
+      currentLine.append(char)
+      currentIndex = text.index(after: currentIndex)
+    }
+
+    // Add final line if there's content
+    if !currentLine.isEmpty {
+      lines.append(
+        createLine(
+          text: currentLine,
+          startIndex: currentStart,
+          endIndex: text.endIndex,
+          baselineY: Float(lines.count)
+        ))
+    }
+
+    return lines
+  }
+
   private func wrapText(_ text: String, wrapWidth: Float?) -> [Line] {
     guard let wrapWidth = wrapWidth else {
-      // No wrapping - return single line
-      return [
-        Line(
-          text: text,
-          startIndex: text.startIndex,
-          endIndex: text.endIndex,
-          width: measureWidth(text),
-          baselineY: 0
-        )
-      ]
+      // No wrapping - but still need to process newlines
+      return processNewlines(text)
+    }
+
+    // If wrapWidth is effectively infinite, just process newlines
+    if wrapWidth >= Float.greatestFiniteMagnitude {
+      return processNewlines(text)
     }
 
     var lines: [Line] = []
