@@ -44,6 +44,9 @@ public final class SlotGrid {
   public var slotMenu: SlotMenu
   public var onSlotAction: ((SlotAction, Int) -> Void)?
 
+  // MARK: - Slot Data
+  public var slotData: [SlotData?] = []
+
   public init(config: GridConfiguration) {
     self.columns = config.columns
     self.rows = config.rows
@@ -93,6 +96,23 @@ public final class SlotGrid {
   /// Set the grid position (top-left corner)
   public func setPosition(_ position: Point) {
     gridPosition = position
+  }
+
+  /// Set the slot data array (should match the grid size)
+  public func setSlotData(_ data: [SlotData?]) {
+    slotData = data
+  }
+
+  /// Get slot data at a specific index
+  public func getSlotData(at index: Int) -> SlotData? {
+    guard index >= 0 && index < slotData.count else { return nil }
+    return slotData[index]
+  }
+
+  /// Set slot data at a specific index
+  public func setSlotData(_ data: SlotData?, at index: Int) {
+    guard index >= 0 && index < slotData.count else { return }
+    slotData[index] = data
   }
 
   /// Get the total size of the grid
@@ -368,6 +388,18 @@ public final class SlotGrid {
         shader.setVec3(
           "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))
         shader.setVec3("uBorderShadow", value: (x: borderShadow.red, y: borderShadow.green, z: borderShadow.blue))
+      }
+
+      // Draw item image if slot has data
+      if i < slotData.count, let slotData = slotData[i], let item = slotData.item, let image = item.image {
+        let imageSize = min(slotSize * 0.8, min(image.naturalSize.width, image.naturalSize.height))
+        let imageRect = Rect(
+          x: slotPosition.x + (slotSize - imageSize) * 0.5,
+          y: slotPosition.y + (slotSize - imageSize) * 0.5,
+          width: imageSize,
+          height: imageSize
+        )
+        image.draw(in: imageRect)
       }
     }
 

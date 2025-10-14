@@ -26,12 +26,12 @@ extension Document {
   ]
 }
 
-struct Document: Sendable {
-  var id: String?
-  var displayName: String?
-  var image: Image?
-  var frontMatter: String?
-  var pages: [String]
+public struct Document: Sendable {
+  public var id: String?
+  public var displayName: String?
+  public var image: Image?
+  public var frontMatter: String?
+  public var pages: [String]
 }
 
 final class DocumentView: RenderLoop {

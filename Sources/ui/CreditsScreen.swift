@@ -18,6 +18,7 @@ private let categoryStyle = nameStyle
 private let sectionGap: Float = 0
 private let initialScrollOffset = Engine.viewportSize.height * 1.2
 
+// FIXME: changing viewport size while playing credits should work
 final class CreditsScreen: RenderLoop {
   private let promptList = PromptList(.skip)
 
@@ -31,7 +32,7 @@ final class CreditsScreen: RenderLoop {
   private var creditsImage: Image?
 
   func onKey(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
-    if key == .space { scrollTurbo = state == .pressed }
+    if key == .space || key == .enter { scrollTurbo = state == .pressed }
   }
 
   func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {

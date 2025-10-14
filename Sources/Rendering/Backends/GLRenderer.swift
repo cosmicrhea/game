@@ -368,7 +368,8 @@ public final class GLRenderer: Renderer {
         atlas: atlas,
         origin: Point(finalOrigin.x + anchorOffset.x + lineXOffset, lineBaselineY),
         scale: currentScale,
-        color: defaultStyle.color
+        color: defaultStyle.color,
+        font: font
       )
 
       let lineIndices = generateTextLineIndices(
@@ -592,7 +593,8 @@ public final class GLRenderer: Renderer {
     atlas: GlyphAtlas,
     origin: Point,
     scale: Float,
-    color: Color
+    color: Color,
+    font: Font
   ) -> [Float] {
     var vertices: [Float] = []
     var currentX: Float = 0
@@ -606,9 +608,10 @@ public final class GLRenderer: Renderer {
 
       // Handle spaces - they should advance but not render
       if codepoint == 32 {  // Space character
-        // Use a reasonable space width if not in atlas
-        let spaceWidth = atlas.glyphs[32]?.advance ?? 8  // Default space width
-        currentX += Float(spaceWidth) * scale
+        // Use the actual font advance for spaces to match measurement
+        // Spaces don't have glyphs in the atlas, so we get the advance directly from the font
+        let spaceAdvance = font.getTrueTypeFont().getAdvance(for: codepoint, next: nil)
+        currentX += spaceAdvance * scale
         i += 1
         continue
       }

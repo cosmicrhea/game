@@ -152,17 +152,10 @@ public final class Font {
 
     while i < scalars.count {
       let codepoint = Int32(scalars[i].value)
-
-      // Handle spaces with consistent width like the rendering code
-      if codepoint == 32 {  // Space character
-        // Use a reasonable space width to match rendering behavior
-        let spaceWidth: Float = 8  // Default space width (matches GLRenderer)
-        width += spaceWidth * scale
-        i += 1
-        continue
-      }
-
       let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
+
+      // Use the actual font advance for all characters, including spaces
+      // This ensures measurement matches rendering exactly
       width += trueTypeFont.getAdvance(for: codepoint, next: next) * scale
       i += 1
     }
