@@ -404,17 +404,7 @@ extension AttributedString {
 
 // MARK: - Drawing Extensions
 
-/// Text anchor options for positioning text
-public enum TextAnchor {
-  case topLeft
-  case top
-  case topRight
-  case center
-  case bottomLeft
-  case bottom
-  case bottomRight
-  case baselineLeft
-}
+// TextAnchor has been replaced with the centralized Alignment enum in Geometry.swift
 
 extension AttributedString {
   /// Draws the attributed string at the specified point.
@@ -428,7 +418,7 @@ extension AttributedString {
     at point: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float? = nil,
-    anchor: TextAnchor = .topLeft,
+    alignment: Alignment = .topLeft,
     context: GraphicsContext? = nil
   ) {
     let ctx = context ?? GraphicsContext.current
@@ -439,8 +429,8 @@ extension AttributedString {
       at: point,
       defaultStyle: defaultStyle,
       wrapWidth: wrapWidth,
-      anchor: anchor,
-      alignment: defaultStyle.alignment
+      alignment: alignment,
+      textAlignment: defaultStyle.alignment
     )
   }
 
@@ -470,7 +460,7 @@ extension String {
     at point: Point,
     style: TextStyle,
     wrapWidth: Float? = nil,
-    anchor: TextAnchor = .topLeft,
+    alignment: Alignment = .topLeft,
     context: GraphicsContext? = nil
   ) {
     let attributed = AttributedString(
@@ -483,7 +473,7 @@ extension String {
           fontSize: style.fontSize
         )
       ])
-    attributed.draw(at: point, defaultStyle: style, wrapWidth: wrapWidth, anchor: anchor, context: context)
+    attributed.draw(at: point, defaultStyle: style, wrapWidth: wrapWidth, alignment: alignment, context: context)
   }
 
   /// Draws the string within the specified rectangle with the given style.

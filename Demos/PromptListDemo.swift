@@ -32,10 +32,10 @@ final class PromptListDemo: RenderLoop {
     // Collect all groups and measure their sizes
     var groupData: [(title: String, prompts: OrderedDictionary<String, [[String]]>, width: Float, height: Float)] = []
 
-    for (title, prompts) in InputPromptGroups.groups.reversed() {
+    for (title, prompts) in PromptGroup.prompts.reversed() {
       let measuredWidth = measureGroupWidth(prompts: prompts)
       let totalHeight = groupHeight + titleAboveOffset + titleStyle.fontSize * 1.2 + padding
-      groupData.append((title: title, prompts: prompts, width: measuredWidth, height: totalHeight))
+      groupData.append((title: title.rawValue.titleCased, prompts: prompts, width: measuredWidth, height: totalHeight))
     }
 
     // Pack rectangles using STBRectPack
@@ -79,14 +79,14 @@ final class PromptListDemo: RenderLoop {
       let titleX = screenX + Float(group.width) - titleWidth
       let titleBaselineY = screenY + Float(group.height) - padding
       group.title.draw(
-        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, anchor: .bottomLeft)
+        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, alignment: .bottomLeft)
 
       // Draw input prompts for each source
       for (i, source) in InputSource.allCases.enumerated() {
         let y = screenY + Float(i) * rowStep
         let rightX = screenX + Float(group.width)
         promptRenderer.drawHorizontal(
-          prompts: group.prompts, inputSource: source, windowSize: ws, origin: (rightX, y), anchor: .bottomRight)
+          prompts: group.prompts, inputSource: source, windowSize: ws, origin: (rightX, y), alignment: .bottomRight)
       }
 
       if Config.current.wireframeMode {

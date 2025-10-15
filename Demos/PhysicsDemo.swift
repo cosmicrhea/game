@@ -271,7 +271,7 @@
 //      debugText,
 //      at: (24, Float(HEIGHT) - 24),
 //      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-//      anchor: .topLeft
+//      alignment: .topLeft
 //    )
 //
 //    // Instructions
@@ -280,7 +280,7 @@
 //      instructions,
 //      at: (24, 24),
 //      windowSize: (Int32(WIDTH), Int32(HEIGHT)),
-//      anchor: .bottomLeft
+//      alignment: .bottomLeft
 //    )
 //  }
 //}

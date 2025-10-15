@@ -153,6 +153,9 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
+      MainMenu(),
+      InventoryView(),
+//      GradientDemo(),
       CreditsScreen(),
       TitleScreenStack(),
       SVGDemo(),
@@ -161,9 +164,8 @@ public final class Engine {
       // SlotDemo(),
       // SlotGridDemo(),
       //      LibraryView(),
-      InventoryView(),
+//      MainMenu(),
       DocumentDemo(),
-      MapView(),
 
       //      CalloutDemo(),
       //      PromptListDemo(),

@@ -8,6 +8,7 @@ public final class GLRenderer: Renderer {
   private let pathProgram: GLProgram
   private let textProgram: GLProgram
   private let fboProgram: GLProgram
+  private let gradientProgram: GLProgram
 
   // Clear color state
   private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
@@ -73,6 +74,7 @@ public final class GLRenderer: Renderer {
     self.pathProgram = try! GLProgram("Common/path", "Common/path")
     self.textProgram = try! GLProgram("UI/text")
     self.fboProgram = try! GLProgram("UI/fbo", "UI/fbo")
+    self.gradientProgram = try! GLProgram("Common/gradient", "Common/gradient")
 
     // Enable depth testing
     glEnable(GL_DEPTH_TEST)
@@ -293,8 +295,8 @@ public final class GLRenderer: Renderer {
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float? = nil,
-    anchor: TextAnchor = .topLeft,
-    alignment: TextAlignment = .left
+    alignment: Alignment = .topLeft,
+    textAlignment: TextAlignment = .left
   ) {
     // Apply coordinate flipping if the current GraphicsContext is flipped
     let finalOrigin: Point
@@ -330,11 +332,11 @@ public final class GLRenderer: Renderer {
     // Ensure we have an atlas for the required glyphs
     guard let atlas = GlyphAtlas.build(for: text, font: font.getTrueTypeFont()) else { return }
 
-    // Convert TextAnchor to anchor offset
-    let anchorOffset = calculateTextAnchorOffset(
+    // Convert Alignment to anchor offset
+    let anchorOffset = calculateAlignmentOffset(
       layoutResult: layoutResult,
       origin: finalOrigin,
-      anchor: anchor,
+      alignment: alignment,
       scale: currentScale,
       font: font
     )
@@ -352,12 +354,14 @@ public final class GLRenderer: Renderer {
       let lineXOffset: Float
       if let wrapWidth = wrapWidth {
         switch alignment {
-        case .left:
+        case .topLeft, .left, .bottomLeft:
           lineXOffset = 0
-        case .center:
+        case .top, .center, .bottom:
           lineXOffset = (wrapWidth - line.width) / 2
-        case .right:
+        case .topRight, .right, .bottomRight:
           lineXOffset = wrapWidth - line.width
+        case .baselineLeft:
+          lineXOffset = 0
         }
       } else {
         lineXOffset = 0
@@ -492,6 +496,59 @@ public final class GLRenderer: Renderer {
     drawTriangles(vertices: vertices, indices: indices, color: color)
   }
 
+  // MARK: - Gradient Drawing
+
+  public func drawLinearGradient(_ gradient: Gradient, in rect: Rect, angle: Float) {
+    drawGradient(gradient, in: rect, type: 0, angle: angle, center: nil)
+  }
+
+  public func drawLinearGradient(_ gradient: Gradient, in path: BezierPath, angle: Float) {
+    let (vertices, indices) = path.tessellate()
+    guard !vertices.isEmpty && !indices.isEmpty else { return }
+    let bounds = calculateBounds(from: vertices)
+    drawGradientTriangles(
+      gradient, vertices: vertices, indices: indices, type: 0, angle: angle, center: nil, bounds: bounds)
+  }
+
+  public func drawRadialGradient(_ gradient: Gradient, in rect: Rect, center: Point) {
+    // TODO: Implement OpenGL gradient rendering
+    // For now, fall back to solid color (first color stop)
+    if let firstColor = gradient.colorStops.first?.color {
+      drawRect(rect, color: firstColor)
+    }
+  }
+
+  public func drawRadialGradient(_ gradient: Gradient, in path: BezierPath, center: Point) {
+    // TODO: Implement OpenGL gradient rendering
+    // For now, fall back to solid color (first color stop)
+    if let firstColor = gradient.colorStops.first?.color {
+      drawPath(path, color: firstColor)
+    }
+  }
+
+  private func createOrthographicMatrix(viewportSize: Size) -> [Float] {
+    let left: Float = 0
+    let right = viewportSize.width
+    let bottom: Float = 0
+    let top = viewportSize.height
+    let near: Float = 0
+    let far: Float = 1
+
+    let m00 = 2 / (right - left)
+    let m11 = 2 / (top - bottom)
+    let m22 = -2 / (far - near)
+    let m03 = -(right + left) / (right - left)
+    let m13 = -(top + bottom) / (top - bottom)
+    let m23 = -(far + near) / (far - near)
+
+    return [
+      m00, 0, 0, 0,
+      0, m11, 0, 0,
+      0, 0, m22, 0,
+      m03, m13, m23, 1,
+    ]
+  }
+
   private func drawTriangles(vertices: [Float], indices: [UInt32], color: Color) {
     guard !vertices.isEmpty && !indices.isEmpty else { return }
 
@@ -556,27 +613,46 @@ public final class GLRenderer: Renderer {
     glDeleteVertexArrays(1, &vao)
   }
 
+  /// Draws a simple rectangle with a solid color (for fallback rendering)
+  private func drawRect(_ rect: Rect, color: Color) {
+    let vertices: [Float] = [
+      // x, y, r, g, b, a
+      rect.origin.x, rect.origin.y, color.red, color.green, color.blue, color.alpha,  // bottom-left
+      rect.origin.x + rect.width, rect.origin.y, color.red, color.green, color.blue, color.alpha,  // bottom-right
+      rect.origin.x, rect.origin.y + rect.height, color.red, color.green, color.blue, color.alpha,  // top-left
+      rect.origin.x + rect.width, rect.origin.y + rect.height, color.red, color.green, color.blue, color.alpha,  // top-right
+    ]
+
+    let indices: [UInt32] = [0, 1, 2, 1, 3, 2]  // Two triangles
+
+    drawTriangles(vertices: vertices, indices: indices, color: color)
+  }
+
   // MARK: - Text Rendering Helpers
 
-  private func calculateTextAnchorOffset(
+  private func calculateAlignmentOffset(
     layoutResult: TextLayout.LayoutResult,
     origin: Point,
-    anchor: TextAnchor,
+    alignment: Alignment,
     scale: Float,
     font: Font
   ) -> Point {
     // Use the same approach as the working ModularTextRenderer
     let baseline = font.baselineFromTop * scale
 
-    switch anchor {
+    switch alignment {
     case .topLeft:
       return Point(0, -baseline)
     case .top:
       return Point(-layoutResult.totalWidth / 2, -baseline)
     case .topRight:
       return Point(-layoutResult.totalWidth, -baseline)
+    case .left:
+      return Point(0, layoutResult.totalHeight / 2 - baseline)
     case .center:
       return Point(-layoutResult.totalWidth / 2, layoutResult.totalHeight / 2 - baseline)
+    case .right:
+      return Point(-layoutResult.totalWidth, layoutResult.totalHeight / 2 - baseline)
     case .bottomLeft:
       return Point(0, layoutResult.totalHeight - baseline)
     case .bottom:
@@ -851,5 +927,132 @@ public final class GLRenderer: Renderer {
       // Draw the framebuffer texture
       framebuffer.drawTexture(in: rect, program: fboProgram)
     }
+  }
+
+  // MARK: - Gradient Helper Methods
+
+  private func calculateBounds(from vertices: [Float]) -> Rect {
+    guard !vertices.isEmpty else { return .zero }
+
+    var minX = Float.infinity
+    var maxX = -Float.infinity
+    var minY = Float.infinity
+    var maxY = -Float.infinity
+
+    // Assuming vertices are in format [x, y, ...] with stride of 2
+    for i in stride(from: 0, to: vertices.count, by: 2) {
+      let x = vertices[i]
+      let y = vertices[i + 1]
+
+      minX = min(minX, x)
+      maxX = max(maxX, x)
+      minY = min(minY, y)
+      maxY = max(maxY, y)
+    }
+
+    return Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+  }
+
+  private func drawGradient(_ gradient: Gradient, in rect: Rect, type: Int, angle: Float, center: Point?) {
+    // Create vertices for the rectangle with gradient coordinates
+    let vertices: [Float] = [
+      // x, y, gradientX, gradientY
+      rect.origin.x, rect.origin.y, 0.0, 0.0,  // bottom-left
+      rect.origin.x + rect.width, rect.origin.y, 1.0, 0.0,  // bottom-right
+      rect.origin.x, rect.origin.y + rect.height, 0.0, 1.0,  // top-left
+      rect.origin.x + rect.width, rect.origin.y + rect.height, 1.0, 1.0,  // top-right
+    ]
+
+    let indices: [UInt32] = [0, 1, 2, 1, 3, 2]  // Two triangles
+
+    drawGradientTriangles(
+      gradient, vertices: vertices, indices: indices, type: type, angle: angle, center: center, bounds: rect)
+  }
+
+  private func drawGradientTriangles(
+    _ gradient: Gradient, vertices: [Float], indices: [UInt32], type: Int, angle: Float, center: Point?, bounds: Rect
+  ) {
+    guard !vertices.isEmpty && !indices.isEmpty else { return }
+
+    var vao: GLuint = 0
+    var vbo: GLuint = 0
+    var ebo: GLuint = 0
+
+    glGenVertexArrays(1, &vao)
+    glGenBuffers(1, &vbo)
+    glGenBuffers(1, &ebo)
+
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.count * MemoryLayout<Float>.stride, vertices, GL_DYNAMIC_DRAW)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.count * MemoryLayout<UInt32>.stride, indices, GL_DYNAMIC_DRAW)
+
+    // Position attribute
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(
+      0, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), UnsafeRawPointer(bitPattern: 0))
+
+    // Gradient coordinate attribute
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(
+      1, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 2 * MemoryLayout<Float>.stride))
+
+    // Use the gradient shader
+    gradientProgram.use()
+
+    // Set up uniforms using the proper GLProgram API
+    let mvp = createOrthographicMatrix(viewportSize: viewportSize)
+    mvp.withUnsafeBufferPointer { buf in
+      gradientProgram.setMat4("mvp", value: buf.baseAddress!)
+    }
+    gradientProgram.setInt("gradientType", value: Int32(type))
+
+    // Set gradient parameters based on type
+    if type == 0 {
+      // Linear gradient - use normalized coordinates (0,0) to (1,1) for diagonal
+      let angleRad = angle * .pi / 180.0
+
+      // Calculate start and end points in UV space (0,0) to (1,1)
+      let cosAngle = cos(angleRad)
+      let sinAngle = sin(angleRad)
+
+      // For a diagonal gradient from bottom-left to top-right
+      let startX = 0.5 - 0.5 * cosAngle
+      let startY = 0.5 - 0.5 * sinAngle
+      let endX = 0.5 + 0.5 * cosAngle
+      let endY = 0.5 + 0.5 * sinAngle
+
+      gradientProgram.setVec2("gradientStart", value: (startX, startY))
+      gradientProgram.setVec2("gradientEnd", value: (endX, endY))
+    } else {
+      // Radial gradient - simple approach
+      let centerX = center?.x ?? 0.5
+      let centerY = center?.y ?? 0.5
+      let maxRadius = 0.5  // Simple radius that covers the unit square
+
+      gradientProgram.setVec2("gradientStart", value: (centerX, centerY))
+      gradientProgram.setVec2("gradientEnd", value: (Float(maxRadius), 0.0))
+    }
+
+    // Set color stops
+    let numStops = min(gradient.colorStops.count, 16)
+    gradientProgram.setInt("numColorStops", value: Int32(numStops))
+
+    for i in 0..<numStops {
+      let stop = gradient.colorStops[i]
+      gradientProgram.setVec4(
+        "colorStops[\(i)]", value: (stop.color.red, stop.color.green, stop.color.blue, stop.color.alpha))
+      gradientProgram.setFloat("colorLocations[\(i)]", value: stop.location)
+    }
+
+    // Draw the triangles
+    glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+
+    // Cleanup
+    glDeleteVertexArrays(1, &vao)
+    glDeleteBuffers(1, &vbo)
+    glDeleteBuffers(1, &ebo)
   }
 }

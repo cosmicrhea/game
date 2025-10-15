@@ -10,6 +10,7 @@ public final class MTLRenderer: Renderer {
   private let commandQueue: MTLCommandQueue
   private let imagePipelineState: MTLRenderPipelineState
   private let pathPipelineState: MTLRenderPipelineState
+  private let gradientPipelineState: MTLRenderPipelineState
   private let textureCache: CVMetalTextureCache
 
   // Metal layer and drawable management
@@ -63,6 +64,7 @@ public final class MTLRenderer: Renderer {
     // Create pipeline states
     self.imagePipelineState = try Self.createImagePipelineState(device: device)
     self.pathPipelineState = try Self.createPathPipelineState(device: device)
+    self.gradientPipelineState = try Self.createGradientPipelineState(device: device)
 
     // Create vertex buffers with larger sizes to handle complex scenes
     self.imageVertexBuffer = device.makeBuffer(length: 4096 * 16, options: [])  // 4096 vertices * 16 bytes per vertex
@@ -334,6 +336,44 @@ public final class MTLRenderer: Renderer {
     drawTriangles(vertices: vertices, indices: indices, color: color)
   }
 
+  // MARK: - Gradient Drawing
+
+  public func drawLinearGradient(_ gradient: Gradient, in rect: Rect, angle: Float) {
+    // TODO: Implement Metal gradient rendering
+    // For now, fall back to solid color (first color stop)
+    if let firstColor = gradient.colorStops.first?.color {
+      var path = BezierPath()
+      path.addRect(rect)
+      drawPath(path, color: firstColor)
+    }
+  }
+
+  public func drawLinearGradient(_ gradient: Gradient, in path: BezierPath, angle: Float) {
+    // TODO: Implement Metal gradient rendering
+    // For now, fall back to solid color (first color stop)
+    if let firstColor = gradient.colorStops.first?.color {
+      drawPath(path, color: firstColor)
+    }
+  }
+
+  public func drawRadialGradient(_ gradient: Gradient, in rect: Rect, center: Point) {
+    // TODO: Implement Metal gradient rendering
+    // For now, fall back to solid color (first color stop)
+    if let firstColor = gradient.colorStops.first?.color {
+      var path = BezierPath()
+      path.addRect(rect)
+      drawPath(path, color: firstColor)
+    }
+  }
+
+  public func drawRadialGradient(_ gradient: Gradient, in path: BezierPath, center: Point) {
+    // TODO: Implement Metal gradient rendering
+    // For now, fall back to solid color (first color stop)
+    if let firstColor = gradient.colorStops.first?.color {
+      drawPath(path, color: firstColor)
+    }
+  }
+
   // MARK: - Private Helpers
 
   private static func createImagePipelineState(device: MTLDevice) throws -> MTLRenderPipelineState {
@@ -561,8 +601,8 @@ public final class MTLRenderer: Renderer {
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float?,
-    anchor: TextAnchor,
-    alignment: TextAlignment
+    alignment: Alignment,
+    textAlignment: TextAlignment
   ) {
     // TODO: Implement Metal text rendering
     // For now, this is a stub that does nothing
@@ -617,6 +657,119 @@ public final class MTLRenderer: Renderer {
     // For now, this is a no-op
   }
 
+  private static func createGradientPipelineState(device: MTLDevice) throws -> MTLRenderPipelineState {
+    // Create library from source code
+    let shaderSource = """
+      #include <metal_stdlib>
+      using namespace metal;
+
+      struct GradientVertex {
+          float2 position [[attribute(0)]];
+          float2 gradientCoord [[attribute(1)]];
+      };
+
+      struct GradientVertexOut {
+          float4 position [[position]];
+          float2 gradientCoord;
+      };
+
+      struct GradientUniforms {
+          float4x4 mvp;
+          int gradientType; // 0 = linear, 1 = radial
+          float2 gradientStart; // For linear: start point, for radial: center point
+          float2 gradientEnd; // For linear: end point, for radial: radius vector
+          int numColorStops;
+          float4 colorStops[16]; // RGBA values
+          float colorLocations[16]; // Location values (0.0 to 1.0)
+      };
+
+      vertex GradientVertexOut gradientVertex(GradientVertex in [[stage_in]],
+                                            constant GradientUniforms& uniforms [[buffer(0)]]) {
+          GradientVertexOut out;
+          out.position = uniforms.mvp * float4(in.position, 0.0, 1.0);
+          out.gradientCoord = in.gradientCoord;
+          return out;
+      }
+
+      fragment float4 gradientFragment(GradientVertexOut in [[stage_in]],
+                                     constant GradientUniforms& uniforms [[buffer(0)]]) {
+          float2 uv = in.gradientCoord;
+          
+          if (uniforms.gradientType == 0) {
+              // Linear gradient
+              float2 gradientDir = uniforms.gradientEnd - uniforms.gradientStart;
+              float gradientLength = length(gradientDir);
+              
+              if (gradientLength == 0.0) {
+                  return uniforms.colorStops[0];
+              }
+              
+              float2 normalizedDir = gradientDir / gradientLength;
+              float2 toPoint = uv - uniforms.gradientStart;
+              float t = dot(toPoint, normalizedDir) / gradientLength;
+              
+              // Clamp t to [0, 1]
+              t = clamp(t, 0.0, 1.0);
+              
+              // Find the two color stops that bracket t
+              for (int i = 0; i < uniforms.numColorStops - 1; i++) {
+                  if (t >= uniforms.colorLocations[i] && t <= uniforms.colorLocations[i + 1]) {
+                      float localT = (t - uniforms.colorLocations[i]) / (uniforms.colorLocations[i + 1] - uniforms.colorLocations[i]);
+                      return mix(uniforms.colorStops[i], uniforms.colorStops[i + 1], localT);
+                  }
+              }
+              
+              // Handle edge cases
+              if (t <= uniforms.colorLocations[0]) {
+                  return uniforms.colorStops[0];
+              } else {
+                  return uniforms.colorStops[uniforms.numColorStops - 1];
+              }
+          } else {
+              // Radial gradient
+              float2 center = uniforms.gradientStart;
+              float2 radiusVec = uniforms.gradientEnd;
+              float maxRadius = length(radiusVec);
+              
+              if (maxRadius == 0.0) {
+                  return uniforms.colorStops[0];
+              }
+              
+              float distance = length(uv - center);
+              float t = distance / maxRadius;
+              
+              // Clamp t to [0, 1]
+              t = clamp(t, 0.0, 1.0);
+              
+              // Find the two color stops that bracket t
+              for (int i = 0; i < uniforms.numColorStops - 1; i++) {
+                  if (t >= uniforms.colorLocations[i] && t <= uniforms.colorLocations[i + 1]) {
+                      float localT = (t - uniforms.colorLocations[i]) / (uniforms.colorLocations[i + 1] - uniforms.colorLocations[i]);
+                      return mix(uniforms.colorStops[i], uniforms.colorStops[i + 1], localT);
+                  }
+              }
+              
+              // Handle edge cases
+              if (t <= uniforms.colorLocations[0]) {
+                  return uniforms.colorStops[0];
+              } else {
+                  return uniforms.colorStops[uniforms.numColorStops - 1];
+              }
+          }
+      }
+      """
+
+    let library = try device.makeLibrary(source: shaderSource, options: nil)
+    let vertexFunction = library.makeFunction(name: "gradientVertex")!
+    let fragmentFunction = library.makeFunction(name: "gradientFragment")!
+
+    let pipelineDescriptor = MTLRenderPipelineDescriptor()
+    pipelineDescriptor.vertexFunction = vertexFunction
+    pipelineDescriptor.fragmentFunction = fragmentFunction
+    pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+
+    return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+  }
 }
 
 // MARK: - Uniform Structures
@@ -629,6 +782,21 @@ struct ImageUniforms {
 struct PathUniforms {
   var mvp: matrix_float4x4
   var color: SIMD4<Float>
+}
+
+struct GradientUniforms {
+  var mvp: matrix_float4x4
+  var gradientType: Int32
+  var gradientStart: SIMD2<Float>
+  var gradientEnd: SIMD2<Float>
+  var numColorStops: Int32
+  var colorStops:
+    (
+      SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>,
+      SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>
+    )
+  var colorLocations:
+    (Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float)
 }
 
 // MARK: - Errors

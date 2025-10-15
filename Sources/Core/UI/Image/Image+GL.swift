@@ -8,7 +8,7 @@ import struct ImageFormats.Image
 import struct ImageFormats.RGBA
 
 extension Image {
-  /// Load an image from SPM resource path and upload to GL. Returns a GPU-backed Image.
+  /// Load an image from resource path and upload to GL. Returns a GPU-backed Image.
   public init(_ path: String, size: Size? = nil, strokeWidth: Float? = nil, pixelScale: Float = 1.0) {
     var width = 1
     var height = 1
@@ -49,6 +49,16 @@ extension Image {
     }
 
     self = Image.uploadToGL(pixels: bytes, width: width, height: height, pixelScale: pixelScale)
+  }
+
+  /// Load an image from resource path with a square size. Convenience initializer.
+  /// - Parameters:
+  ///   - path: Path to the image file in the app bundle
+  ///   - size: Square size (width and height will be the same)
+  ///   - strokeWidth: Optional stroke width override (default: nil, uses original)
+  ///   - pixelScale: Scale factor for the image (default: 1.0)
+  public init(_ path: String, size: Float, strokeWidth: Float? = nil, pixelScale: Float = 1.0) {
+    self.init(path, size: Size(size, size), strokeWidth: strokeWidth, pixelScale: pixelScale)
   }
 
   /// Creates an Image by rendering to an offscreen framebuffer.

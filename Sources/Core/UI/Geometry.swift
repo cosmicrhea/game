@@ -368,3 +368,18 @@ public enum Axis {
   case horizontal
   case vertical
 }
+
+/// Centralized alignment options for positioning UI elements.
+/// Replaces TextAnchor, MenuAnchor, and PromptList.Anchor.
+public enum Alignment {
+  case topLeft
+  case top
+  case topRight
+  case left
+  case center
+  case right
+  case bottomLeft
+  case bottom
+  case bottomRight
+  case baselineLeft
+}

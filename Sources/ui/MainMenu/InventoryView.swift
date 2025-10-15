@@ -119,19 +119,21 @@ final class InventoryView: RenderLoop {
     let selectedIndex = slotGrid.selectedIndex
     if let slotData = slotGrid.getSlotData(at: selectedIndex), let item = slotData.item {
       currentItemName = item.name
-      currentItemDescription = item.description ?? "No description available"
+      currentItemDescription = item.description ?? ""
     } else {
-      currentItemName = "Empty Slot"
-      currentItemDescription = "No item in this slot"
+      currentItemName = ""
+      currentItemDescription = ""
     }
   }
 
   private func drawItemLabel() {
     // Position the label underneath the grid
     let gridPosition = slotGrid.gridPosition
-    let gridSize = slotGrid.totalSize
     let labelX = gridPosition.x
     let labelY = gridPosition.y - 80  // 80 pixels below the grid
+
+    // Get the slot grid width to use as wrap width
+    let gridWidth = slotGrid.totalSize.width
 
     // Draw item name
     let nameStyle = TextStyle(
@@ -141,7 +143,7 @@ final class InventoryView: RenderLoop {
       strokeWidth: 2,
       strokeColor: .gray700
     )
-    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle)
+    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle, wrapWidth: gridWidth)
 
     // Draw item description
     let descriptionStyle = TextStyle(
@@ -152,7 +154,7 @@ final class InventoryView: RenderLoop {
       strokeColor: .gray900
     )
     let descriptionY = labelY - 40
-    currentItemDescription.draw(at: Point(labelX, descriptionY), style: descriptionStyle)
+    currentItemDescription.draw(at: Point(labelX, descriptionY), style: descriptionStyle, wrapWidth: gridWidth)
   }
 
   private func loadSampleItems() {
@@ -162,32 +164,32 @@ final class InventoryView: RenderLoop {
         id: "glock18c",
         name: "Glock 18C",
         image: Image("Items/Weapons/glock18c.png"),
-        // description: "A compact 9mm pistol with selective fire capability"
-        description: "A faded photograph showing a dark tunnel"
+        description: "Compact 9mm pistol with selective fire capability."
+          //        description: "A faded photograph showing a dark tunnel."
       ),
       Item(
         id: "sigp320",
-        name: "SIG P320",
+        name: "SIG Sauer P320",
         image: Image("Items/Weapons/sigp320.png"),
-        description: "A modern striker-fired pistol with modular design"
+        description: "Modern striker-fired pistol with modular design."
       ),
       Item(
         id: "handgun_ammo",
         name: "9mm Ammunition",
         image: Image("Items/Weapons/handgun_ammo.png"),
-        description: "Standard 9mm rounds for handguns"
+        description: "Standard 9 millimeter rounds for handguns."
       ),
       Item(
         id: "lighter",
         name: "Lighter",
         image: Image("Items/Weapons/lighter.png"),
-        description: "A simple butane lighter for lighting fires"
+        description: "Simple butane lighter for lighting fires."
       ),
       Item(
         id: "utility_key",
         name: "Utility Key",
         image: Image("Items/Weapons/utility_key.png"),
-        description: "A master key for utility rooms and maintenance areas"
+        description: "A key for utility cabinets."
       ),
     ]
   }
@@ -196,10 +198,18 @@ final class InventoryView: RenderLoop {
     let totalSlots = slotGrid.columns * slotGrid.rows
     var slotData: [SlotData?] = Array(repeating: nil, count: totalSlots)
 
-    // Place some sample items in the first few slots
-    for (index, item) in sampleItems.enumerated() {
+    // Place items with different quantities
+    let itemsWithQuantities: [(Item, Int?)] = [
+      (sampleItems[0], 15),  // Glock 18C - 15 rounds loaded
+      (sampleItems[1], 17),  // SIG P320 - 17 rounds loaded
+      (sampleItems[2], 24),  // 9mm Ammunition - 24 rounds
+      (sampleItems[3], nil),  // Lighter - no quantity shown
+      (sampleItems[4], nil),  // Utility Key - no quantity shown
+    ]
+
+    for (index, (item, quantity)) in itemsWithQuantities.enumerated() {
       if index < totalSlots {
-        slotData[index] = SlotData(item: item, quantity: 1)
+        slotData[index] = SlotData(item: item, quantity: quantity)
       }
     }
 

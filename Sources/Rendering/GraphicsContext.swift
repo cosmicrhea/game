@@ -105,6 +105,44 @@ public final class GraphicsContext {
     drawStroke(path, color: color, lineWidth: lineWidth)
   }
 
+  // MARK: - Gradient Drawing
+
+  /// Draws a linear gradient in the specified rectangle.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - rect: The rectangle to fill with the gradient.
+  ///   - angle: The angle of the gradient in degrees (0 = horizontal, 90 = vertical).
+  public func drawLinearGradient(_ gradient: Gradient, in rect: Rect, angle: Float = 0) {
+    renderer.drawLinearGradient(gradient, in: rect, angle: angle)
+  }
+
+  /// Draws a linear gradient in the specified path.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - path: The path to fill with the gradient.
+  ///   - angle: The angle of the gradient in degrees (0 = horizontal, 90 = vertical).
+  public func drawLinearGradient(_ gradient: Gradient, in path: BezierPath, angle: Float = 0) {
+    renderer.drawLinearGradient(gradient, in: path, angle: angle)
+  }
+
+  /// Draws a radial gradient in the specified rectangle.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - rect: The rectangle to fill with the gradient.
+  ///   - center: The center point of the radial gradient (relative to the rectangle, 0,0 = top-left, 1,1 = bottom-right).
+  public func drawRadialGradient(_ gradient: Gradient, in rect: Rect, center: Point = Point(0.5, 0.5)) {
+    renderer.drawRadialGradient(gradient, in: rect, center: center)
+  }
+
+  /// Draws a radial gradient in the specified path.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - path: The path to fill with the gradient.
+  ///   - center: The center point of the radial gradient (relative to the path's bounding box, 0,0 = top-left, 1,1 = bottom-right).
+  public func drawRadialGradient(_ gradient: Gradient, in path: BezierPath, center: Point = Point(0.5, 0.5)) {
+    renderer.drawRadialGradient(gradient, in: path, center: center)
+  }
+
   // MARK: - Coordinate System Helpers
 
   /// Flips a Y coordinate if the context is flipped.

@@ -121,7 +121,7 @@ final class MainLoop: RenderLoop {
     debugText.draw(
       at: Point(24, Float(Engine.viewportSize.height) - 24),
       style: determinationStyle,
-      anchor: .topLeft
+      alignment: .topLeft
     )
   }
 }

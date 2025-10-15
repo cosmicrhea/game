@@ -17,15 +17,30 @@ enum CreditsData {
       // https://sketchfab.com/duanesmind
       // https://sketchfab.com/3d-models/cctv-and-keypad-access-panel-dfbf3ebd9b774babbec99989f34df691
       "Duane's Mind",
+
+      // https://sketchfab.com/tonken
+      // https://sketchfab.com/3d-models/utility-key-af35a59d5ea94b00b9ee37d4eda10b1f
+      "tonken",
+
+      // https://sketchfab.com/unknown.fbx
+      // https://sketchfab.com/3d-models/zippo-lighter-1c8ef92481544dd6a49adedbf85da0ea
+      "Ibrahim Taha",
+      // "unknown.fbx",
+
+      // https://sketchfab.com/AxonDesigns
+      // https://sketchfab.com/3d-models/key-with-tag-16ea3fbecc6346df9859f0e18406951b
+      "AxonDesigns",
     ],
 
     "Sound Designers": [
       // https://freesound.org/people/carlerichudon10/
       // https://freesound.org/people/carlerichudon10/sounds/466375/
+      // page_*.wav
       "carlerichudon10",
 
       // https://cyrex-studios.itch.io/
       // https://cyrex-studios.itch.io/universal-ui-soundpack
+      // Minimalist*.wav
       "Cyrex Studios",
 
       // https://ad-sounds.itch.io/

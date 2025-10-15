@@ -4,10 +4,28 @@ import GLMath
 
 /// An action that can be performed on a slot.
 public enum SlotAction: String, CaseIterable {
-  case use
-  case inspect
-  case combine
-  case discard
+  case use, inspect, combine, discard
+}
+
+extension SlotAction {
+  var id: String { rawValue }
+  var label: String { rawValue.titleCased }
+
+  var icon: Image? {
+    switch self {
+    case .use: return Image("UI/Icons/phosphor-icons/gear-bold.svg", size: 20)
+    case .inspect: return Image("UI/Icons/phosphor-icons/magnifying-glass-bold.svg", size: 20)
+    case .combine: return Image("UI/Icons/phosphor-icons/plus-circle-bold.svg", size: 20)
+    case .discard: return Image("UI/Icons/phosphor-icons/trash-bold.svg", size: 20)
+    }
+  }
+
+  func isEnabled(for slotIndex: Int) -> Bool {
+    switch self {
+    case .use, .inspect, .combine, .discard:
+      return true
+    }
+  }
 }
 
 /// A menu for slot interactions.
@@ -27,9 +45,12 @@ public final class SlotMenu: PopupMenu {
 
   /// Show the slot menu for a specific slot
   public func showForSlot(
-    at position: Point, slotIndex: Int, slotPosition: Point,
-    availableActions: [SlotAction] = [.use, .inspect, .combine, .discard], openedWithKeyboard: Bool = false,
-    slotSize: Size = Size(80, 80)
+    at position: Point,
+    slotIndex: Int,
+    slotPosition: Point,
+    availableActions: [SlotAction] = [.use, .inspect, .combine, .discard],
+    openedWithKeyboard: Bool = false,
+    slotSize: Size
   ) {
     self.slotIndex = slotIndex
     self.slotPosition = slotPosition
@@ -40,7 +61,10 @@ public final class SlotMenu: PopupMenu {
 
   /// Show the slot menu with custom actions
   public func showWithCustomActions(
-    at position: Point, slotIndex: Int, slotPosition: Point, actions: [(String, SlotAction)]
+    at position: Point,
+    slotIndex: Int,
+    slotPosition: Point,
+    actions: [(String, SlotAction)]
   ) {
     self.slotIndex = slotIndex
     self.slotPosition = slotPosition
@@ -76,28 +100,5 @@ public final class SlotMenu: PopupMenu {
 
   private func handleAction(_ action: SlotAction) {
     onAction?(action, slotIndex)
-  }
-}
-
-// MARK: - SlotAction Extensions
-
-extension SlotAction {
-  var id: String { rawValue }
-  var label: String { rawValue.titleCased }
-
-  var icon: String? {
-    switch self {
-    case .use: return "UI/use_icon"
-    case .inspect: return "UI/inspect_icon"
-    case .combine: return "UI/combine_icon"
-    case .discard: return "UI/discard_icon"
-    }
-  }
-
-  func isEnabled(for slotIndex: Int) -> Bool {
-    switch self {
-    case .use, .inspect, .combine, .discard:
-      return true
-    }
   }
 }

@@ -1,13 +1,21 @@
-import class AppKit.NSSound
 import class Foundation.Bundle
+
+#if os(macOS)
+  import class AppKit.NSSound
+#endif
 
 extension UISound {
   static func select() { play("RE_SELECT02") }
-  //  static func select() { play("Minimalist10") }
+  // static func select() { play("Minimalist10") }
+  // static func select() { play("UR/accept") }
+  static func cancel() { play("UR/cancel") }
+  static func error() { play("UR/error") }
+
   static func shutter() { play("shutter") }
 
-  //  static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
+  // static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
   static func navigate() { play("Minimalist10", volume: 0.8) }
+  // static func navigate() { play("UR/scroll") }
 
   static func pageTurn() { play(["page_1", "page_2", "page_3"]) }
 }
@@ -15,7 +23,7 @@ extension UISound {
 enum UISound {
   #if os(macOS)
     static func play(_ sound: String, volume: Float = 1) {
-      guard let file = Bundle.module.path(forResource: "UI/\(sound)", ofType: "wav") else {
+      guard let file = Bundle.module.path(forResource: "UI/Sounds/\(sound)", ofType: "wav") else {
         logger.error("failed to load \(sound)")
         return
       }

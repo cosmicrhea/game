@@ -43,6 +43,36 @@ public protocol Renderer {
   ///   - tint: Optional color tint to apply to the image.
   func drawImageRegion(textureID: UInt64, in rect: Rect, uv: Rect, tint: Color?)
 
+  // MARK: - Gradients
+
+  /// Draws a linear gradient in the specified rectangle.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - rect: The rectangle to fill with the gradient.
+  ///   - angle: The angle of the gradient in degrees (0 = horizontal, 90 = vertical).
+  func drawLinearGradient(_ gradient: Gradient, in rect: Rect, angle: Float)
+
+  /// Draws a linear gradient in the specified path.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - path: The path to fill with the gradient.
+  ///   - angle: The angle of the gradient in degrees (0 = horizontal, 90 = vertical).
+  func drawLinearGradient(_ gradient: Gradient, in path: BezierPath, angle: Float)
+
+  /// Draws a radial gradient in the specified rectangle.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - rect: The rectangle to fill with the gradient.
+  ///   - center: The center point of the radial gradient (relative to the rectangle, 0,0 = top-left, 1,1 = bottom-right).
+  func drawRadialGradient(_ gradient: Gradient, in rect: Rect, center: Point)
+
+  /// Draws a radial gradient in the specified path.
+  /// - Parameters:
+  ///   - gradient: The gradient to draw.
+  ///   - path: The path to fill with the gradient.
+  ///   - center: The center point of the radial gradient (relative to the path's bounding box, 0,0 = top-left, 1,1 = bottom-right).
+  func drawRadialGradient(_ gradient: Gradient, in path: BezierPath, center: Point)
+
   // MARK: - Text
 
   /// Draws attributed text at the specified location.
@@ -51,15 +81,15 @@ public protocol Renderer {
   ///   - origin: The point to draw the text at.
   ///   - defaultStyle: The default text style to use for unformatted text.
   ///   - wrapWidth: Optional width to wrap text at.
-  ///   - anchor: The anchor point for positioning.
-  ///   - alignment: Text alignment within the wrap width.
+  ///   - alignment: The alignment point for positioning.
+  ///   - textAlignment: Text alignment within the wrap width.
   func drawText(
     _ attributedString: AttributedString,
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float?,
-    anchor: TextAnchor,
-    alignment: TextAlignment
+    alignment: Alignment,
+    textAlignment: TextAlignment
   )
 
   // MARK: - Paths

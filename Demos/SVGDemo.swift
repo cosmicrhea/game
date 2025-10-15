@@ -39,10 +39,20 @@ final class SVGDemo: RenderLoop {
 
   private func loadImages() {
     svgData.removeAll()
-    for path in svgPaths {
-      let image = Image(path, size: Size(iconSize, iconSize), strokeWidth: strokeWidth)
-      let name = URL(fileURLWithPath: path).lastPathComponent.replacingOccurrences(of: ".svg", with: "")
-      svgData.append((image: image, name: name))
+    // for path in svgPaths {
+    //   let image = Image(path, size: Size(iconSize, iconSize), strokeWidth: strokeWidth)
+    //   let name = URL(fileURLWithPath: path).lastPathComponent.replacingOccurrences(of: ".svg", with: "")
+    //   svgData.append((image: image, name: name))
+    // }
+
+    let testIcons = [
+      "gear", "hand-arrow-up", "gps-fix", "magnifying-glass", "trash", "plus-circle", "eye", "arrow-square-out",
+      "arrows-down-up", "arrows-left-right", "map-pin-area", "user", "files",
+    ]
+
+    for icon in testIcons {
+      let image = Image("UI/Icons/phosphor-icons/\(icon)-bold.svg", size: Size(iconSize, iconSize))
+      svgData.append((image: image, name: icon))
     }
   }
 
@@ -116,7 +126,7 @@ final class SVGDemo: RenderLoop {
       data.name.draw(
         at: Point(textX, textY),
         style: textStyle,
-        anchor: .bottomLeft
+        alignment: .bottomLeft
       )
     }
 
@@ -129,7 +139,7 @@ final class SVGDemo: RenderLoop {
     infoText.draw(
       at: Point(20, Float(Engine.viewportSize.height) - 20),
       style: infoStyle,
-      anchor: .topLeft
+      alignment: .topLeft
     )
   }
 }

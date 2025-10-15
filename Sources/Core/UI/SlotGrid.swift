@@ -68,9 +68,9 @@ public final class SlotGrid {
   public init(
     columns: Int,
     rows: Int,
-    slotSize: Float = 80.0,
-    spacing: Float = 2.0,
-    cornerRadius: Float = 3.0,
+    slotSize: Float = 96.0,
+    spacing: Float = 3.0,
+    cornerRadius: Float = 5.0,
     radialGradientStrength: Float = 0.6,
     selectionWraps: Bool = false
   ) {
@@ -400,6 +400,23 @@ public final class SlotGrid {
           height: imageSize
         )
         image.draw(in: imageRect)
+
+        // Draw quantity number in bottom-right corner if should show quantity
+        if slotData.shouldShowQuantity {
+          let quantityText = "\(slotData.quantity!)"
+          let quantityStyle = TextStyle(
+            fontName: "Creato Display Bold",
+            fontSize: 14,
+            color: .white,
+            strokeWidth: 2,
+            strokeColor: .black
+          )
+
+          // Position in bottom-right corner of slot with proper padding
+          let quantityX = slotPosition.x + slotSize - 12
+          let quantityY = slotPosition.y + slotSize - 12
+          quantityText.draw(at: Point(quantityX, quantityY), style: quantityStyle)
+        }
       }
     }
 

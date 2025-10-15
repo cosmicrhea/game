@@ -176,7 +176,7 @@ final class LibraryView: RenderLoop {
           displayName.draw(
             at: Point(textRect.origin.x + textRect.size.width / 2, textRect.origin.y + textRect.size.height / 2),
             style: textStyle,
-            anchor: .topLeft
+            alignment: .topLeft
           )
         }
       } else {
@@ -192,7 +192,7 @@ final class LibraryView: RenderLoop {
         emptyText.draw(
           at: Point(itemRect.origin.x + itemRect.size.width / 2, itemRect.origin.y + itemRect.size.height / 2),
           style: textStyle,
-          anchor: .topLeft
+          alignment: .topLeft
         )
       }
     }

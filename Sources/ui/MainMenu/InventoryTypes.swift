@@ -19,9 +19,9 @@ public struct Item: Sendable {
 /// Represents the data for a single slot in a SlotGrid
 public struct SlotData: Sendable {
   public let item: Item?
-  public let quantity: Int
+  public let quantity: Int?
 
-  public init(item: Item? = nil, quantity: Int = 1) {
+  public init(item: Item? = nil, quantity: Int? = nil) {
     self.item = item
     self.quantity = quantity
   }
@@ -35,5 +35,9 @@ public struct SlotData: Sendable {
   public var hasItem: Bool {
     return item != nil
   }
-}
 
+  /// Returns true if the slot should display a quantity number
+  public var shouldShowQuantity: Bool {
+    return quantity != nil
+  }
+}

@@ -146,7 +146,7 @@ final class SlotGridDemo: RenderLoop {
       instruction.draw(
         at: Point(20, Float(Engine.viewportSize.height) - 20 - Float(index * 25)),
         style: TextStyle(fontName: "Determination", fontSize: 18, color: .white),
-        anchor: .topLeft
+        alignment: .topLeft
       )
     }
 
@@ -170,7 +170,7 @@ final class SlotGridDemo: RenderLoop {
           Float(Engine.viewportSize.width) - 20,
           Float(Engine.viewportSize.height) - 20 - Float(index * 20)),
         style: TextStyle(fontName: "Determination", fontSize: 16, color: .white),
-        anchor: .topRight
+        alignment: .topRight
       )
     }
   }

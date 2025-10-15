@@ -109,6 +109,10 @@ extension Image {
       .replacingOccurrences(of: "stroke='black'", with: "stroke='white'")
       .replacingOccurrences(of: "fill=\"black\"", with: "fill=\"white\"")
       .replacingOccurrences(of: "fill='black'", with: "fill='white'")
+      .replacingOccurrences(of: "stroke=\"currentColor\"", with: "stroke=\"white\"")
+      .replacingOccurrences(of: "stroke='currentColor'", with: "stroke='white'")
+      .replacingOccurrences(of: "fill=\"currentColor\"", with: "fill=\"white\"")
+      .replacingOccurrences(of: "fill='currentColor'", with: "fill='white'")
 
     // Override or add width/height attributes based on targetSize
     if let targetSize = targetSize {

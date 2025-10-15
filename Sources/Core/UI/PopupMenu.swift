@@ -3,22 +3,17 @@ import GL
 import GLFW
 import GLMath
 
-// MARK: - MenuAnchor Enum
-public enum MenuAnchor {
-  case topLeft, top, topRight
-  case left, center, right
-  case bottomLeft, bottom, bottomRight
-}
+// MenuAnchor has been replaced with the centralized Alignment enum in Geometry.swift
 
 // MARK: - Menu Item
 public struct MenuItem {
   public let id: String
   public let label: String
-  public let icon: String?
+  public let icon: Image?
   public let isEnabled: Bool
   public let action: () -> Void
 
-  public init(id: String, label: String, icon: String? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+  public init(id: String, label: String, icon: Image? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
     self.id = id
     self.label = label
     self.icon = icon
@@ -38,7 +33,7 @@ public class PopupMenu {
 
   // MARK: - Positioning
   public var appearsAtMousePosition: Bool = false
-  public var anchor: MenuAnchor = .topRight
+  public var alignment: Alignment = .topRight
   public var offset: Point = Point(0, 0)
 
   // MARK: - Animation
@@ -52,9 +47,9 @@ public class PopupMenu {
   private var currentTriggerSize: Size = Size(80, 80)
 
   private var menuItems: [MenuItem] = []
-  private let itemHeight: Float = 32.0
-  private let padding: Float = 8.0
-  private let minWidth: Float = 120.0
+  private let itemHeight: Float = 40.0
+  private let padding: Float = 9.0
+  private let minWidth: Float = 144.0
 
   // MARK: - Colors
   public var backgroundColor = Color(0.35, 0.35, 0.35, 0.75)
@@ -278,6 +273,24 @@ public class PopupMenu {
         }
       }
 
+      // Draw icon if present
+      let iconSize: Float = 20.0
+      let iconPadding: Float = 8.0
+      if let icon = item.icon {
+        let iconY = itemY + (itemHeight - iconSize) * 0.5  // Center vertically
+        let iconRect = Rect(
+          x: position.x + iconPadding,
+          y: iconY,
+          width: iconSize,
+          height: iconSize
+        )
+
+        // Apply fade to icon
+        let fadeAlpha = isVisible ? animationProgress : (1.0 - animationProgress)
+        let iconTint = Color.white.withAlphaComponent(fadeAlpha)
+        icon.draw(in: iconRect, tint: iconTint)
+      }
+
       // Draw item text - properly centered with fade
       let textStyle = item.isEnabled ? TextStyle.contextMenu : TextStyle.contextMenuDisabled
       let textHeight = textStyle.fontSize * 1.2  // Approximate text height
@@ -299,10 +312,12 @@ public class PopupMenu {
         color: fadedTextColor
       )
 
+      // Adjust text position based on whether there's an icon
+      let textX = item.icon != nil ? position.x + iconPadding + iconSize + 8 : position.x + padding
       item.label.draw(
-        at: Point(position.x + padding, textY),
+        at: Point(textX, textY),
         style: fadedTextStyle,
-        anchor: .topLeft
+        alignment: .topLeft
       )
     }
 
@@ -323,13 +338,15 @@ public class PopupMenu {
     // Start position based on anchor (slide in from the side)
     let slideDistance = currentTriggerSize.width / 3.0  // One third of trigger width
 
-    switch anchor {
+    switch alignment {
     case .topLeft, .left, .bottomLeft:
       startPosition = Point(targetPosition.x + slideDistance, targetPosition.y)  // Slide from right (flipped)
     case .top, .center, .bottom:
       startPosition = Point(targetPosition.x, targetPosition.y - 50)  // Slide from top
     case .topRight, .right, .bottomRight:
       startPosition = Point(targetPosition.x - slideDistance, targetPosition.y)  // Slide from left (flipped)
+    case .baselineLeft:
+      startPosition = Point(targetPosition.x + slideDistance, targetPosition.y)  // Slide from right (flipped)
     }
 
     position = startPosition
@@ -370,23 +387,27 @@ public class PopupMenu {
     var finalY = triggerPosition.y
 
     // Adjust X position based on anchor
-    switch anchor {
+    switch alignment {
     case .topLeft, .left, .bottomLeft:
       finalX = triggerPosition.x - menuWidth  // Left of trigger
     case .top, .center, .bottom:
       finalX = triggerPosition.x - menuWidth * 0.5  // Centered on trigger
     case .topRight, .right, .bottomRight:
       finalX = triggerPosition.x + triggerSize.width * 0.5  // Right of trigger (menu's left edge at trigger's right edge)
+    case .baselineLeft:
+      finalX = triggerPosition.x - menuWidth  // Left of trigger
     }
 
     // Adjust Y position based on anchor (OpenGL Y is flipped)
-    switch anchor {
+    switch alignment {
     case .topLeft, .top, .topRight:
       finalY = triggerPosition.y + triggerSize.height * 0.5  // Top of menu aligns with top of trigger
     case .left, .center, .right:
       finalY = triggerPosition.y - triggerSize.height * 0.5  // Centered vertically
     case .bottomLeft, .bottom, .bottomRight:
       finalY = triggerPosition.y - triggerSize.height  // Bottom of menu aligns with bottom of trigger
+    case .baselineLeft:
+      finalY = triggerPosition.y + triggerSize.height * 0.5  // Top of menu aligns with top of trigger
     }
 
     return Point(finalX + offset.x, finalY + offset.y)
