@@ -2,9 +2,9 @@ import GL
 import GLFW
 import GLMath
 
-/// A grid of slots with configurable spacing and layout
+/// A specialized SlotGrid for displaying documents
 @MainActor
-public final class SlotGrid {
+public final class DocumentSlotGrid {
   // MARK: - Configuration
   public var columns: Int
   public var rows: Int
@@ -40,41 +40,18 @@ public final class SlotGrid {
   public var selectedSlotColor = Color.slotSelected
   public var hoveredSlotColor = Color.slotHovered
 
-  // MARK: - Context Menu
-  public var slotMenu: SlotMenu
-  public var onSlotAction: ((SlotAction, Int) -> Void)?
-
-  // MARK: - Selection Callback (alternative to menu)
-  public var onSlotSelected: ((Int) -> Void)?
-  public var showMenuOnSelection: Bool = true
+  // MARK: - Selection Callback
+  public var onDocumentSelected: ((Document?) -> Void)?
 
   // MARK: - Slot Data
-  public var slotData: [SlotData?] = []
-
-  public init(config: GridConfiguration) {
-    self.columns = config.columns
-    self.rows = config.rows
-    self.slotSize = config.cellSize
-    self.spacing = config.spacing
-    self.cornerRadius = config.cornerRadius
-    self.radialGradientStrength = config.radialGradientStrength
-    self.selectionWraps = config.selectionWraps
-    // Start selection in bottom-left corner (now index 0)
-    self.selectedIndex = 0
-
-    self.slotMenu = SlotMenu()
-    self.slotMenu.offset = Point(2, 0)  // 2px right offset
-    self.slotMenu.onAction = { [weak self] action, slotIndex in
-      self?.onSlotAction?(action, slotIndex)
-    }
-  }
+  public var slotData: [DocumentSlotData?] = []
 
   public init(
     columns: Int,
     rows: Int,
-    slotSize: Float = 96.0,
-    spacing: Float = 3.0,
-    cornerRadius: Float = 5.0,
+    slotSize: Float = 128.0,
+    spacing: Float = 8.0,
+    cornerRadius: Float = 8.0,
     radialGradientStrength: Float = 0.6,
     selectionWraps: Bool = false
   ) {
@@ -87,12 +64,6 @@ public final class SlotGrid {
     self.selectionWraps = selectionWraps
     // Start selection in bottom-left corner (now index 0)
     self.selectedIndex = 0
-
-    self.slotMenu = SlotMenu()
-    self.slotMenu.offset = Point(3, 0)
-    self.slotMenu.onAction = { [weak self] action, slotIndex in
-      self?.onSlotAction?(action, slotIndex)
-    }
   }
 
   // MARK: - Public Methods
@@ -103,18 +74,18 @@ public final class SlotGrid {
   }
 
   /// Set the slot data array (should match the grid size)
-  public func setSlotData(_ data: [SlotData?]) {
+  public func setSlotData(_ data: [DocumentSlotData?]) {
     slotData = data
   }
 
   /// Get slot data at a specific index
-  public func getSlotData(at index: Int) -> SlotData? {
+  public func getSlotData(at index: Int) -> DocumentSlotData? {
     guard index >= 0 && index < slotData.count else { return nil }
     return slotData[index]
   }
 
   /// Set slot data at a specific index
-  public func setSlotData(_ data: SlotData?, at index: Int) {
+  public func setSlotData(_ data: DocumentSlotData?, at index: Int) {
     guard index >= 0 && index < slotData.count else { return }
     slotData[index] = data
   }
@@ -245,15 +216,8 @@ public final class SlotGrid {
 
   // MARK: - Input Handling
 
-  /// Handle keyboard input for grid navigation and menu
+  /// Handle keyboard input for grid navigation
   public func handleKey(_ key: Keyboard.Key) -> Bool {
-    // Handle menu navigation if menu is visible
-    if slotMenu.isVisible {
-      if slotMenu.handleKey(key) {
-        return true
-      }
-    }
-
     switch key {
     case .w, .up:
       return moveSelection(direction: .down)  // W/Up moves down
@@ -264,99 +228,34 @@ public final class SlotGrid {
     case .d, .right:
       return moveSelection(direction: .right)
     case .f, .space, .enter:
-      if showMenuOnSelection {
-        // Show menu for selected slot
-        showMenuForSelectedSlot()
-      } else {
-        // Call selection callback
-        onSlotSelected?(selectedIndex)
-      }
+      // Call document selection callback
+      let document = slotData.indices.contains(selectedIndex) ? slotData[selectedIndex]?.document : nil
+      onDocumentSelected?(document)
       return true
-    case .escape:
-      if slotMenu.isVisible {
-        slotMenu.hide()
-        return true
-      }
     default:
       return false
     }
-    return false
   }
 
-  /// Handle mouse movement for hover effects and menu
+  /// Handle mouse movement for hover effects
   public func handleMouseMove(at position: Point) {
-    if slotMenu.isVisible {
-      slotMenu.updateMouse(at: position)
-    } else {
-      updateHover(at: position)
-    }
+    updateHover(at: position)
   }
 
-  /// Handle mouse click for selection and menu
+  /// Handle mouse click for selection
   public func handleMouseClick(at position: Point) -> Bool {
-    if slotMenu.isVisible {
-      // Handle menu click
-      if slotMenu.handleClick(at: position) {
-        // Menu item was clicked, menu is now hidden
-        return true
-      } else {
-        // Clicked outside menu, hide it
-        slotMenu.hide()
-        return false
-      }
-    } else {
-      // Select slot and either show menu or call callback
-      if let slotIndex = slotIndex(at: position) {
-        setSelected(slotIndex)
-        if showMenuOnSelection {
-          showMenuForSlot(slotIndex, at: position)
-        } else {
-          onSlotSelected?(slotIndex)
-        }
-        return true
-      }
+    if let slotIndex = slotIndex(at: position) {
+      setSelected(slotIndex)
+      let document = slotData.indices.contains(slotIndex) ? slotData[slotIndex]?.document : nil
+      onDocumentSelected?(document)
+      return true
     }
     return false
-  }
-
-  // MARK: - Menu Management
-
-  /// Show menu for the currently selected slot
-  private func showMenuForSelectedSlot() {
-    let slotPosition = slotPosition(at: selectedIndex)
-    let slotCenter = Point(
-      slotPosition.x + slotSize * 0.5,
-      slotPosition.y + slotSize * 0.5
-    )
-    showMenuForSlot(selectedIndex, at: slotCenter, openedWithKeyboard: true)
-  }
-
-  /// Show menu for a specific slot
-  private func showMenuForSlot(_ slotIndex: Int, at position: Point, openedWithKeyboard: Bool = false) {
-    let slotPosition = slotPosition(at: slotIndex)
-    let slotCenter = Point(
-      slotPosition.x + slotSize * 0.5,
-      slotPosition.y + slotSize * 0.5
-    )
-    slotMenu.showForSlot(
-      at: slotCenter,
-      slotIndex: slotIndex,
-      slotPosition: slotPosition,
-      availableActions: [.use, .inspect, .combine, .discard],
-      openedWithKeyboard: openedWithKeyboard,
-      slotSize: Size(slotSize, slotSize)
-    )
-    UISound.select()
-  }
-
-  /// Update menu animations
-  public func update(deltaTime: Float) {
-    slotMenu.update(deltaTime: deltaTime)
   }
 
   // MARK: - Rendering
 
-  /// Draw the slot grid and menu
+  /// Draw the slot grid
   public func draw() {
     for i in 0..<(columns * rows) {
       let slotPosition = slotPosition(at: i)
@@ -368,8 +267,7 @@ public final class SlotGrid {
       // Determine slot color based on state
       var currentSlotColor = slotColor
       if i == selectedIndex {
-        // Use active color when menu is open, selected color otherwise
-        currentSlotColor = slotMenu.isVisible ? Color.slotActive : selectedSlotColor
+        currentSlotColor = selectedSlotColor
       } else if i == hoveredIndex {
         currentSlotColor = hoveredSlotColor
       }
@@ -403,8 +301,8 @@ public final class SlotGrid {
         shader.setVec3("uBorderShadow", value: (x: borderShadow.red, y: borderShadow.green, z: borderShadow.blue))
       }
 
-      // Draw item image if slot has data
-      if i < slotData.count, let slotData = slotData[i], let item = slotData.item, let image = item.image {
+      // Draw document image if slot has data
+      if i < slotData.count, let slotData = slotData[i], let document = slotData.document, let image = document.image {
         let imageSize = min(slotSize * 0.8, min(image.naturalSize.width, image.naturalSize.height))
         let imageRect = Rect(
           x: slotPosition.x + (slotSize - imageSize) * 0.5,
@@ -412,42 +310,11 @@ public final class SlotGrid {
           width: imageSize,
           height: imageSize
         )
-        image.draw(in: imageRect)
 
-        // Draw quantity number in bottom-right corner if should show quantity
-        if slotData.shouldShowQuantity {
-          let quantityText = "\(slotData.quantity!)"
-          let quantityStyle = TextStyle(
-            fontName: "CreatoDisplay-ExtraBold",
-            fontSize: 19,
-            color: .white,
-            strokeWidth: 1,
-            strokeColor: .black
-          )
-
-          let fadeWidth: Float = 8 + quantityText.size(with: quantityStyle).width * 2
-          let fadeRect = Rect(origin: slotPosition + Point(3, 5), size: Size(fadeWidth, 21))
-          GraphicsContext.current?.drawLinearGradient(
-            Gradient(startingColor: .black.withAlphaComponent(0.8), endingColor: .clear),
-            // Gradient(colors: [.clear, Color.black.withAlphaComponent(0.8), .clear]),
-            in: fadeRect,
-            angle: 0
-          )
-
-          // Position in bottom-right corner of slot with proper padding
-          let quantityX = slotPosition.x + 9
-          let quantityY = slotPosition.y + 6
-          quantityText.draw(at: Point(quantityX, quantityY), style: quantityStyle, anchor: .bottomLeft)
-        }
+        // Apply opacity based on discovery status
+        let opacity: Float = slotData.isDiscovered ? 1.0 : 0.25
+        image.draw(in: imageRect, tint: Color.white.withAlphaComponent(opacity))
       }
     }
-
-    // Draw the context menu
-    slotMenu.draw()
   }
-}
-
-// MARK: - Direction Enum
-public enum Direction {
-  case up, down, left, right
 }

@@ -1,5 +1,6 @@
 import Assimp
 import GL
+import GLMath
 
 class MeshInstance {
   struct Vertex {
@@ -10,14 +11,16 @@ class MeshInstance {
 
   let scene: Scene
   let mesh: Mesh
+  let transformMatrix: mat4
 
   var VAO: GLuint = 0
   var VBO: GLuint = 0
   var EBO: GLuint = 0
 
-  init(scene: Scene, mesh: Mesh) {
+  init(scene: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1)) {
     self.scene = scene
     self.mesh = mesh
+    self.transformMatrix = transformMatrix
 
     glGenVertexArrays(1, &VAO)
     glGenBuffers(1, &VBO)
@@ -72,6 +75,49 @@ class MeshInstance {
     glBindVertexArray(VAO)
     glDrawElements(GL_TRIANGLES, GLsizei(mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
     glBindVertexArray(0)
+  }
+}
+
+// MARK: - Scene helpers for transform matrices
+
+extension Scene {
+  /// Get transform matrix for a mesh by finding it in the node hierarchy
+  func getTransformMatrix(for mesh: Mesh) -> mat4 {
+    return findMeshTransform(mesh: mesh, node: rootNode, parentTransform: mat4(1))
+  }
+
+  private func findMeshTransform(mesh: Mesh, node: Node, parentTransform: mat4) -> mat4 {
+    // Get this node's transformation matrix
+    let nodeTransform = convertAssimpMatrix(node.transformation)
+    let globalTransform = parentTransform * nodeTransform
+
+    // Check if this node contains the mesh
+    for i in 0..<node.numberOfMeshes {
+      let meshIndex = node.meshes[i]
+      if meshes[meshIndex] === mesh {
+        return globalTransform
+      }
+    }
+
+    // Search in child nodes
+    for i in 0..<node.numberOfChildren {
+      let childNode = node.children[i]
+      let result = findMeshTransform(mesh: mesh, node: childNode, parentTransform: globalTransform)
+      if result != mat4(1) {
+        return result
+      }
+    }
+
+    return mat4(1)  // Not found
+  }
+
+  /// Convert Assimp matrix to GLMath mat4
+  private func convertAssimpMatrix(_ matrix: Assimp.Matrix4x4) -> mat4 {
+    let row1 = vec4(Float(matrix.a1), Float(matrix.b1), Float(matrix.c1), Float(matrix.d1))
+    let row2 = vec4(Float(matrix.a2), Float(matrix.b2), Float(matrix.c2), Float(matrix.d2))
+    let row3 = vec4(Float(matrix.a3), Float(matrix.b3), Float(matrix.c3), Float(matrix.d3))
+    let row4 = vec4(Float(matrix.a4), Float(matrix.b4), Float(matrix.c4), Float(matrix.d4))
+    return mat4(row1, row2, row3, row4)
   }
 }
 

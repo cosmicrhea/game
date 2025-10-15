@@ -155,7 +155,7 @@ public final class Engine {
     loops = [
       MainMenu(),
       InventoryView(),
-//      GradientDemo(),
+      //      GradientDemo(),
       CreditsScreen(),
       TitleScreenStack(),
       SVGDemo(),
@@ -164,7 +164,7 @@ public final class Engine {
       // SlotDemo(),
       // SlotGridDemo(),
       //      LibraryView(),
-//      MainMenu(),
+      //      MainMenu(),
       DocumentDemo(),
 
       //      CalloutDemo(),
@@ -224,6 +224,8 @@ public final class Engine {
       self.activeLoop.onMouseButton(window: window, button: button, state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onMouseButtonPressed(window: window, button: button, mods: mods)
+      } else if state == .released {
+        self.activeLoop.onMouseButtonReleased(window: window, button: button, mods: mods)
       }
     }
   }

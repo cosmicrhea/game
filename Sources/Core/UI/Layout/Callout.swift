@@ -74,7 +74,7 @@ public struct Callout {
 
   // Default style for callouts (hardcoded)
   private static let defaultStyle = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 20,
     color: Color(0.9, 0.9, 0.9, 1)
   )

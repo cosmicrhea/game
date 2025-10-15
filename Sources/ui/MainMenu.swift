@@ -63,19 +63,24 @@ final class MainMenu: RenderLoop {
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    // Handle tab switching first
-    switch key {
-    case .q:
-      cycleTab(-1)
-      return
-    case .e:
-      cycleTab(1)
-      return
-    case .escape:
-      // Exit main menu - could be handled by parent
-      break
-    default:
-      break
+    // Don't allow tab switching when showing a document or item
+    if !(currentTab == .library && libraryView.showingDocument)
+      && !(currentTab == .inventory && inventoryView.showingItem)
+    {
+      // Handle tab switching first
+      switch key {
+      case .q:
+        cycleTab(-1)
+        return
+      case .e:
+        cycleTab(1)
+        return
+      case .escape:
+        // Exit main menu - could be handled by parent
+        break
+      default:
+        break
+      }
     }
 
     // Forward input to active view
@@ -86,8 +91,16 @@ final class MainMenu: RenderLoop {
     activeView.onMouseMove(window: window, x: x, y: y)
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+    activeView.onMouseButton(window: window, button: button, state: state, mods: mods)
+  }
+
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     activeView.onMouseButtonPressed(window: window, button: button, mods: mods)
+  }
+
+  func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    activeView.onMouseButtonReleased(window: window, button: button, mods: mods)
   }
 
   func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
@@ -98,8 +111,12 @@ final class MainMenu: RenderLoop {
     // Draw the active view
     activeView.draw()
 
-    // Draw tab icons and prompts at the top
-    drawTabIcons()
+    // Only draw tab icons if we're not showing a document in the library or item in inventory
+    if !(currentTab == .library && libraryView.showingDocument)
+      && !(currentTab == .inventory && inventoryView.showingItem)
+    {
+      drawTabIcons()
+    }
   }
 
   // MARK: - Private Methods
@@ -138,7 +155,7 @@ final class MainMenu: RenderLoop {
     let iconSpacing: Float = 72
     let totalWidth = Float(Tab.allCases.count - 1) * iconSpacing
     let startX = (Float(Engine.viewportSize.width) - totalWidth) * 0.5
-    let iconY: Float = Float(Engine.viewportSize.height) - 128
+    let iconY: Float = Float(Engine.viewportSize.height) - 80
 
     // Draw prompts further down
     let promptY = iconY

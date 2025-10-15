@@ -7,12 +7,14 @@ public struct Item: Sendable {
   public let name: String
   public let image: Image?
   public let description: String?
+  public let modelPath: String?
 
-  public init(id: String, name: String, image: Image? = nil, description: String? = nil) {
+  public init(id: String, name: String, image: Image? = nil, description: String? = nil, modelPath: String? = nil) {
     self.id = id
     self.name = name
     self.image = image
     self.description = description
+    self.modelPath = modelPath
   }
 }
 

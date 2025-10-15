@@ -195,7 +195,7 @@ public class PopupMenu {
       return true
     case .right, .d:
       return true
-    case .space, .enter:
+    case .f, .space, .enter:
       if selectedIndex < menuItems.count {
         let item = menuItems[selectedIndex]
         if item.isEnabled {

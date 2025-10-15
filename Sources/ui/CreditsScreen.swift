@@ -5,7 +5,7 @@ import GLMath
 import ImageFormats
 
 private let nameStyle = TextStyle(
-  fontName: "Creato Display Bold",
+  fontName: "CreatoDisplay-Bold",
   fontSize: 24,
   color: .white,
   lineHeight: 1.3
@@ -33,11 +33,13 @@ final class CreditsScreen: RenderLoop {
   private var creditsImage: Image?
 
   func onKey(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
-    if key == .space || key == .enter { scrollTurbo = state == .pressed }
+    if key == .leftAlt || key == .rightAlt { scrollTurbo = state == .pressed }
   }
 
   func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    if button == .left { scrollTurbo = state == .pressed }
+    #if DEBUG
+      if button == .left { scrollTurbo = state == .pressed }
+    #endif
   }
 
   func update(deltaTime: Float) {

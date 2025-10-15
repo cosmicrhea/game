@@ -98,7 +98,7 @@ final class SVGDemo: RenderLoop {
     let padding: Float = 32.0
     let iconsPerRow = 8
     let textStyle = TextStyle(
-      fontName: "Creato Display Bold",
+      fontName: "CreatoDisplay-Bold",
       fontSize: 13,
       color: .gray300,
       alignment: .center

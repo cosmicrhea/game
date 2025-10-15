@@ -19,12 +19,21 @@ final class InventoryView: RenderLoop {
   private var currentItemName: String = ""
   private var currentItemDescription: String = ""
 
+  // Item inspection state
+  private var currentItemView: ItemView? = nil
+  private var isShowingItem: Bool = false
+
+  // Public property to check if showing an item
+  public var showingItem: Bool {
+    return isShowingItem
+  }
+
   init() {
     slotGrid = SlotGrid(
       columns: 4,
       rows: 2,
-      slotSize: 80.0,
-      spacing: 4.0
+      slotSize: 96.0,
+      spacing: 3.0
     )
     slotGrid.onSlotAction = { [weak self] action, slotIndex in
       self?.handleSlotAction(action, slotIndex: slotIndex)
@@ -51,16 +60,32 @@ final class InventoryView: RenderLoop {
   }
 
   func update(deltaTime: Float) {
-    recenterGrid()
+    if isShowingItem {
+      currentItemView?.update(deltaTime: deltaTime)
+    } else {
+      recenterGrid()
 
-    // Update slot grid (includes menu animations)
-    slotGrid.update(deltaTime: deltaTime)
+      // Update slot grid (includes menu animations)
+      slotGrid.update(deltaTime: deltaTime)
 
-    // Update item label based on current selection
-    updateItemLabel()
+      // Update item label based on current selection
+      updateItemLabel()
+    }
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    if isShowingItem {
+      // Handle escape to return to inventory view
+      if key == .escape {
+        hideItem()
+        return
+      }
+
+      // Forward other input to ItemView
+      currentItemView?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      return
+    }
+
     // Let SlotGrid handle all input (including menu)
     if slotGrid.handleKey(key) {
       return
@@ -78,12 +103,33 @@ final class InventoryView: RenderLoop {
   func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
     lastMouseX = x
     lastMouseY = y
+
+    if isShowingItem {
+      // Forward mouse input to ItemView
+      currentItemView?.onMouseMove(window: window, x: x, y: y)
+      return
+    }
+
     // Flip Y coordinate to match screen coordinates (top-left origin)
     let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     slotGrid.handleMouseMove(at: mousePosition)
   }
 
+  func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+    if isShowingItem {
+      // Forward mouse input to ItemView
+      currentItemView?.onMouseButton(window: window, button: button, state: state, mods: mods)
+      return
+    }
+  }
+
   func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+    if isShowingItem {
+      // Forward mouse input to ItemView
+      currentItemView?.onMouseButtonPressed(window: window, button: button, mods: mods)
+      return
+    }
+
     let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
     if button == .left {
@@ -91,26 +137,39 @@ final class InventoryView: RenderLoop {
     }
   }
 
-  func draw() {
-    // Draw ambient background
-    ambientBackground.draw { shader in
-      // Set ambient background parameters
-      shader.setVec3("uTintDark", value: (0.035, 0.045, 0.055))
-      shader.setVec3("uTintLight", value: (0.085, 0.10, 0.11))
-      shader.setFloat("uMottle", value: 0.35)
-      shader.setFloat("uGrain", value: 0.08)
-      shader.setFloat("uVignette", value: 0.35)
-      shader.setFloat("uDust", value: 0.06)
+  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+    if isShowingItem {
+      // Forward scroll input to ItemView
+      currentItemView?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+      return
     }
+  }
 
-    // Draw the slot grid (includes menu)
-    slotGrid.draw()
+  func draw() {
+    if isShowingItem {
+      // Draw the ItemView
+      currentItemView?.draw()
+    } else {
+      // Draw ambient background
+      ambientBackground.draw { shader in
+        // Set ambient background parameters
+        shader.setVec3("uTintDark", value: (0.035, 0.045, 0.055))
+        shader.setVec3("uTintLight", value: (0.085, 0.10, 0.11))
+        shader.setFloat("uMottle", value: 0.35)
+        shader.setFloat("uGrain", value: 0.08)
+        shader.setFloat("uVignette", value: 0.35)
+        shader.setFloat("uDust", value: 0.06)
+      }
 
-    // Draw the prompt list
-    promptList.draw()
+      // Draw the slot grid (includes menu)
+      slotGrid.draw()
 
-    // Draw item label
-    drawItemLabel()
+      // Draw the prompt list
+      promptList.draw()
+
+      // Draw item label
+      drawItemLabel()
+    }
   }
 
   // MARK: - Private Methods
@@ -127,34 +186,35 @@ final class InventoryView: RenderLoop {
   }
 
   private func drawItemLabel() {
-    // Position the label underneath the grid
-    let gridPosition = slotGrid.gridPosition
-    let labelX = gridPosition.x
-    let labelY = gridPosition.y - 80  // 80 pixels below the grid
+    // Position the label consistently from the bottom of the screen
+    let screenWidth = Float(Engine.viewportSize.width)
+    let labelX: Float = 40  // Left-align with some margin
+    let labelY: Float = 160  // 160 pixels from bottom of screen (same as ItemView)
 
-    // Get the slot grid width to use as wrap width
-    let gridWidth = slotGrid.totalSize.width
+    // Use screen width for consistent wrapping
+    let gridWidth = screenWidth * 0.8
 
     // Draw item name
     let nameStyle = TextStyle(
-      fontName: "Creato Display Bold",
+      fontName: "CreatoDisplay-Bold",
       fontSize: 28,
       color: .white,
       strokeWidth: 2,
       strokeColor: .gray700
     )
-    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle, wrapWidth: gridWidth)
+    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle, wrapWidth: gridWidth, anchor: .topLeft)
 
     // Draw item description
     let descriptionStyle = TextStyle(
-      fontName: "Creato Display Medium",
+      fontName: "CreatoDisplay-Medium",
       fontSize: 20,
       color: .gray300,
       strokeWidth: 1,
       strokeColor: .gray900
     )
     let descriptionY = labelY - 40
-    currentItemDescription.draw(at: Point(labelX, descriptionY), style: descriptionStyle, wrapWidth: gridWidth)
+    currentItemDescription.draw(
+      at: Point(labelX, descriptionY), style: descriptionStyle, wrapWidth: gridWidth, anchor: .topLeft)
   }
 
   private func loadSampleItems() {
@@ -164,32 +224,36 @@ final class InventoryView: RenderLoop {
         id: "glock18c",
         name: "Glock 18C",
         image: Image("Items/Weapons/glock18c.png"),
-        description: "Compact 9mm pistol with selective fire capability."
-          //        description: "A faded photograph showing a dark tunnel."
+        description: "Compact 9mm pistol with selective fire capability.",
+        modelPath: "Items/Weapons/glock18c"
       ),
       Item(
         id: "sigp320",
         name: "SIG Sauer P320",
         image: Image("Items/Weapons/sigp320.png"),
-        description: "Modern striker-fired pistol with modular design."
+        description: "Modern striker-fired pistol with modular design.",
+        modelPath: "Items/Weapons/sigp320"
       ),
       Item(
         id: "handgun_ammo",
         name: "9mm Ammunition",
         image: Image("Items/Weapons/handgun_ammo.png"),
-        description: "Standard 9 millimeter rounds for handguns."
+        description: "Standard 9 millimeter rounds for handguns.",
+        //modelPath: "Items/Weapons/handgun_ammo"
       ),
       Item(
         id: "lighter",
         name: "Lighter",
         image: Image("Items/Weapons/lighter.png"),
-        description: "Simple butane lighter for lighting fires."
+        description: "Simple butane lighter for lighting fires.",
+        modelPath: "Items/Weapons/lighter"
       ),
       Item(
         id: "utility_key",
         name: "Utility Key",
         image: Image("Items/Weapons/utility_key.png"),
-        description: "A key for utility cabinets."
+        description: "A key for utility cabinets.",
+        modelPath: "Items/Weapons/utility_key"
       ),
     ]
   }
@@ -202,7 +266,7 @@ final class InventoryView: RenderLoop {
     let itemsWithQuantities: [(Item, Int?)] = [
       (sampleItems[0], 15),  // Glock 18C - 15 rounds loaded
       (sampleItems[1], 17),  // SIG P320 - 17 rounds loaded
-      (sampleItems[2], 24),  // 9mm Ammunition - 24 rounds
+      (sampleItems[2], 240),  // 9mm Ammunition - 24 rounds
       (sampleItems[3], nil),  // Lighter - no quantity shown
       (sampleItems[4], nil),  // Utility Key - no quantity shown
     ]
@@ -228,6 +292,7 @@ final class InventoryView: RenderLoop {
       // Handle item inspection
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
         print("Inspecting item: \(item.name) - \(item.description ?? "No description")")
+        showItem(item)
       }
       break
     case .combine:
@@ -244,5 +309,23 @@ final class InventoryView: RenderLoop {
       }
       break
     }
+  }
+
+  private func showItem(_ item: Item) {
+    // Create new ItemView
+    currentItemView = ItemView(item: item)
+
+    // Set up completion callback to return to inventory view
+    currentItemView?.onItemFinished = { [weak self] in
+      self?.hideItem()
+    }
+
+    // Switch to item view
+    isShowingItem = true
+  }
+
+  private func hideItem() {
+    currentItemView = nil
+    isShowingItem = false
   }
 }

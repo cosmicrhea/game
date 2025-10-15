@@ -44,7 +44,10 @@ final class MainLoop: RenderLoop {
 
     meshInstances = scene.meshes
       .filter { $0.numberOfVertices > 0 }
-      .map { MeshInstance(scene: scene, mesh: $0) }
+      .map { mesh in
+        let transformMatrix = scene.getTransformMatrix(for: mesh)
+        return MeshInstance(scene: scene, mesh: mesh, transformMatrix: transformMatrix)
+      }
 
     promptList = PromptList(.itemView, axis: .horizontal)
   }
@@ -95,7 +98,10 @@ final class MainLoop: RenderLoop {
     testTriangle.draw()
 
     // Meshes
-    meshInstances.forEach { $0.draw() }
+    meshInstances.forEach { meshInstance in
+      program.setMat4("model", value: meshInstance.transformMatrix)
+      meshInstance.draw()
+    }
 
     drawObjectiveCallout()
     drawDebugPromptList()

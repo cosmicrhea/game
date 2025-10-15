@@ -5,7 +5,7 @@ import STBRectPack
 
 @MainActor
 final class TextEffectsDemo: RenderLoop {
-  private let titleStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 16, color: .white)
+  private let titleStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 16, color: .white)
   private let sampleText = "The quick brown fox jumps over the lazy dog"
 
   private let effects: [(name: String, style: TextStyle)] = {
@@ -15,7 +15,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Plain Text",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
           alignment: .left
@@ -24,7 +24,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Red Outline",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
           alignment: .left,
@@ -35,7 +35,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Document View",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
           alignment: .left,
@@ -46,7 +46,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Black Shadow",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
           alignment: .left,
@@ -58,7 +58,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Green Outline + Shadow",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
           alignment: .left,
@@ -72,7 +72,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Thick Blue Outline",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
           alignment: .left,
@@ -83,7 +83,7 @@ final class TextEffectsDemo: RenderLoop {
       (
         "Soft Purple Shadow",
         TextStyle(
-          fontName: "Creato Display Medium",
+          fontName: "CreatoDisplay-Medium",
           fontSize: 24,
           color: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
           alignment: .left,

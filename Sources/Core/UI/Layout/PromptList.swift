@@ -26,7 +26,7 @@ public final class PromptList {
   public var showCalloutBackground: Bool = false
 
   public init(_ group: PromptGroup? = nil, axis: Axis = .horizontal) {
-    self.textStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 24, color: .white)
+    self.textStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 24, color: .white)
     self.group = group
     self.axis = axis
   }

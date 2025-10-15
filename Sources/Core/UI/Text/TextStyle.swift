@@ -12,7 +12,7 @@ extension TextStyle {
   )
 
   static let inputPrompt = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 28,
     color: .white.withAlphaComponent(0.95)
   )
@@ -36,7 +36,7 @@ extension TextStyle {
   )
 
   static let document = TextStyle(
-    fontName: "Creato Display Medium",
+    fontName: "CreatoDisplay-Medium",
     fontSize: 24,
     color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
     //lineHeight: 1.2,
@@ -45,7 +45,7 @@ extension TextStyle {
   )
 
   static let menuItem = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 32,
     color: .white,
     strokeWidth: 2,
@@ -53,7 +53,7 @@ extension TextStyle {
   )
 
   static let menuItemDisabled = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 32,
     color: .gray500,
     strokeWidth: 2,
@@ -61,13 +61,13 @@ extension TextStyle {
   )
 
   static let version = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 16,
     color: .gray700.withAlphaComponent(0.5)
   )
 
   static let contextMenu = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 22,
     color: .white,
     strokeWidth: 2,
@@ -75,7 +75,7 @@ extension TextStyle {
   )
 
   static let contextMenuDisabled = TextStyle(
-    fontName: "Creato Display Bold",
+    fontName: "CreatoDisplay-Bold",
     fontSize: 22,
     color: .gray500.withAlphaComponent(0.95)
 

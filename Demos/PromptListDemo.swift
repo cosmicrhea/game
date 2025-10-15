@@ -4,7 +4,7 @@ import STBRectPack
 
 final class PromptListDemo: RenderLoop {
   private lazy var promptRenderer = PromptList(axis: .horizontal)
-  private let titleStyle = TextStyle(fontName: "Creato Display Bold", fontSize: 18, color: .white)
+  private let titleStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 18, color: .white)
 
   // Helper function to measure the actual width of a group
   private func measureGroupWidth(prompts: OrderedDictionary<String, [[String]]>) -> Float {

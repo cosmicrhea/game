@@ -54,6 +54,13 @@ enum CreditsData {
       "spy15",
     ],
 
+    "Font Designers": [
+      // https://www.dafont.com/creato-display.font
+      // CreatoDisplay-*.otf
+      "Lafontype",
+      "Anugrah Pasau",
+    ],
+
     "Asset Pipeline Programming": [
       // Assimp
       "Christian Treffs"
