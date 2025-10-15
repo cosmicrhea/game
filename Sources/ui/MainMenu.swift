@@ -34,8 +34,8 @@ final class MainMenu: RenderLoop {
   private let inactiveIconScale: Float = 0.8
 
   // Animation state
-  private var iconScales: [Tab: Float] = [.map: 1.0, .inventory: 0.8, .library: 0.8]
-  private var animationProgress: [Tab: Float] = [.map: 1.0, .inventory: 0.0, .library: 0.0]
+  private var iconScales: [Tab: Float] = [.map: 0.8, .inventory: 1.0, .library: 0.8]
+  private var animationProgress: [Tab: Float] = [.map: 0.0, .inventory: 1.0, .library: 0.0]
   private let animationDuration: Float = 0.25
   private let easing: Easing = .easeInOutQuad
 
@@ -147,12 +147,12 @@ final class MainMenu: RenderLoop {
     // Previous prompt on the left
     let prevPromptX = startX - promptSpacing
     prevPrompt.targetIconHeight = 32
-    prevPrompt.draw(at: Point(prevPromptX, promptY), alignment: .center)
+    prevPrompt.draw(at: Point(prevPromptX, promptY), anchor: .center)
 
     // Next prompt on the right
     let nextPromptX = startX + totalWidth + promptSpacing
     nextPrompt.targetIconHeight = 32
-    nextPrompt.draw(at: Point(nextPromptX, promptY), alignment: .center)
+    nextPrompt.draw(at: Point(nextPromptX, promptY), anchor: .center)
 
     // Draw tab icons
     for (index, tab) in Tab.allCases.enumerated() {

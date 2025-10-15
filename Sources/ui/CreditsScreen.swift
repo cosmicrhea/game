@@ -164,7 +164,7 @@ final class CreditsScreen: RenderLoop {
         at: Point(leftColumnX, currentY),
         style: categoryStyle,
         wrapWidth: leftColumnWidth,
-        alignment: .topLeft
+        anchor: .topLeft
       )
 
       // Get actual height of category for positioning names
@@ -178,7 +178,7 @@ final class CreditsScreen: RenderLoop {
         at: Point(rightColumnX, nameY),
         style: nameStyle,
         wrapWidth: Float.greatestFiniteMagnitude,
-        alignment: .topLeft
+        anchor: .topLeft
       )
       let namesBounds = namesText.boundingRect(with: nameStyle, wrapWidth: Float.greatestFiniteMagnitude)
       nameY += namesBounds.size.height

@@ -88,7 +88,7 @@ public protocol Renderer {
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float?,
-    alignment: Alignment,
+    anchor: AnchorPoint,
     textAlignment: TextAlignment
   )
 

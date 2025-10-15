@@ -126,7 +126,7 @@ final class SVGDemo: RenderLoop {
       data.name.draw(
         at: Point(textX, textY),
         style: textStyle,
-        alignment: .bottomLeft
+        anchor: .bottomLeft
       )
     }
 
@@ -139,7 +139,7 @@ final class SVGDemo: RenderLoop {
     infoText.draw(
       at: Point(20, Float(Engine.viewportSize.height) - 20),
       style: infoStyle,
-      alignment: .topLeft
+      anchor: .topLeft
     )
   }
 }

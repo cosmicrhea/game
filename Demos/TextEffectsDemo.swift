@@ -158,7 +158,7 @@ final class TextEffectsDemo: RenderLoop {
       effect.name.draw(
         at: Point(screenX, screenY),
         style: titleStyleWithColor,
-        alignment: .topLeft,
+        anchor: .topLeft,
         context: context
       )
 
@@ -166,7 +166,7 @@ final class TextEffectsDemo: RenderLoop {
       sampleText.draw(
         at: Point(screenX, screenY + titleHeight + 8),
         style: effect.style,
-        alignment: .topLeft,
+        anchor: .topLeft,
         context: context
       )
 

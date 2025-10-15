@@ -288,7 +288,7 @@ final class DocumentView: RenderLoop {
         at: Point(oldTextX, oldTextY),
         style: oldTextStyle,
         wrapWidth: textWidth,
-        alignment: .bottomLeft
+        anchor: .bottomLeft
       )
 
       // New text (fading in, moving in from direction of animation)
@@ -304,7 +304,7 @@ final class DocumentView: RenderLoop {
         at: Point(newTextX, baseTextY),
         style: newStyle,
         wrapWidth: textWidth,
-        alignment: .bottomLeft
+        anchor: .bottomLeft
       )
     } else {
       // Draw current text normally
@@ -312,7 +312,7 @@ final class DocumentView: RenderLoop {
         at: Point(textAreaX, baseTextY),
         style: currentTextStyle,
         wrapWidth: textWidth,
-        alignment: .bottomLeft
+        anchor: .bottomLeft
       )
     }
 

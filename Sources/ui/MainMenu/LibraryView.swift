@@ -168,15 +168,14 @@ final class LibraryView: RenderLoop {
           let textStyle = TextStyle(
             fontName: "Squarewave",
             fontSize: 16,
-            color: isSelected ? Color.white.withAlphaComponent(opacity) : Color.white.withAlphaComponent(0.8 * opacity),
-            alignment: .center
+            color: isSelected ? Color.white.withAlphaComponent(opacity) : Color.white.withAlphaComponent(0.8 * opacity)
           )
 
           // Draw the text centered in the rect
           displayName.draw(
             at: Point(textRect.origin.x + textRect.size.width / 2, textRect.origin.y + textRect.size.height / 2),
             style: textStyle,
-            alignment: .topLeft
+            anchor: .topLeft
           )
         }
       } else {
@@ -185,14 +184,13 @@ final class LibraryView: RenderLoop {
         let textStyle = TextStyle(
           fontName: "Squarewave",
           fontSize: 14,
-          color: Color.white.withAlphaComponent(0.3),
-          alignment: .center
+          color: Color.white.withAlphaComponent(0.3)
         )
 
         emptyText.draw(
           at: Point(itemRect.origin.x + itemRect.size.width / 2, itemRect.origin.y + itemRect.size.height / 2),
           style: textStyle,
-          alignment: .topLeft
+          anchor: .topLeft
         )
       }
     }

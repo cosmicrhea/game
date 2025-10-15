@@ -168,7 +168,7 @@ public final class PromptList {
     let labelStyle = TextStyle(
       fontName: textStyle.fontName, fontSize: textStyle.fontSize,
       color: Color(red: labelColor.0, green: labelColor.1, blue: labelColor.2, alpha: labelColor.3))
-    group.label.draw(at: Point(labelX, labelBaselineY), style: labelStyle, alignment: .baselineLeft)
+    group.label.draw(at: Point(labelX, labelBaselineY), style: labelStyle, anchor: .baselineLeft)
   }
 
   /// Render a single horizontal strip of groups aligned to bottom-right.
@@ -195,13 +195,13 @@ public final class PromptList {
     groups: [Row],
     windowSize: (w: Int32, h: Int32),
     origin: (x: Float, y: Float),
-    alignment: Alignment
+    anchor: AnchorPoint
   ) {
     let (totalWidth, maxHeight, groupMetrics) = calculateTotalMetrics(groups)
 
     // Determine starting x based on anchor
     var x: Float = origin.x
-    switch alignment {
+    switch anchor {
     case .topLeft, .bottomLeft:
       x = origin.x
     case .top, .bottom:
@@ -220,7 +220,7 @@ public final class PromptList {
 
     // Determine base y based on anchor
     let y: Float = {
-      switch alignment {
+      switch anchor {
       case .bottomLeft, .bottomRight:
         return origin.y
       case .topLeft, .topRight:
@@ -252,7 +252,7 @@ public final class PromptList {
     inputSource: InputSource,
     windowSize: (w: Int32, h: Int32),
     origin: (x: Float, y: Float),
-    alignment: Alignment
+    anchor: AnchorPoint
   ) {
     var groups: [Row] = []
     for (label, options) in prompts {
@@ -260,7 +260,7 @@ public final class PromptList {
         groups.append(Row(iconNames: icons, label: label))
       }
     }
-    drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, alignment: alignment)
+    drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, anchor: anchor)
   }
 
   /// Ordered overload: preserves explicit label ordering using OrderedDictionary
@@ -269,7 +269,7 @@ public final class PromptList {
     inputSource: InputSource = .player1,
     windowSize: (w: Int32, h: Int32),
     origin: (x: Float, y: Float),
-    alignment: Alignment
+    anchor: AnchorPoint
   ) {
     var groups: [Row] = []
     for (label, options) in prompts {
@@ -277,7 +277,7 @@ public final class PromptList {
         groups.append(Row(iconNames: icons, label: label))
       }
     }
-    drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, alignment: alignment)
+    drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, anchor: anchor)
   }
 
   /// Measure the actual size of a horizontal strip for the given prompts and input source
@@ -298,7 +298,7 @@ public final class PromptList {
 
   /// Render a vertical stack of groups
   private func drawVertical(
-    groups: [Row], windowSize: (w: Int32, h: Int32), origin: (x: Float, y: Float), alignment: Alignment
+    groups: [Row], windowSize: (w: Int32, h: Int32), origin: (x: Float, y: Float), anchor: AnchorPoint
   ) {
     let (_, maxHeight, groupMetrics) = calculateTotalMetrics(groups)
 
@@ -307,7 +307,7 @@ public final class PromptList {
 
     // Determine starting position based on anchor
     let startY: Float = {
-      switch alignment {
+      switch anchor {
       case .topLeft, .topRight:
         return origin.y
       case .bottomLeft, .bottomRight:
@@ -324,7 +324,7 @@ public final class PromptList {
     }()
 
     let startX: Float = {
-      switch alignment {
+      switch anchor {
       case .topLeft, .bottomLeft:
         return origin.x
       case .topRight, .bottomRight:
@@ -353,7 +353,7 @@ public final class PromptList {
     prompts: OrderedDictionary<String, [[String]]>,
     inputSource: InputSource = .player1,
     origin: Point,
-    alignment: Alignment
+    anchor: AnchorPoint
   ) {
     let windowSize = (Int32(Engine.viewportSize.width), Int32(Engine.viewportSize.height))
     var groups: [Row] = []
@@ -365,9 +365,9 @@ public final class PromptList {
 
     switch axis {
     case .horizontal:
-      drawHorizontal(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), alignment: alignment)
+      drawHorizontal(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), anchor: anchor)
     case .vertical:
-      drawVertical(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), alignment: alignment)
+      drawVertical(groups: groups, windowSize: windowSize, origin: (origin.x, origin.y), anchor: anchor)
     }
   }
 
@@ -390,7 +390,7 @@ public final class PromptList {
       prompts: prompts,
       inputSource: .player1,
       origin: origin,
-      alignment: .bottomRight
+      anchor: .bottomRight
     )
   }
 }

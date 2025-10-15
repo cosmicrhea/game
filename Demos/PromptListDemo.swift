@@ -79,14 +79,14 @@ final class PromptListDemo: RenderLoop {
       let titleX = screenX + Float(group.width) - titleWidth
       let titleBaselineY = screenY + Float(group.height) - padding
       group.title.draw(
-        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, alignment: .bottomLeft)
+        at: Point(titleX, titleBaselineY), style: titleStyleWithColor, anchor: .bottomLeft)
 
       // Draw input prompts for each source
       for (i, source) in InputSource.allCases.enumerated() {
         let y = screenY + Float(i) * rowStep
         let rightX = screenX + Float(group.width)
         promptRenderer.drawHorizontal(
-          prompts: group.prompts, inputSource: source, windowSize: ws, origin: (rightX, y), alignment: .bottomRight)
+          prompts: group.prompts, inputSource: source, windowSize: ws, origin: (rightX, y), anchor: .bottomRight)
       }
 
       if Config.current.wireframeMode {

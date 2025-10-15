@@ -43,7 +43,7 @@ final class FadeDemo: RenderLoop {
     instructionText.draw(
       at: Point(20, Float(Engine.viewportSize.height) - 20),
       style: TextStyle(fontName: "Determination", fontSize: 24, color: .white),
-      alignment: .topLeft
+      anchor: .topLeft
     )
 
     // Draw fade status
@@ -51,7 +51,7 @@ final class FadeDemo: RenderLoop {
     statusText.draw(
       at: Point(20, Float(Engine.viewportSize.height) - 60),
       style: TextStyle(fontName: "Determination", fontSize: 20, color: .white),
-      alignment: .topLeft
+      anchor: .topLeft
     )
   }
 }

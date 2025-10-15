@@ -418,7 +418,7 @@ extension AttributedString {
     at point: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float? = nil,
-    alignment: Alignment = .topLeft,
+    anchor: AnchorPoint = .topLeft,
     context: GraphicsContext? = nil
   ) {
     let ctx = context ?? GraphicsContext.current
@@ -429,7 +429,7 @@ extension AttributedString {
       at: point,
       defaultStyle: defaultStyle,
       wrapWidth: wrapWidth,
-      alignment: alignment,
+      anchor: anchor,
       textAlignment: defaultStyle.alignment
     )
   }
@@ -460,7 +460,7 @@ extension String {
     at point: Point,
     style: TextStyle,
     wrapWidth: Float? = nil,
-    alignment: Alignment = .topLeft,
+    anchor: AnchorPoint = .topLeft,
     context: GraphicsContext? = nil
   ) {
     let attributed = AttributedString(
@@ -473,7 +473,7 @@ extension String {
           fontSize: style.fontSize
         )
       ])
-    attributed.draw(at: point, defaultStyle: style, wrapWidth: wrapWidth, alignment: alignment, context: context)
+    attributed.draw(at: point, defaultStyle: style, wrapWidth: wrapWidth, anchor: anchor, context: context)
   }
 
   /// Draws the string within the specified rectangle with the given style.

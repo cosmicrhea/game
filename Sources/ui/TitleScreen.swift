@@ -141,6 +141,6 @@ final class TitleScreenStack: RenderLoop {
     let versionText = "v\(Engine.versionString)"
     let versionX: Float = 56
     let versionY: Float = 20
-    versionText.draw(at: Point(versionX, versionY), style: .version, alignment: .bottomLeft)
+    versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
   }
 }

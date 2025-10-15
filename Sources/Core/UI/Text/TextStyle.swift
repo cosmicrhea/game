@@ -67,15 +67,18 @@ extension TextStyle {
   )
 
   static let contextMenu = TextStyle(
-    fontName: "Creato Display Medium",
-    fontSize: 24,
-    color: .white
+    fontName: "Creato Display Bold",
+    fontSize: 22,
+    color: .white,
+    strokeWidth: 2,
+    strokeColor: .black
   )
 
   static let contextMenuDisabled = TextStyle(
-    fontName: "Creato Display Medium",
-    fontSize: 24,
-    color: .gray500
+    fontName: "Creato Display Bold",
+    fontSize: 22,
+    color: .gray500.withAlphaComponent(0.95)
+
   )
 
   /// Creates a menu item style based on selection and disabled state

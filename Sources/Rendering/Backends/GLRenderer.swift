@@ -295,7 +295,7 @@ public final class GLRenderer: Renderer {
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float? = nil,
-    alignment: Alignment = .topLeft,
+    anchor: AnchorPoint = .topLeft,
     textAlignment: TextAlignment = .left
   ) {
     // Apply coordinate flipping if the current GraphicsContext is flipped
@@ -332,11 +332,11 @@ public final class GLRenderer: Renderer {
     // Ensure we have an atlas for the required glyphs
     guard let atlas = GlyphAtlas.build(for: text, font: font.getTrueTypeFont()) else { return }
 
-    // Convert Alignment to anchor offset
-    let anchorOffset = calculateAlignmentOffset(
+    // Convert AnchorPoint to anchor offset
+    let anchorOffset = calculateAnchorOffset(
       layoutResult: layoutResult,
       origin: finalOrigin,
-      alignment: alignment,
+      anchor: anchor,
       scale: currentScale,
       font: font
     )
@@ -628,17 +628,17 @@ public final class GLRenderer: Renderer {
 
   // MARK: - Text Rendering Helpers
 
-  private func calculateAlignmentOffset(
+  private func calculateAnchorOffset(
     layoutResult: TextLayout.LayoutResult,
     origin: Point,
-    alignment: Alignment,
+    anchor: AnchorPoint,
     scale: Float,
     font: Font
   ) -> Point {
     // Use the same approach as the working ModularTextRenderer
     let baseline = font.baselineFromTop * scale
 
-    switch alignment {
+    switch anchor {
     case .topLeft:
       return Point(0, -baseline)
     case .top:

@@ -41,11 +41,11 @@ public final class Prompt {
   }
 
   /// Draw the prompt icon(s) at the specified position
-  public func draw(at position: Point, inputSource: InputSource = .player1, alignment: Alignment = .topLeft) {
+  public func draw(at position: Point, inputSource: InputSource = .player1, anchor: AnchorPoint = .topLeft) {
     guard let icons = chooseIcons(for: inputSource) else { return }
 
     let promptSize = size(for: inputSource)
-    let adjustedPosition = adjustPosition(position, for: promptSize, alignment: alignment)
+    let adjustedPosition = adjustPosition(position, for: promptSize, anchor: anchor)
 
     var iconX = adjustedPosition.x
     let iconY = adjustedPosition.y
@@ -102,8 +102,8 @@ public final class Prompt {
   }
 
   /// Adjust position based on alignment
-  private func adjustPosition(_ position: Point, for size: Size, alignment: Alignment) -> Point {
-    switch alignment {
+  private func adjustPosition(_ position: Point, for size: Size, anchor: AnchorPoint) -> Point {
+    switch anchor {
     case .topLeft:
       return position
     case .top:

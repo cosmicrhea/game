@@ -601,7 +601,7 @@ public final class MTLRenderer: Renderer {
     at origin: Point,
     defaultStyle: TextStyle,
     wrapWidth: Float?,
-    alignment: Alignment,
+    anchor: AnchorPoint,
     textAlignment: TextAlignment
   ) {
     // TODO: Implement Metal text rendering

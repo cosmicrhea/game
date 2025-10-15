@@ -33,7 +33,7 @@ public class PopupMenu {
 
   // MARK: - Positioning
   public var appearsAtMousePosition: Bool = false
-  public var alignment: Alignment = .topRight
+  public var anchor: AnchorPoint = .topRight
   public var offset: Point = Point(0, 0)
 
   // MARK: - Animation
@@ -42,9 +42,9 @@ public class PopupMenu {
   private var animationProgress: Float = 0.0
   private var isAnimating: Bool = false
   private var animationStartTime: Double = 0.0
-  private var targetPosition: Point = Point(0, 0)
-  private var startPosition: Point = Point(0, 0)
-  private var currentTriggerSize: Size = Size(80, 80)
+  private var targetPosition: Point = .zero
+  private var startPosition: Point = .zero
+  private var currentTriggerSize: Size = .zero
 
   private var menuItems: [MenuItem] = []
   private let itemHeight: Float = 40.0
@@ -68,7 +68,10 @@ public class PopupMenu {
 
   /// Show the context menu at the specified position
   public func show(
-    at position: Point, items: [MenuItem], openedWithKeyboard: Bool = false, triggerSize: Size = Size(80, 80)
+    at position: Point,
+    items: [MenuItem],
+    openedWithKeyboard: Bool = false,
+    triggerSize: Size = Size(80, 80)
   ) {
     self.menuItems = items
     self.selectedIndex = openedWithKeyboard ? 0 : -1  // -1 means no selection for mouse
@@ -317,7 +320,7 @@ public class PopupMenu {
       item.label.draw(
         at: Point(textX, textY),
         style: fadedTextStyle,
-        alignment: .topLeft
+        anchor: .topLeft
       )
     }
 
@@ -338,7 +341,7 @@ public class PopupMenu {
     // Start position based on anchor (slide in from the side)
     let slideDistance = currentTriggerSize.width / 3.0  // One third of trigger width
 
-    switch alignment {
+    switch anchor {
     case .topLeft, .left, .bottomLeft:
       startPosition = Point(targetPosition.x + slideDistance, targetPosition.y)  // Slide from right (flipped)
     case .top, .center, .bottom:
@@ -387,7 +390,7 @@ public class PopupMenu {
     var finalY = triggerPosition.y
 
     // Adjust X position based on anchor
-    switch alignment {
+    switch anchor {
     case .topLeft, .left, .bottomLeft:
       finalX = triggerPosition.x - menuWidth  // Left of trigger
     case .top, .center, .bottom:
@@ -399,7 +402,7 @@ public class PopupMenu {
     }
 
     // Adjust Y position based on anchor (OpenGL Y is flipped)
-    switch alignment {
+    switch anchor {
     case .topLeft, .top, .topRight:
       finalY = triggerPosition.y + triggerSize.height * 0.5  // Top of menu aligns with top of trigger
     case .left, .center, .right:
