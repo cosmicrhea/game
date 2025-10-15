@@ -11,9 +11,10 @@ private let nameStyle = TextStyle(
   lineHeight: 1.3
 )
 
-private let categoryStyle = nameStyle
+private let categoryStyle =
+  nameStyle
   .withColor(.gray500)
-  .withAlignment(.right)
+  .withAlignment(TextAlignment.right)
 
 private let sectionGap: Float = 0
 private let initialScrollOffset = Engine.viewportSize.height * 1.2

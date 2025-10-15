@@ -247,7 +247,7 @@ final class DocumentView: RenderLoop {
 
     // Use centered alignment for frontmatter, left alignment for regular pages
     if currentPage == 0, hasFrontmatter() {
-      currentTextStyle = TextStyle.document.withAlignment(.center)
+      currentTextStyle = TextStyle.document.withAlignment(TextAlignment.center)
     } else {
       currentTextStyle = TextStyle.document
     }
@@ -270,7 +270,7 @@ final class DocumentView: RenderLoop {
         oldTextStyle = TextStyle.document
           .withColor(TextStyle.document.color.withAlphaComponent(1.0 - animationProgress))
           .withStrokeColor(TextStyle.document.strokeColor.withAlphaComponent(1.0 - animationProgress))
-          .withAlignment(.center)
+          .withAlignment(TextAlignment.center)
       } else {
         // Calculate which page index to use (accounting for frontmatter)
         let oldPageIndex = hasFrontmatter() ? previousPageIndex - 1 : previousPageIndex

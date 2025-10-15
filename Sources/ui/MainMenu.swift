@@ -4,31 +4,23 @@ import GLMath
 
 final class MainMenu: RenderLoop {
   // Tab views
-  private let inventoryView = InventoryView()
   private let mapView = MapView()
+  private let inventoryView = InventoryView()
   private let libraryView = LibraryView()
 
   // Tab management
   private enum Tab: Int, CaseIterable {
-    case inventory = 0
-    case map = 1
-    case library = 2
-
-    var name: String {
-      switch self {
-      case .inventory: return "Inventory"
-      case .map: return "Map"
-      case .library: return "Library"
-      }
-    }
+    case map
+    case inventory
+    case library
   }
 
   private var currentTab: Tab = .inventory
 
   // Tab icons
   private let tabIcons: [Tab: Image] = [
-    .inventory: Image("UI/Icons/phosphor-icons/bag-simple-fill.svg", size: 48),
     .map: Image("UI/Icons/phosphor-icons/map-pin-fill.svg", size: 48),
+    .inventory: Image("UI/Icons/phosphor-icons/bag-simple-fill.svg", size: 48),
     .library: Image("UI/Icons/phosphor-icons/book-fill.svg", size: 48),
   ]
 
@@ -42,8 +34,8 @@ final class MainMenu: RenderLoop {
   private let inactiveIconScale: Float = 0.8
 
   // Animation state
-  private var iconScales: [Tab: Float] = [.inventory: 1.0, .map: 0.8, .library: 0.8]
-  private var animationProgress: [Tab: Float] = [.inventory: 1.0, .map: 0.0, .library: 0.0]
+  private var iconScales: [Tab: Float] = [.map: 1.0, .inventory: 0.8, .library: 0.8]
+  private var animationProgress: [Tab: Float] = [.map: 1.0, .inventory: 0.0, .library: 0.0]
   private let animationDuration: Float = 0.25
   private let easing: Easing = .easeInOutQuad
 

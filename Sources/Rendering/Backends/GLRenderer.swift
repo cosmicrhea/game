@@ -350,18 +350,16 @@ public final class GLRenderer: Renderer {
       // Calculate proper Y position for this line using the working approach
       let lineBaselineY = finalOrigin.y + anchorOffset.y - Float(line.baselineY) * lineHeight
 
-      // Calculate X offset based on alignment
+      // Calculate X offset based on text alignment (not positioning alignment)
       let lineXOffset: Float
       if let wrapWidth = wrapWidth {
-        switch alignment {
-        case .topLeft, .left, .bottomLeft:
+        switch textAlignment {
+        case .left:
           lineXOffset = 0
-        case .top, .center, .bottom:
+        case .center:
           lineXOffset = (wrapWidth - line.width) / 2
-        case .topRight, .right, .bottomRight:
+        case .right:
           lineXOffset = wrapWidth - line.width
-        case .baselineLeft:
-          lineXOffset = 0
         }
       } else {
         lineXOffset = 0

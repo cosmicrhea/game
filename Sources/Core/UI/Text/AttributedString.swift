@@ -83,7 +83,7 @@ public struct TextStyle: Sendable {
       lineHeight: self.lineHeight,
       strokeWidth: self.strokeWidth,
       strokeColor: self.strokeColor,
-      shadowWidth: self.shadowWidth,
+      shadowWidth: self.strokeWidth,
       shadowOffset: self.shadowOffset,
       shadowColor: self.shadowColor
     )
