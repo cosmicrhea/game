@@ -10,14 +10,12 @@ import unistd
   import Foundation
 #endif
 
-/// The width of the game window in pixels.
-public let WIDTH = 1280
-//public let WIDTH = 1800
-/// The height of the game window in pixels.
-public let HEIGHT = 720
-//public let HEIGHT = 1126
+///// The width of the game window in pixels.
+//public let WIDTH = 1280 // 1800
+///// The height of the game window in pixels.
+//public let HEIGHT = 720 // 1126
 
-/// Command-line interface options for the Glass engine.
+/// Command-line interface options for the engine.
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
   var demo: String?
@@ -74,7 +72,7 @@ public final class Engine {
   private init() {}
 
   private func run() {
-    print(" 🥛 Glass Engine ")
+    print("|ω･)ﾉ♡☆")
 
     cli = CLIOptions.parseOrExit()
 
@@ -153,12 +151,13 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
+//      ItemView(item: Item.allItems[1]),
       MainMenu(),
       InventoryView(),
       //      GradientDemo(),
       CreditsScreen(),
       TitleScreenStack(),
-      SVGDemo(),
+//      SVGDemo(),
 
       MainLoop(),
       // SlotDemo(),

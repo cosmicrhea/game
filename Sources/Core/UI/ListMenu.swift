@@ -168,9 +168,14 @@ public class ListMenu {
   private func handleMenuSelection() {
     let selectedItem = menuItems[selectedIndex]
     print("Selected: \(selectedItem.label)")
-    UISound.select()
-    onItemSelected?(selectedItem)
-    selectedItem.action()
+
+    if selectedItem.isEnabled {
+      UISound.select()
+      onItemSelected?(selectedItem)
+      selectedItem.action()
+    } else {
+      UISound.error()
+    }
   }
 
   private func getItemIndexAt(_ mousePosition: Point) -> Int? {

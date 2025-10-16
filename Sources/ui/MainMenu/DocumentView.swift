@@ -111,7 +111,11 @@ final class DocumentView: RenderLoop {
     switch key {
     case .left, .a: previousPage()
     case .right, .d: nextPage()
-    default: break
+    case .escape:
+      UISound.cancel()
+      onDocumentFinished?()
+    default:
+      break
     }
   }
 
@@ -122,10 +126,14 @@ final class DocumentView: RenderLoop {
       if currentPage >= totalPages - 1 {
         // We're on the last page, but only trigger completion callback if not animating
         guard !isAnimating else { return }
+        UISound.cancel()
         onDocumentFinished?()
       } else {
         nextPage()
       }
+    case .right:
+      UISound.cancel()
+      onDocumentFinished?()
     default: break
     }
   }
@@ -247,7 +255,7 @@ final class DocumentView: RenderLoop {
 
     // Use centered alignment for frontmatter, left alignment for regular pages
     if currentPage == 0, hasFrontmatter() {
-      currentTextStyle = TextStyle.document.withAlignment(TextAlignment.center)
+      currentTextStyle = TextStyle.document.withAlignment(.center)
     } else {
       currentTextStyle = TextStyle.document
     }
@@ -270,7 +278,7 @@ final class DocumentView: RenderLoop {
         oldTextStyle = TextStyle.document
           .withColor(TextStyle.document.color.withAlphaComponent(1.0 - animationProgress))
           .withStrokeColor(TextStyle.document.strokeColor.withAlphaComponent(1.0 - animationProgress))
-          .withAlignment(TextAlignment.center)
+          .withAlignment(.center)
       } else {
         // Calculate which page index to use (accounting for frontmatter)
         let oldPageIndex = hasFrontmatter() ? previousPageIndex - 1 : previousPageIndex

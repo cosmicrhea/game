@@ -206,6 +206,7 @@ public class PopupMenu {
       }
       return true
     case .escape:
+      UISound.cancel()
       hide()
       return true
     default:

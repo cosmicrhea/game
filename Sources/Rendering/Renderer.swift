@@ -81,8 +81,8 @@ public protocol Renderer {
   ///   - origin: The point to draw the text at.
   ///   - defaultStyle: The default text style to use for unformatted text.
   ///   - wrapWidth: Optional width to wrap text at.
-  ///   - alignment: The alignment point for positioning.
-  ///   - textAlignment: Text alignment within the wrap width.
+  ///   - anchor: The anchor point that determines how the origin positions the text (e.g., topLeft, center).
+  ///   - textAlignment: How lines of text are aligned horizontally within the specified wrap width (e.g., left, center, right).
   func drawText(
     _ attributedString: AttributedString,
     at origin: Point,

@@ -4,6 +4,7 @@ import GLFW
 import GLMath
 
 import class Foundation.Bundle
+import class Foundation.NSArray
 
 final class ItemView: RenderLoop {
   private let item: Item
@@ -11,9 +12,12 @@ final class ItemView: RenderLoop {
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
 
   // 3D model rendering
-  private let meshInstances: [MeshInstance]
-  private let program = try! GLProgram("Common/basic 2")
+  private var meshInstances: [MeshInstance] = []
   private var camera = OrbitCamera()
+  private let light = Light.itemInspection()
+
+  // Loading state
+  private let loadingProgress = LoadingProgress()
 
   // Item info styling is now defined inline in drawItemInfo() to match InventoryView
 
@@ -21,44 +25,75 @@ final class ItemView: RenderLoop {
   private var lastMouseX: Double = 0
   private var lastMouseY: Double = 0
 
+  // Debug state
+  private var showDebugInfo: Bool = false
+
   /// Completion callback for when item inspection is finished.
   var onItemFinished: (() -> Void)?
 
   init(item: Item) {
     self.item = item
 
-    // Load 3D model if available
-    if let modelPath = item.modelPath {
-      let scenePath = Bundle.module.path(forResource: modelPath, ofType: "glb")!
-      let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
-
-      meshInstances = scene.meshes
-        .filter { $0.numberOfVertices > 0 }
-        .map { mesh in
-          let transformMatrix = scene.getTransformMatrix(for: mesh)
-          return MeshInstance(scene: scene, mesh: mesh, transformMatrix: transformMatrix)
-        }
-    } else {
-      meshInstances = []
-    }
-
     // Set up camera for item inspection
     camera.target = vec3(0, 0, 0)  // Orbit around the center
-    camera.distance = 3.0  // Start a bit back from the item
-    camera.yaw = 0  // Start facing forward
-    camera.pitch = 0  // Level view
+    camera.distance = 2.0  // Start closer to the item
+    // yaw and pitch will use the default values from OrbitCamera init (-35.6, 14.1)
+
+    // Start async loading if model is available
+    if let modelPath = item.modelPath {
+      Task {
+        await loadModelAsync(path: modelPath)
+      }
+    }
   }
 
-  func update(window: GLFWWindow, deltaTime: Float) {
+  /// Load 3D model asynchronously with progress updates
+  private func loadModelAsync(path: String) async {
+    do {
+      meshInstances = try await MeshInstance.loadAsync(
+        path: path,
+        onSceneProgress: { progress in
+          Task { @MainActor in
+            print("Scene progress: \(progress)")
+            self.loadingProgress.updateSceneProgress(progress)
+          }
+        },
+        onTextureProgress: { current, total, progress in
+          Task { @MainActor in
+            print("Texture progress: \(current)/\(total) - \(progress)")
+            self.loadingProgress.updateTextureProgress(current: current, total: total, progress: progress)
+          }
+        }
+      )
+
+      await MainActor.run {
+        self.loadingProgress.markCompleted()
+      }
+    } catch {
+      print("Failed to load model: \(error)")
+      await MainActor.run {
+        self.loadingProgress.markCompleted()
+      }
+    }
+  }
+
+  // func update(deltaTime: Float) {
+  //   camera.update(deltaTime: deltaTime)
+  // }
+
+  func update(window: Window, deltaTime: Float) {
     camera.update(deltaTime: deltaTime)
-    print(window.mouse.state(of: .left))
-    print(window.mouse.state(of: .button1))
+    camera.processKeyboardState(window.keyboard, deltaTime)
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .escape:
+      UISound.cancel()
       onItemFinished?()
+    case .backspace:
+      UISound.select()
+      showDebugInfo.toggle()
     default:
       break
     }
@@ -69,13 +104,16 @@ final class ItemView: RenderLoop {
   }
 
   func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    print("onMouseButton: \(button), state: \(state)")
     if button == .left {
       if state == .pressed {
         camera.startDragging()
       } else if state == .released {
         camera.stopDragging()
       }
+    } else if button == .right && state == .pressed {
+      // Right-click to close item view
+      UISound.cancel()
+      onItemFinished?()
     }
   }
 
@@ -97,6 +135,9 @@ final class ItemView: RenderLoop {
     // Draw 3D model if available
     if !meshInstances.isEmpty {
       draw3DModel()
+    } else if loadingProgress.isLoading {
+      // Show loading progress
+      drawLoadingProgress()
     }
 
     // Draw item information
@@ -104,25 +145,33 @@ final class ItemView: RenderLoop {
 
     // Draw prompt list
     promptList.draw()
+
+    // Draw debug info if enabled
+    if showDebugInfo {
+      camera.drawDebugInfo()
+    }
   }
 
   private func draw3DModel() {
-    program.use()
-    // Use fixed FOV - zoom is handled by distance in OrbitCamera
-    program.setMat4("projection", value: GLMath.perspective(45.0, 1, 0.001, 1000.0))
-    program.setMat4("view", value: camera.getViewMatrix())
+    // Use actual window aspect ratio to prevent squishing
+    let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
+    let projection = GLMath.perspective(45.0, aspectRatio, 0.001, 1000.0)
+    let view = camera.getViewMatrix()
 
-    // Draw all mesh instances with proper model matrix
+    // Draw all mesh instances
     meshInstances.forEach { meshInstance in
-      // Set model matrix for this mesh using the transform from Assimp
-      program.setMat4("model", value: meshInstance.transformMatrix)
-      meshInstance.draw()
+      meshInstance.draw(
+        projection: projection,
+        view: view,
+        lightDirection: light.direction,
+        lightColor: light.color,
+        lightIntensity: light.intensity
+      )
     }
   }
 
   private func drawItemInfo() {
     let screenWidth = Float(Engine.viewportSize.width)
-    let screenHeight = Float(Engine.viewportSize.height)
 
     // Position text at the bottom of the screen, similar to InventoryView
     // but using consistent bottom positioning instead of grid-relative positioning
@@ -161,6 +210,28 @@ final class ItemView: RenderLoop {
         at: Point(labelX, descriptionY),
         style: descriptionStyle,
         wrapWidth: screenWidth * 0.8,
+        anchor: .topLeft
+      )
+    }
+  }
+
+  private func drawLoadingProgress() {
+    let progressStyle = TextStyle(
+      fontName: "CreatoDisplay-Medium",
+      fontSize: 16,
+      color: .white,
+      strokeWidth: 1,
+      strokeColor: .gray900
+    )
+
+    let startY = Float(Engine.viewportSize.height) - 40
+    let lineHeight: Float = 24
+
+    for (index, message) in loadingProgress.progressMessages.enumerated() {
+      let y = startY - Float(index) * lineHeight
+      message.draw(
+        at: Point(40, y),
+        style: progressStyle,
         anchor: .topLeft
       )
     }

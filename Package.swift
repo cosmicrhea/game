@@ -22,7 +22,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
     .package(url: "https://github.com/swiftlang/swift-markdown", branch: "main"),
-    .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
+//    .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
     .package(url: "https://github.com/apple/swift-syntax", from: "509.0.0"),
 
     // .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
@@ -40,6 +40,7 @@ let package = Package(
     .package(path: "../glass-deps/stb-perlin"),
     .package(path: "../glass-deps/stb-rect-pack"),
     .package(path: "../glass-deps/stb-truetype"),
+    .package(path: "../glass-deps/swift-image-formats"),
   ],
 
   targets: [

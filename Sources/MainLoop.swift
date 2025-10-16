@@ -98,9 +98,18 @@ final class MainLoop: RenderLoop {
     testTriangle.draw()
 
     // Meshes
+    let lightDirection = normalize(vec3(0.5, -1.0, 0.3))
+    let lightColor = vec3(1.0, 1.0, 1.0)
+    let lightIntensity: Float = 1.0
+
     meshInstances.forEach { meshInstance in
-      program.setMat4("model", value: meshInstance.transformMatrix)
-      meshInstance.draw()
+      meshInstance.draw(
+        projection: GLMath.perspective(camera.zoom, 1, 0.001, 1000.0),
+        view: camera.getViewMatrix(),
+        lightDirection: lightDirection,
+        lightColor: lightColor,
+        lightIntensity: lightIntensity
+      )
     }
 
     drawObjectiveCallout()

@@ -504,8 +504,10 @@ public final class GLRenderer: Renderer {
     let (vertices, indices) = path.tessellate()
     guard !vertices.isEmpty && !indices.isEmpty else { return }
     let bounds = calculateBounds(from: vertices)
-    drawGradientTriangles(
-      gradient, vertices: vertices, indices: indices, type: 0, angle: angle, center: nil, bounds: bounds)
+    withUIContext {
+      drawGradientTriangles(
+        gradient, vertices: vertices, indices: indices, type: 0, angle: angle, center: nil, bounds: bounds)
+    }
   }
 
   public func drawRadialGradient(_ gradient: Gradient, in rect: Rect, center: Point) {

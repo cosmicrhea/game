@@ -59,9 +59,10 @@ final class InventoryView: RenderLoop {
     slotGrid.setPosition(gridPosition)
   }
 
-  func update(deltaTime: Float) {
+  func update(window: Window, deltaTime: Float) {
     if isShowingItem {
-      currentItemView?.update(deltaTime: deltaTime)
+      // Forward update to ItemView
+      currentItemView?.update(window: window, deltaTime: deltaTime)
     } else {
       recenterGrid()
 
@@ -71,6 +72,9 @@ final class InventoryView: RenderLoop {
       // Update item label based on current selection
       updateItemLabel()
     }
+
+    // Update slot grid
+    slotGrid.update(deltaTime: deltaTime)
   }
 
   func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -187,7 +191,7 @@ final class InventoryView: RenderLoop {
 
   private func drawItemLabel() {
     // Position the label consistently from the bottom of the screen
-    let screenWidth = Float(Engine.viewportSize.width)
+    let screenWidth = Engine.viewportSize.width
     let labelX: Float = 40  // Left-align with some margin
     let labelY: Float = 160  // 160 pixels from bottom of screen (same as ItemView)
 
@@ -202,7 +206,7 @@ final class InventoryView: RenderLoop {
       strokeWidth: 2,
       strokeColor: .gray700
     )
-    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle, wrapWidth: gridWidth, anchor: .topLeft)
+    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle)
 
     // Draw item description
     let descriptionStyle = TextStyle(
@@ -214,48 +218,12 @@ final class InventoryView: RenderLoop {
     )
     let descriptionY = labelY - 40
     currentItemDescription.draw(
-      at: Point(labelX, descriptionY), style: descriptionStyle, wrapWidth: gridWidth, anchor: .topLeft)
+      at: Point(labelX, descriptionY), style: descriptionStyle)
   }
 
   private func loadSampleItems() {
     // Load weapon images from Items/Weapons
-    sampleItems = [
-      Item(
-        id: "glock18c",
-        name: "Glock 18C",
-        image: Image("Items/Weapons/glock18c.png"),
-        description: "Compact 9mm pistol with selective fire capability.",
-        modelPath: "Items/Weapons/glock18c"
-      ),
-      Item(
-        id: "sigp320",
-        name: "SIG Sauer P320",
-        image: Image("Items/Weapons/sigp320.png"),
-        description: "Modern striker-fired pistol with modular design.",
-        modelPath: "Items/Weapons/sigp320"
-      ),
-      Item(
-        id: "handgun_ammo",
-        name: "9mm Ammunition",
-        image: Image("Items/Weapons/handgun_ammo.png"),
-        description: "Standard 9 millimeter rounds for handguns.",
-        //modelPath: "Items/Weapons/handgun_ammo"
-      ),
-      Item(
-        id: "lighter",
-        name: "Lighter",
-        image: Image("Items/Weapons/lighter.png"),
-        description: "Simple butane lighter for lighting fires.",
-        modelPath: "Items/Weapons/lighter"
-      ),
-      Item(
-        id: "utility_key",
-        name: "Utility Key",
-        image: Image("Items/Weapons/utility_key.png"),
-        description: "A key for utility cabinets.",
-        modelPath: "Items/Weapons/utility_key"
-      ),
-    ]
+    sampleItems = Item.allItems
   }
 
   private func setupSlotData() {

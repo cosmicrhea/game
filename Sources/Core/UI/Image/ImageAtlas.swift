@@ -71,11 +71,11 @@ public final class ImageAtlas {
       logger.debug("ImageAtlas: using cached atlas for \(src)")
       return cached
     }
-    logger.info("ImageAtlas: loading new atlas for \(src)")
+    //logger.trace("ImageAtlas: loading new atlas for \(src)")
     let path = src.inputPromptAtlasPath
     if let atlas = ImageAtlas(tpxmlPath: path) {
       inputPromptCache[src] = atlas
-      logger.info("ImageAtlas: cached atlas for \(src)")
+      //logger.trace("ImageAtlas: cached atlas for \(src)")
       return atlas
     }
     logger.error("ImageAtlas: failed to load atlas for \(src) at path \(path)")

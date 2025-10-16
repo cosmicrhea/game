@@ -8,7 +8,8 @@ extension UISound {
   static func select() { play("RE_SELECT02") }
   // static func select() { play("Minimalist10") }
   // static func select() { play("UR/accept") }
-  static func cancel() { play("UR/cancel") }
+//  static func cancel() { play("UR/cancel") }
+  static func cancel() { play("RE_SELECT06") }
   static func error() { play("UR/error") }
 
   static func shutter() { play("shutter") }

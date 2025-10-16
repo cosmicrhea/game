@@ -14,7 +14,7 @@ extension ImageAtlas {
       return nil
     }
     let xmlURL = baseURL.appendingPathComponent(tpxmlPath)
-    logger.info("ImageAtlas: looking for XML at \(xmlURL.path)")
+    //logger.trace("ImageAtlas: looking for XML at \(xmlURL.path)")
     guard let data = try? Data(contentsOf: xmlURL) else {
       logger.error("ImageAtlas: failed to load XML data from \(xmlURL.path)")
       return nil
@@ -24,20 +24,20 @@ extension ImageAtlas {
     let xml = XMLParser(data: data)
     xml.delegate = coordinator
     let parseResult = xml.parse()
-    logger.info("ImageAtlas: XML parsing result: \(parseResult)")
-    logger.info("ImageAtlas: parsed \(coordinator.nameToRect.count) entries")
+    //logger.trace("ImageAtlas: XML parsing result: \(parseResult)")
+    //logger.trace("ImageAtlas: parsed \(coordinator.nameToRect.count) entries")
 
     // Resolve PNG path relative to XML
     let imageFileName = coordinator.imagePath ?? ""
     let imageURL = xmlURL.deletingLastPathComponent().appendingPathComponent(imageFileName)
     let relativeFromBundle = imageURL.path.replacingOccurrences(of: baseURL.path + "/", with: "")
-    logger.info("ImageAtlas: loading image from \(relativeFromBundle)")
+    //logger.trace("ImageAtlas: loading image from \(relativeFromBundle)")
     let texture = Image(relativeFromBundle)
 
     // Get dimensions from the loaded image instead of XML
     let atlasW = Int(texture.naturalSize.width)
     let atlasH = Int(texture.naturalSize.height)
-    logger.info("ImageAtlas: atlas dimensions from image: \(atlasW)x\(atlasH)")
+    //logger.trace("ImageAtlas: atlas dimensions from image: \(atlasW)x\(atlasH)")
     guard atlasW > 0 && atlasH > 0 else {
       logger.error("ImageAtlas: invalid atlas dimensions: \(atlasW)x\(atlasH)")
       return nil
@@ -52,7 +52,7 @@ extension ImageAtlas {
       let uv = Rect(x: u0, y: v0, width: u1 - u0, height: v1 - v0)
       entries.append(ImageAtlasEntry(name: name, uv: uv, size: Size(Float(r.w), Float(r.h))))
     }
-    logger.info("ImageAtlas: creating ImageAtlas with \(entries.count) entries")
+    //logger.trace("ImageAtlas: creating ImageAtlas with \(entries.count) entries")
     self.init(texture: texture, entries: entries)
   }
 

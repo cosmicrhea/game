@@ -188,11 +188,13 @@ final class LibraryView: RenderLoop {
       showDocument(document)
     } else {
       print("Selected empty slot")
+      UISound.error()
     }
   }
 
   private func showDocument(_ document: Document) {
     // Create new DocumentView
+    UISound.select()
     currentDocumentView = DocumentView(document: document)
 
     // Set up completion callback to return to library view

@@ -9,13 +9,109 @@ final class MainMenu: RenderLoop {
   private let libraryView = LibraryView()
 
   // Tab management
-  private enum Tab: Int, CaseIterable {
+  private let tabs = MainMenuTabs()
+
+  // Current active view
+  private var activeView: RenderLoop {
+    switch tabs.activeTab {
+    case .inventory: return inventoryView
+    case .map: return mapView
+    case .library: return libraryView
+    }
+  }
+
+  init() {
+    // Initialize all views
+    inventoryView.onAttach(window: Engine.shared.window)
+    mapView.onAttach(window: Engine.shared.window)
+    libraryView.onAttach(window: Engine.shared.window)
+
+    // Set up tab callbacks
+    tabs.canSwitchTabs = { [weak self] in
+      guard let self = self else { return false }
+      return !(self.tabs.activeTab == .library && self.libraryView.showingDocument)
+        && !(self.tabs.activeTab == .inventory && self.inventoryView.showingItem)
+    }
+  }
+
+  func update(window: Window, deltaTime: Float) {
+    tabs.update(deltaTime: deltaTime)
+    activeView.update(window: window, deltaTime: deltaTime)
+  }
+
+  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    // Handle tab switching first
+    if tabs.handleKeyPress(key) {
+      return
+    }
+
+    switch key {
+    case .escape:
+      // Exit main menu - could be handled by parent
+      break
+    default:
+      break
+    }
+
+    // Forward input to active view
+    activeView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+  }
+
+  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+    activeView.onMouseMove(window: window, x: x, y: y)
+  }
+
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+    activeView.onMouseButton(window: window, button: button, state: state, mods: mods)
+  }
+
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    // Handle tab clicking first
+    if button == .left
+      && tabs.handleMouseClick(at: Point(Float(window.mouse.position.x), Float(window.mouse.position.y)))
+    {
+      return
+    }
+
+    activeView.onMouseButtonPressed(window: window, button: button, mods: mods)
+  }
+
+  func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    activeView.onMouseButtonReleased(window: window, button: button, mods: mods)
+  }
+
+  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+    activeView.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+  }
+
+  func draw() {
+    // Draw the active view
+    activeView.draw()
+
+    // Only draw tab icons if we're not showing a document in the library or item in inventory
+    if !(tabs.activeTab == .library && libraryView.showingDocument)
+      && !(tabs.activeTab == .inventory && inventoryView.showingItem)
+    {
+      tabs.draw()
+    }
+  }
+
+}
+
+// MARK: - MainMenuTabs
+
+final class MainMenuTabs {
+  // Tab management
+  enum Tab: Int, CaseIterable {
     case map
     case inventory
     case library
   }
 
   private var currentTab: Tab = .inventory
+
+  // Mouse tracking
+  private var mousePosition: Point = Point.zero
 
   // Tab icons
   private let tabIcons: [Tab: Image] = [
@@ -39,99 +135,97 @@ final class MainMenu: RenderLoop {
   private let animationDuration: Float = 0.25
   private let easing: Easing = .easeInOutQuad
 
-  // Current active view
-  private var activeView: RenderLoop {
-    switch currentTab {
-    case .inventory: return inventoryView
-    case .map: return mapView
-    case .library: return libraryView
-    }
-  }
+  // Callbacks
+  var onTabChanged: ((Tab) -> Void)?
+  var canSwitchTabs: () -> Bool = { true }
 
-  init() {
-    // Initialize all views
-    inventoryView.onAttach(window: Engine.shared.window)
-    mapView.onAttach(window: Engine.shared.window)
-    libraryView.onAttach(window: Engine.shared.window)
+  var activeTab: Tab {
+    return currentTab
   }
 
   func update(deltaTime: Float) {
-    activeView.update(deltaTime: deltaTime)
-
-    // Animate icon scales
     updateIconScales(deltaTime: deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    // Don't allow tab switching when showing a document or item
-    if !(currentTab == .library && libraryView.showingDocument)
-      && !(currentTab == .inventory && inventoryView.showingItem)
-    {
-      // Handle tab switching first
-      switch key {
-      case .q:
-        cycleTab(-1)
-        return
-      case .e:
-        cycleTab(1)
-        return
-      case .escape:
-        // Exit main menu - could be handled by parent
-        break
-      default:
-        break
+  func updateMousePosition(_ position: Point) {
+    mousePosition = position
+  }
+
+  func handleKeyPress(_ key: Keyboard.Key) -> Bool {
+    switch key {
+    case .q:
+      cycleTab(-1)
+      return true
+    case .e:
+      cycleTab(1)
+      return true
+    default:
+      return false
+    }
+  }
+
+  func handleMouseClick(at position: Point) -> Bool {
+    if let clickedTab = getTabAtMousePosition(at: position) {
+      if canSwitchTabs() {
+        currentTab = clickedTab
+        onTabChanged?(currentTab)
+        UISound.select()
+        return true
       }
     }
-
-    // Forward input to active view
-    activeView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
-  }
-
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
-    activeView.onMouseMove(window: window, x: x, y: y)
-  }
-
-  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    activeView.onMouseButton(window: window, button: button, state: state, mods: mods)
-  }
-
-  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
-    activeView.onMouseButtonPressed(window: window, button: button, mods: mods)
-  }
-
-  func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
-    activeView.onMouseButtonReleased(window: window, button: button, mods: mods)
-  }
-
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
-    activeView.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+    return false
   }
 
   func draw() {
-    // Draw the active view
-    activeView.draw()
-
-    // Only draw tab icons if we're not showing a document in the library or item in inventory
-    if !(currentTab == .library && libraryView.showingDocument)
-      && !(currentTab == .inventory && inventoryView.showingItem)
-    {
-      drawTabIcons()
-    }
+    drawTabIcons()
   }
 
   // MARK: - Private Methods
+
+  private func getTabAtMousePosition(at position: Point) -> Tab? {
+    if !canSwitchTabs() {
+      return nil
+    }
+    let iconSpacing: Float = 72
+    let totalWidth = Float(Tab.allCases.count - 1) * iconSpacing
+    let startX = (Float(Engine.viewportSize.width) - totalWidth) * 0.5
+    let iconY: Float = Float(Engine.viewportSize.height) - 80
+
+    for (index, tab) in Tab.allCases.enumerated() {
+      let iconX = startX + Float(index) * iconSpacing
+
+      // Use animated scale for hit detection
+      let scale = iconScales[tab] ?? inactiveIconScale
+      let scaledSize = baseIconSize * scale
+
+      // Create hit area rectangle
+      let hitRect = Rect(
+        x: iconX - scaledSize * 0.5,
+        y: iconY - scaledSize * 0.5,
+        width: scaledSize,
+        height: scaledSize
+      )
+
+      // Check if mouse position is within this tab's hit area
+      if hitRect.contains(position) {
+        return tab
+      }
+    }
+
+    return nil
+  }
 
   private func cycleTab(_ direction: Int) {
     let tabCount = Tab.allCases.count
     let newIndex = (currentTab.rawValue + direction + tabCount) % tabCount
     currentTab = Tab(rawValue: newIndex)!
+    onTabChanged?(currentTab)
     UISound.select()
   }
 
   private func updateIconScales(deltaTime: Float) {
     for tab in Tab.allCases {
       let isActive = tab == currentTab
-      let targetProgress: Float = isActive ? 1.0 : 0.0
       let currentProgress = animationProgress[tab] ?? (isActive ? 1.0 : 0.0)
 
       // Update animation progress

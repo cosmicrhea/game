@@ -1,6 +1,46 @@
 import GL
 import GLMath
 
+extension Item {
+  static let allItems = [
+    Item(
+      id: "glock18c",
+      name: "Glock 18C",
+      image: Image("Items/Weapons/glock18c~2.png"),
+      description: "Compact 9mm pistol with selective fire capability.",
+      modelPath: "Items/Weapons/glock18c"
+    ),
+    Item(
+      id: "sigp320",
+      name: "SIG Sauer P320",
+      image: Image("Items/Weapons/sigp320.png"),
+      description: "Modern striker-fired pistol with modular design.",
+      modelPath: "Items/Weapons/sigp320"
+    ),
+    Item(
+      id: "handgun_ammo",
+      name: "9mm Ammunition",
+      image: Image("Items/Weapons/handgun_ammo.png"),
+      description: "Standard 9 millimeter rounds for handguns.",
+      //modelPath: "Items/Weapons/handgun_ammo"
+    ),
+    Item(
+      id: "lighter",
+      name: "Lighter",
+      image: Image("Items/Weapons/lighter.png"),
+      description: "Simple butane lighter for lighting fires.",
+      modelPath: "Items/Weapons/lighter"
+    ),
+    Item(
+      id: "utility_key",
+      name: "Utility Key",
+      image: Image("Items/Weapons/utility_key.png"),
+      description: "A key for utility cabinets.",
+      modelPath: "Items/Weapons/utility_key"
+    ),
+  ]
+}
+
 /// Represents an item that can be stored in inventory slots
 public struct Item: Sendable {
   public let id: String
