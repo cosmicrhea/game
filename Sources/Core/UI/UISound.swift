@@ -1,15 +1,21 @@
+@preconcurrency import Miniaudio
 import class Foundation.Bundle
+import class Foundation.Thread
 
 #if os(macOS)
-  import class AppKit.NSSound
+//  import class AppKit.NSSound
 #endif
+
+private let engine = try! AudioEngine()
 
 extension UISound {
   static func select() { play("RE_SELECT02") }
   // static func select() { play("Minimalist10") }
   // static func select() { play("UR/accept") }
-//  static func cancel() { play("UR/cancel") }
+
+  //  static func cancel() { play("UR/cancel") }
   static func cancel() { play("RE_SELECT06") }
+
   static func error() { play("UR/error") }
 
   static func shutter() { play("shutter") }
@@ -22,32 +28,46 @@ extension UISound {
 }
 
 enum UISound {
-  #if os(macOS)
-    static func play(_ sound: String, volume: Float = 1) {
-      guard let file = Bundle.module.path(forResource: "UI/Sounds/\(sound)", ofType: "wav") else {
-        logger.error("failed to load \(sound)")
-        return
-      }
+  nonisolated(unsafe) static var volume: Float = 1.0
 
-      // TODO: cross platform
-      guard let sound = NSSound(contentsOfFile: file, byReference: true) else {
-        logger.error("failed to decode \(sound)")
-        return
-      }
+  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
+  private nonisolated(unsafe) static var lastPlayedSounds: [String: String] = [:]
 
-      sound.volume = volume
-      sound.play()
+  static func play(_ soundName: String, volume: Float = 1) {
+    guard let path = Bundle.module.path(forResource: "UI/Sounds/\(soundName)", ofType: "wav") else {
+      logger.error("failed to load \(soundName)")
+      return
     }
-  #else
-    static func play(_ sound: String) {}
-  #endif
 
-  nonisolated(unsafe) private static var lastPlayedSounds: [String: String] = [:]
+//    var sound = sounds[soundName]
+//    if sound == nil {
+//      sound = try! Sound(contentsOfFile: file, spatial: false)
+//      sounds[soundName] = sound
+//    }
 
-  static func play(_ sounds: [String]) {
-    let key = sounds.sorted().joined(separator: ",")
-    let availableSounds = sounds.filter { $0 != lastPlayedSounds[key] }
-    let selectedSound = availableSounds.randomElement() ?? sounds.randomElement()!
+//    do {
+//      let sound = try Sound.play(path, spatial: false)
+//      sound.volume = volume
+//    } catch {
+//      logger.error("failed to play \(soundName): \(error)")
+//    }
+
+
+//    let sound =
+    engine.playSound(contentsOfFile: path, spatial: false)
+//    sound.volume = volume * Self.volume
+
+    // guard let sound else { return }
+//    let sound = try! Sound.play(path, spatial: false)
+//    sound.volume = volume * Self.volume
+//    let sound = try! Sound(contentsOfFile: file, spatial: false)
+//    sound.play()
+  }
+
+  static func play(_ soundNames: [String]) {
+    let key = soundNames.sorted().joined(separator: ",")
+    let availableSounds = soundNames.filter { $0 != lastPlayedSounds[key] }
+    let selectedSound = availableSounds.randomElement() ?? soundNames.randomElement()!
     lastPlayedSounds[key] = selectedSound
     play(selectedSound)
   }

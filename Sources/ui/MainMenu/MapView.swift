@@ -19,6 +19,18 @@ class MapView: RenderLoop {
 
   private let promptList = PromptList(.mapView, axis: .horizontal)
 
+  private var meshInstances: [MeshInstance] = []
+
+  init() {
+    Task {
+      meshInstances = try await MeshInstance.loadAsync(
+        path: "Scenes/tunnels_mockup",
+        onSceneProgress: { progress in },
+        onTextureProgress: { current, total, progress in }
+      )
+    }
+  }
+
   func update(deltaTime: Float) {
     // Update any animations or effects
     // For now, just a placeholder
@@ -35,6 +47,10 @@ class MapView: RenderLoop {
       shader.setColor("uGridColor", value: gridColor)
       shader.setFloat("uGridThickness", value: gridThickness)
     }
+
+//    for meshInstance in meshInstances {
+//      // meshInstance
+//    }
 
     promptList.draw()
   }

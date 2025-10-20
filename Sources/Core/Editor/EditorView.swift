@@ -134,7 +134,7 @@
       if let range = property.validRange {
         LabeledContent(property.displayName) {
           HStack(spacing: 0) {
-            Slider(value: $localValue, in: range)
+            SwiftUI.Slider(value: $localValue, in: range)
 
               //        } onEditingChanged: { editing in
               //          print("editing \(property.displayName): \(editing)")

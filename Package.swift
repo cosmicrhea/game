@@ -36,11 +36,13 @@ let package = Package(
     .package(path: "../glass-deps/glfw-swift"),
     .package(path: "../glass-deps/jolt"),
     .package(path: "../glass-deps/libtess2"),
+    .package(path: "../glass-deps/miniaudio"),
     .package(path: "../glass-deps/nanosvg"),
     .package(path: "../glass-deps/stb-perlin"),
     .package(path: "../glass-deps/stb-rect-pack"),
     .package(path: "../glass-deps/stb-truetype"),
     .package(path: "../glass-deps/swift-image-formats"),
+    .package(path: "../glass-deps/tinyexr"),
   ],
 
   targets: [
@@ -67,10 +69,12 @@ let package = Package(
         .product(name: "GLFW", package: "glfw-swift"),
         .product(name: "Jolt", package: "jolt"),
         .product(name: "Tess", package: "libtess2"),
+        .product(name: "Miniaudio", package: "miniaudio"),
         .product(name: "NanoSVG", package: "nanosvg"),
         .product(name: "STBPerlin", package: "stb-perlin"),
         .product(name: "STBRectPack", package: "stb-rect-pack"),
         .product(name: "STBTrueType", package: "stb-truetype"),
+        .product(name: "TinyEXR", package: "tinyexr"),
       ],
 
       path: ".",
@@ -107,11 +111,11 @@ let package = Package(
       ],
 
       linkerSettings: [
-        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
+        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug)),
       ],
 
       plugins: [
-        "GlassBuildTools"
+        "GlassBuildTools",
       ]
     ),
 

@@ -167,7 +167,7 @@ public class ListMenu {
 
   private func handleMenuSelection() {
     let selectedItem = menuItems[selectedIndex]
-    print("Selected: \(selectedItem.label)")
+    //print("Selected: \(selectedItem.label)")
 
     if selectedItem.isEnabled {
       UISound.select()

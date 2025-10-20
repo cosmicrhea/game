@@ -4,6 +4,13 @@ import GLMath
 extension Item {
   static let allItems = [
     Item(
+      id: "knife",
+      name: "Military Knife",
+      image: Image("Items/Weapons/knife.png"),
+      description: "This weapon is a veteran survivor’s first choice.",
+      modelPath: "Items/Weapons/knife"
+    ),
+    Item(
       id: "glock18c",
       name: "Glock 18C",
       image: Image("Items/Weapons/glock18c~2.png"),
@@ -17,13 +24,13 @@ extension Item {
       description: "Modern striker-fired pistol with modular design.",
       modelPath: "Items/Weapons/sigp320"
     ),
-    Item(
-      id: "handgun_ammo",
-      name: "9mm Ammunition",
-      image: Image("Items/Weapons/handgun_ammo.png"),
-      description: "Standard 9 millimeter rounds for handguns.",
-      //modelPath: "Items/Weapons/handgun_ammo"
-    ),
+//    Item(
+//      id: "handgun_ammo",
+//      name: "9mm Ammunition",
+//      image: Image("Items/Weapons/handgun_ammo.png"),
+//      description: "Standard 9 millimeter rounds for handguns.",
+//      //modelPath: "Items/Weapons/handgun_ammo"
+//    ),
     Item(
       id: "lighter",
       name: "Lighter",
@@ -37,6 +44,27 @@ extension Item {
       image: Image("Items/Weapons/utility_key.png"),
       description: "A key for utility cabinets.",
       modelPath: "Items/Weapons/utility_key"
+    ),
+    Item(
+      id: "metro_key",
+      name: "Metro Key",
+      image: Image("Items/Weapons/metro_key.png"),
+      description: "A rusty key attached to a Metro logo keychain.",
+      modelPath: "Items/Weapons/metro_key"
+    ),
+    Item(
+      id: "tag_key",
+      name: "Key with Tag",
+      image: Image("Items/Weapons/tag_key.png"),
+      description: "A key with a blank tag. Odd.",
+      modelPath: "Items/Weapons/tag_key"
+    ),
+    Item(
+      id: "cryo_gloves",
+      name: "Cryogenic Gloves",
+      image: Image("Items/Weapons/cryo_gloves.png"),
+      description: "A pair of gloves suitable for handling supercooled liquids.",
+      modelPath: "Items/Weapons/cryo_gloves"
     ),
   ]
 }

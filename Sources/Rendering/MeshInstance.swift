@@ -4,6 +4,9 @@ import GL
 import GLMath
 import ImageFormats
 
+// Flag to disable HDRI loading for now
+private let enableHDRI = false
+
 /// Global texture cache to avoid loading duplicate textures
 final class TextureCache: @unchecked Sendable {
   static let shared = TextureCache()
@@ -47,6 +50,8 @@ struct MeshVertex {
   var position: (AssimpReal, AssimpReal, AssimpReal)
   var normal: (AssimpReal, AssimpReal, AssimpReal)
   var uv: (AssimpReal, AssimpReal)
+  var tangent: (AssimpReal, AssimpReal, AssimpReal)
+  var bitangent: (AssimpReal, AssimpReal, AssimpReal)
 }
 
 class MeshInstance: @unchecked Sendable {
@@ -62,9 +67,29 @@ class MeshInstance: @unchecked Sendable {
   var VBO: GLuint = 0
   var EBO: GLuint = 0
 
-  // Texture support
+  // PBR Texture support
   var diffuseTexture: GLuint = 0
-  var hasTexture: Bool = false
+  var normalTexture: GLuint = 0
+  var roughnessTexture: GLuint = 0
+  var metallicTexture: GLuint = 0
+  var aoTexture: GLuint = 0
+
+  var hasDiffuseTexture: Bool = false
+  var hasNormalTexture: Bool = false
+  var hasRoughnessTexture: Bool = false
+  var hasMetallicTexture: Bool = false
+  var hasAoTexture: Bool = false
+
+  // HDRI Environment map
+  var environmentMap: GLuint = 0
+  var hasEnvironmentMap: Bool = false
+
+  // Material properties
+  var baseColor: vec3 = vec3(0.8, 0.15, 0.6)
+  var metallic: Float = 0.0
+  var roughness: Float = 0.5
+  var emissive: vec3 = vec3(0.0, 0.0, 0.0)
+  var opacity: Float = 1.0
 
   // Loading progress callback
   typealias ProgressCallback = (Float) -> Void
@@ -118,10 +143,25 @@ class MeshInstance: @unchecked Sendable {
       2, 2, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
       UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.uv)!))
 
+    // vertex tangents
+    glEnableVertexAttribArray(3)
+    glVertexAttribPointer(
+      3, 3, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+      UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.tangent)!))
+
+    // vertex bitangents
+    glEnableVertexAttribArray(4)
+    glVertexAttribPointer(
+      4, 3, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+      UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.bitangent)!))
+
     glBindVertexArray(0)
 
     // Load texture if available
     loadTexture()
+
+    // Load HDRI environment map
+    loadHDRIEnvironmentMap()
   }
 
   /// Async initializer that loads scene and textures with progress callbacks
@@ -136,7 +176,9 @@ class MeshInstance: @unchecked Sendable {
       Task {
         do {
           let scenePath = Bundle.module.path(forResource: path, ofType: "glb")!
-          let scene = try Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure, .flipUVs]) {
+          let scene = try Assimp.Scene(
+            file: scenePath, flags: [.triangulate, .validateDataStructure, .flipUVs, .calcTangentSpace]
+          ) {
             progress in
             Task { @MainActor in
               onSceneProgress(progress)
@@ -181,25 +223,91 @@ class MeshInstance: @unchecked Sendable {
     return meshInstances
   }
 
-  func draw(projection: mat4, view: mat4, lightDirection: vec3, lightColor: vec3, lightIntensity: Float) {
+  func draw(
+    projection: mat4, view: mat4, cameraPosition: vec3, lightDirection: vec3, lightColor: vec3, lightIntensity: Float,
+    fillLightDirection: vec3, fillLightColor: vec3, fillLightIntensity: Float
+  ) {
+    draw(
+      projection: projection, view: view, modelMatrix: transformMatrix, cameraPosition: cameraPosition,
+      lightDirection: lightDirection, lightColor: lightColor, lightIntensity: lightIntensity,
+      fillLightDirection: fillLightDirection, fillLightColor: fillLightColor, fillLightIntensity: fillLightIntensity)
+  }
+
+  func draw(
+    projection: mat4, view: mat4, modelMatrix: mat4, cameraPosition: vec3, lightDirection: vec3, lightColor: vec3,
+    lightIntensity: Float, fillLightDirection: vec3, fillLightColor: vec3, fillLightIntensity: Float,
+    diffuseOnly: Bool = false
+  ) {
     program.use()
 
     // Set matrices
     program.setMat4("projection", value: projection)
     program.setMat4("view", value: view)
-    program.setMat4("model", value: transformMatrix)
+    program.setMat4("model", value: modelMatrix)
+
+    // Set camera position
+    program.setVec3("cameraPosition", value: (cameraPosition.x, cameraPosition.y, cameraPosition.z))
 
     // Set lighting uniforms
     program.setVec3("lightDirection", value: (lightDirection.x, lightDirection.y, lightDirection.z))
     program.setVec3("lightColor", value: (lightColor.x, lightColor.y, lightColor.z))
     program.setFloat("lightIntensity", value: lightIntensity)
+    program.setVec3("fillLightDirection", value: (fillLightDirection.x, fillLightDirection.y, fillLightDirection.z))
+    program.setVec3("fillLightColor", value: (fillLightColor.x, fillLightColor.y, fillLightColor.z))
+    program.setFloat("fillLightIntensity", value: fillLightIntensity)
 
-    // Set texture uniforms
-    program.setBool("hasTexture", value: hasTexture)
-    if hasTexture {
-      program.setInt("diffuseTexture", value: 0)  // Texture unit 0
+    // Set PBR texture uniforms
+    program.setBool("hasDiffuseTexture", value: hasDiffuseTexture)
+    program.setBool("hasNormalTexture", value: hasNormalTexture)
+    program.setBool("hasRoughnessTexture", value: hasRoughnessTexture)
+    program.setBool("hasMetallicTexture", value: hasMetallicTexture)
+    program.setBool("hasAoTexture", value: hasAoTexture)
+
+    // Set HDRI environment map uniforms
+    program.setBool("hasEnvironmentMap", value: hasEnvironmentMap)
+
+    // Set debug uniforms
+    program.setBool("diffuseOnly", value: diffuseOnly)
+
+    // Set material properties
+    program.setVec3("baseColor", value: (baseColor.x, baseColor.y, baseColor.z))
+    program.setFloat("metallic", value: metallic)
+    program.setFloat("roughness", value: roughness)
+    program.setVec3("emissive", value: (emissive.x, emissive.y, emissive.z))
+    program.setFloat("opacity", value: opacity)
+
+    // Bind textures to texture units
+    if hasDiffuseTexture {
+      program.setInt("diffuseTexture", value: 0)
       glActiveTexture(GL_TEXTURE0)
       glBindTexture(GL_TEXTURE_2D, diffuseTexture)
+    }
+    if hasNormalTexture {
+      program.setInt("normalTexture", value: 1)
+      glActiveTexture(GL_TEXTURE1)
+      glBindTexture(GL_TEXTURE_2D, normalTexture)
+    }
+    if hasRoughnessTexture {
+      program.setInt("roughnessTexture", value: 2)
+      glActiveTexture(GL_TEXTURE2)
+      glBindTexture(GL_TEXTURE_2D, roughnessTexture)
+    }
+    if hasMetallicTexture {
+      program.setInt("metallicTexture", value: 3)
+      glActiveTexture(GL_TEXTURE3)
+      glBindTexture(GL_TEXTURE_2D, metallicTexture)
+    }
+    if hasAoTexture {
+      program.setInt("aoTexture", value: 4)
+      glActiveTexture(GL_TEXTURE4)
+      glBindTexture(GL_TEXTURE_2D, aoTexture)
+    }
+
+    // Bind HDRI environment map
+    if hasEnvironmentMap {
+      program.setInt("environmentMap", value: 5)
+      glActiveTexture(GL_TEXTURE5)
+      glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap)
     }
 
     glBindVertexArray(VAO)
@@ -212,31 +320,74 @@ class MeshInstance: @unchecked Sendable {
     guard mesh.materialIndex < scene.materials.count else { return }
     let material = scene.materials[mesh.materialIndex]
 
-    // Try to get diffuse texture path
-    guard let texturePath = material.getMaterialTexture(texType: .diffuse, texIndex: 0) else { return }
+    // Load material properties
+    loadMaterialProperties(material: material)
+
+    // Load all PBR texture types
+    loadTextureOfType(.diffuse, material: material, textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture)
+    loadTextureOfType(.normals, material: material, textureID: &normalTexture, hasTexture: &hasNormalTexture)
+    loadTextureOfType(
+      .diffuseRoughness, material: material, textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture)
+    loadTextureOfType(.metalness, material: material, textureID: &metallicTexture, hasTexture: &hasMetallicTexture)
+    loadTextureOfType(.ambientOcclusion, material: material, textureID: &aoTexture, hasTexture: &hasAoTexture)
+  }
+
+  private func loadMaterialProperties(material: Material) {
+    // Load base color (diffuse color)
+    if let color = material.getMaterialColor(.COLOR_DIFFUSE) {
+      baseColor = vec3(color.x, color.y, color.z)
+    }
+
+    // Load PBR properties if available
+    if let metallicFactor = material.getMaterialProperty(.GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR)?.float.first {
+      metallic = metallicFactor
+    }
+
+    if let roughnessFactor = material.getMaterialProperty(.GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR)?.float.first {
+      roughness = roughnessFactor
+    }
+
+    // Load emissive color
+    if let emissiveColor = material.getMaterialColor(.COLOR_EMISSIVE) {
+      emissive = vec3(emissiveColor.x, emissiveColor.y, emissiveColor.z)
+    }
+
+    // Load opacity
+    if let opacityValue = material.getMaterialProperty(.OPACITY)?.float.first {
+      opacity = opacityValue
+    }
+  }
+
+  private func loadTextureOfType(
+    _ texType: Assimp.TextureType, material: Material, textureID: inout GLuint, hasTexture: inout Bool
+  ) {
+    // Try to get texture path for this type
+    guard let texturePath = material.getMaterialTexture(texType: texType, texIndex: 0) else { return }
 
     // Create scene-specific cache key for embedded textures
     let cacheKey = texturePath.hasPrefix("*") ? "\(ObjectIdentifier(scene))_\(texturePath)" : texturePath
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
-      logger.info("Using cached texture for key \(cacheKey)")
-      diffuseTexture = cachedTexture
+      logger.trace("Using cached \(texType) texture for key \(cacheKey)")
+      textureID = cachedTexture
       hasTexture = true
       return
     }
 
-    logger.info("Loading texture with path \(texturePath)")
+    logger.info("Loading \(texType) texture with path \(texturePath)")
 
     // Check if it's an embedded texture (starts with "*")
     if texturePath.hasPrefix("*") {
-      loadEmbeddedTexture(texturePath: texturePath, cacheKey: cacheKey)
+      loadEmbeddedTexture(texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
     } else {
       loadExternalTexture(texturePath: texturePath)
     }
   }
 
-  private func loadEmbeddedTexture(texturePath: String, cacheKey: String) {
+  private func loadEmbeddedTexture(
+    texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool
+  ) {
     // Extract texture index from "*0", "*1", etc.
     guard let indexString = texturePath.dropFirst().first,
       let textureIndex = Int(String(indexString)),
@@ -244,13 +395,14 @@ class MeshInstance: @unchecked Sendable {
     else { return }
 
     let texture = scene.textures[textureIndex]
-    createOpenGLTexture(from: texture, texturePath: texturePath, cacheKey: cacheKey)
+    createOpenGLTexture(
+      from: texture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
   }
 
   private func loadExternalTexture(texturePath: String) {
     // For now, skip external textures - would need to implement file loading
     // This could be added later with proper file system access
-    print("External texture loading not implemented yet: \(texturePath)")
+    logger.warning("External texture loading not implemented yet: \(texturePath)")
   }
 
   /// Async version of loadTexture with progress callback
@@ -267,16 +419,16 @@ class MeshInstance: @unchecked Sendable {
       onProgress(1.0)
       return
     }
-    logger.info("Loading texture with path \(texturePath)")
+    logger.trace("Loading texture with path \(texturePath)")
 
     // Create scene-specific cache key for embedded textures
     let cacheKey = texturePath.hasPrefix("*") ? "\(ObjectIdentifier(scene))_\(texturePath)" : texturePath
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
-      logger.info("Using cached texture for key \(cacheKey)")
+      logger.trace("Using cached texture for key \(cacheKey)")
       diffuseTexture = cachedTexture
-      hasTexture = true
+      hasDiffuseTexture = true
       onProgress(1.0)
       return
     }
@@ -287,7 +439,9 @@ class MeshInstance: @unchecked Sendable {
 
   /// Async version of loadEmbeddedTexture with progress callback
   private func loadEmbeddedTextureAsync(
-    texturePath: String, cacheKey: String, onProgress: @escaping @Sendable (Float) -> Void
+    texturePath: String,
+    cacheKey: String,
+    onProgress: @escaping @Sendable (Float) -> Void
   ) async {
     // Extract texture index from "*0", "*1", etc.
     guard let indexString = texturePath.dropFirst().first,
@@ -318,7 +472,7 @@ class MeshInstance: @unchecked Sendable {
     if texture.isCompressed {
       // Handle compressed texture using ImageFormats decoders
       let data = texture.textureData
-      print("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
+      logger.trace("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
 
       do {
         let image: ImageFormats.Image<ImageFormats.RGBA>
@@ -329,6 +483,8 @@ class MeshInstance: @unchecked Sendable {
             Task { @MainActor in
               onProgress(Float(progress))
             }
+          } warningHandler: { warning in
+            logger.warning("\(texturePath) PNG warning: \(warning)")
           }
         } else if texture.achFormatHint.lowercased().contains("webp") {
           image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
@@ -346,7 +502,7 @@ class MeshInstance: @unchecked Sendable {
             0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
         }
       } catch {
-        print("Failed to decode compressed texture: \(error)")
+        logger.error("Failed to decode compressed texture: \(error)")
         glBindTexture(GL_TEXTURE_2D, 0)
         onProgress(1.0)
         return
@@ -354,7 +510,7 @@ class MeshInstance: @unchecked Sendable {
     } else {
       // Handle uncompressed texture
       let data = texture.textureData
-      print("Loading uncompressed texture: \(texture.width)x\(texture.height), data size: \(data.count)")
+      logger.trace("Loading uncompressed texture: \(texture.width)x\(texture.height), data size: \(data.count)")
 
       data.withUnsafeBytes { bytes in
         // Assimp provides BGRA format, convert to RGBA for OpenGL
@@ -369,24 +525,30 @@ class MeshInstance: @unchecked Sendable {
     // Check for OpenGL errors
     let error = glGetError()
     if error != GL_NO_ERROR {
-      print("OpenGL texture error: \(error)")
+      logger.error("OpenGL texture error while loading \(texturePath): \(error)")
       glBindTexture(GL_TEXTURE_2D, 0)
       onProgress(1.0)
       return
     }
 
-    hasTexture = true
+    hasDiffuseTexture = true
     glBindTexture(GL_TEXTURE_2D, 0)
 
     // Cache the texture for future use
     TextureCache.shared.cacheTexture(diffuseTexture, for: cacheKey)
-    logger.info("Cached texture for key \(cacheKey)")
+    logger.trace("Cached texture for key \(cacheKey)")
     onProgress(1.0)
   }
 
-  private func createOpenGLTexture(from texture: Texture, texturePath: String, cacheKey: String) {
-    glGenTextures(1, &diffuseTexture)
-    glBindTexture(GL_TEXTURE_2D, diffuseTexture)
+  private func createOpenGLTexture(
+    from texture: Texture,
+    texturePath: String,
+    cacheKey: String,
+    textureID: inout GLuint,
+    hasTexture: inout Bool
+  ) {
+    glGenTextures(1, &textureID)
+    glBindTexture(GL_TEXTURE_2D, textureID)
 
     // Set texture parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
@@ -397,7 +559,7 @@ class MeshInstance: @unchecked Sendable {
     if texture.isCompressed {
       // Handle compressed texture using ImageFormats decoders
       let data = texture.textureData
-      print("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
+      logger.trace("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
 
       do {
         let image: ImageFormats.Image<ImageFormats.RGBA>
@@ -405,7 +567,7 @@ class MeshInstance: @unchecked Sendable {
         // Try to determine format from hint
         if texture.achFormatHint.lowercased().contains("png") {
           image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { progress in
-            print("Loading PNG texture: \(progress * 100)%")
+            //print("Loading PNG texture: \(progress * 100)%")
           }
         } else if texture.achFormatHint.lowercased().contains("webp") {
           image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
@@ -421,14 +583,14 @@ class MeshInstance: @unchecked Sendable {
             0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
         }
       } catch {
-        print("Failed to decode compressed texture: \(error)")
+        logger.error("Failed to decode compressed texture \(texturePath): \(error)")
         glBindTexture(GL_TEXTURE_2D, 0)
         return
       }
     } else {
       // Handle uncompressed texture
       let data = texture.textureData
-      print("Loading uncompressed texture: \(texture.width)x\(texture.height), data size: \(data.count)")
+      logger.trace("Loading uncompressed texture: \(texture.width)x\(texture.height), data size: \(data.count)")
 
       data.withUnsafeBytes { bytes in
         // Assimp provides BGRA format, convert to RGBA for OpenGL
@@ -442,7 +604,7 @@ class MeshInstance: @unchecked Sendable {
     // Check for OpenGL errors
     let error = glGetError()
     if error != GL_NO_ERROR {
-      print("OpenGL texture error: \(error)")
+      logger.error("OpenGL texture error while loading \(texturePath): \(error)")
       glBindTexture(GL_TEXTURE_2D, 0)
       return
     }
@@ -451,8 +613,121 @@ class MeshInstance: @unchecked Sendable {
     glBindTexture(GL_TEXTURE_2D, 0)
 
     // Cache the texture for future use
-    TextureCache.shared.cacheTexture(diffuseTexture, for: cacheKey)
-    logger.info("Cached texture for key \(cacheKey)")
+    TextureCache.shared.cacheTexture(textureID, for: cacheKey)
+    logger.trace("Cached texture for key \(cacheKey)")
+  }
+
+  /// Load HDRI environment map from EXR file
+  func loadHDRIEnvironmentMap() {
+    if !enableHDRI {
+      // Use fallback procedural environment
+      loadProceduralEnvironment()
+      return
+    }
+
+    glGenTextures(1, &environmentMap)
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap)
+
+    // Load the actual HDRI EXR file
+//    do {
+      let hdriImage = Image(exrPath: "Common/hansaplatz_4k.exr")
+      logger.trace("Loaded HDRI: \(hdriImage.pixelWidth)x\(hdriImage.pixelHeight)")
+
+      // Convert HDRI to cube map
+      // For now, we'll create a simple cube map from the HDRI
+      // TODO: Implement proper equirectangular to cube map conversion
+      let cubeSize = 512
+
+      // Generate cube map faces from HDRI
+      for face in 0..<6 {
+        var faceData = [UInt8](repeating: 0, count: cubeSize * cubeSize * 3)
+
+        // Simple sampling from HDRI for each cube face
+        for y in 0..<cubeSize {
+          for x in 0..<cubeSize {
+            let index = (y * cubeSize + x) * 3
+
+            // Sample from HDRI based on cube face direction
+            let (u, v) = getCubeMapUV(face: face, x: x, y: y, size: cubeSize)
+            let (hdriX, hdriY) = (Int(u * Float(hdriImage.pixelWidth)), Int(v * Float(hdriImage.pixelHeight)))
+
+            if hdriX >= 0 && hdriX < hdriImage.pixelWidth && hdriY >= 0 && hdriY < hdriImage.pixelHeight {
+              let hdriIndex = (hdriY * hdriImage.pixelWidth + hdriX) * 4  // RGBA
+              if let pixelBytes = hdriImage.pixelBytes, hdriIndex + 2 < pixelBytes.count {
+                faceData[index] = pixelBytes[hdriIndex]  // R
+                faceData[index + 1] = pixelBytes[hdriIndex + 1]  // G
+                faceData[index + 2] = pixelBytes[hdriIndex + 2]  // B
+              }
+            }
+          }
+        }
+
+        glTexImage2D(
+          GL_TEXTURE_CUBE_MAP_POSITIVE_X + Int32(face),
+          0, GL_RGB, GLsizei(cubeSize), GLsizei(cubeSize),
+          0, GL_RGB, GL_UNSIGNED_BYTE, faceData
+        )
+      }
+//    } catch {
+//      logger.error("Failed to load HDRI: \(error)")
+//      // Fallback to procedural environment
+//      loadProceduralEnvironment()
+//      return
+//    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE)
+
+    // Generate mipmaps for roughness-based LOD
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP)
+
+    hasEnvironmentMap = true
+    logger.trace("Loaded HDRI environment map from hansaplatz_4k.exr")
+  }
+
+  /// Convert cube map coordinates to UV coordinates
+  private func getCubeMapUV(face: Int, x: Int, y: Int, size: Int) -> (Float, Float) {
+    let u = (Float(x) + 0.5) / Float(size)
+    let v = (Float(y) + 0.5) / Float(size)
+    return (u, v)
+  }
+
+  /// Fallback procedural environment
+  private func loadProceduralEnvironment() {
+    let size = 512
+    var data = [UInt8](repeating: 0, count: size * size * 3)
+
+    // Generate simple sky gradient
+    for i in 0..<size {
+      for j in 0..<size {
+        let index = (i * size + j) * 3
+        let y = Float(i) / Float(size)
+        data[index] = UInt8(255 * (0.4 + 0.6 * y))  // R
+        data[index + 1] = UInt8(255 * (0.6 + 0.4 * y))  // G
+        data[index + 2] = UInt8(255 * 1.0)  // B
+      }
+    }
+
+    // Upload to all 6 faces of cube map
+    for face in 0..<6 {
+      glTexImage2D(
+        GL_TEXTURE_CUBE_MAP_POSITIVE_X + Int32(face),
+        0, GL_RGB, GLsizei(size), GLsizei(size),
+        0, GL_RGB, GL_UNSIGNED_BYTE, data
+      )
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE)
+
+    hasEnvironmentMap = true
+    logger.trace("Loaded procedural environment map")
   }
 }
 
@@ -506,6 +781,8 @@ extension Mesh {
     let positions = vertices
     let normals = self.normals
     let uvs = texCoordsPacked.0
+    let tangents = self.tangents
+    let bitangents = self.bitangents
 
     var result: [MeshVertex] = []
     result.reserveCapacity(numberOfVertices)
@@ -528,7 +805,19 @@ extension Mesh {
       } else {
         t = (0, 0)
       }
-      result.append(MeshVertex(position: p, normal: n, uv: t))
+      let tangent: (AssimpReal, AssimpReal, AssimpReal)
+      if tangents.count >= (i * 3 + 3) {
+        tangent = (tangents[i * 3 + 0], tangents[i * 3 + 1], tangents[i * 3 + 2])
+      } else {
+        tangent = (0, 0, 0)
+      }
+      let bitangent: (AssimpReal, AssimpReal, AssimpReal)
+      if bitangents.count >= (i * 3 + 3) {
+        bitangent = (bitangents[i * 3 + 0], bitangents[i * 3 + 1], bitangents[i * 3 + 2])
+      } else {
+        bitangent = (0, 0, 0)
+      }
+      result.append(MeshVertex(position: p, normal: n, uv: t, tangent: tangent, bitangent: bitangent))
     }
     return result
   }

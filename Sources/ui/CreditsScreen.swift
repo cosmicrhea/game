@@ -80,8 +80,6 @@ final class CreditsScreen: RenderLoop {
     let logoSpacing: Float = 24.0
     let totalRows = CreditsData.logos.count
     let logoGridHeight = Float(totalRows) * logoSize + Float(totalRows - 1) * logoSpacing + logoSpacing * 2
-    print(
-      "logoGridHeight: \(logoGridHeight), totalRows: \(totalRows)")
     totalContentHeight = height + logoGridHeight
   }
 
@@ -133,9 +131,9 @@ final class CreditsScreen: RenderLoop {
     if let image = creditsImage {
       do {
         try image.write(toFile: "/tmp/credits_debug.png")
-        print("Saved credits image to /tmp/credits_debug.png")
+        //print("Saved credits image to /tmp/credits_debug.png")
       } catch {
-        print("Failed to save credits image: \(error)")
+        logger.error("Failed to save credits image: \(error)")
       }
     }
   }
@@ -152,14 +150,14 @@ final class CreditsScreen: RenderLoop {
     let leftColumnX = (screenWidth - totalWidth) / 2
     let rightColumnX = leftColumnX + leftColumnWidth + gap
 
-    print(
-      "Column positions: left=\(leftColumnX), right=\(rightColumnX), widths: \(leftColumnWidth)x\(rightColumnWidth)")
-    print("GraphicsContext isFlipped: \(GraphicsContext.current?.isFlipped ?? false)")
+//    print(
+//      "Column positions: left=\(leftColumnX), right=\(rightColumnX), widths: \(leftColumnWidth)x\(rightColumnWidth)")
+//    print("GraphicsContext isFlipped: \(GraphicsContext.current?.isFlipped ?? false)")
 
     var currentY: Float = 0  // Start at the top of the image (Y=0 in flipped coordinates)
 
     for (category, names) in CreditsData.credits {
-      print("Drawing category: '\(category)' at Y: \(currentY)")
+//      print("Drawing category: '\(category)' at Y: \(currentY)")
 
       // Draw category (gray text, right-aligned in left column)
       category.draw(
@@ -175,7 +173,6 @@ final class CreditsScreen: RenderLoop {
 
       // Draw names as a single multiline string (white text, left-aligned in right column) - sorted alphabetically
       let namesText = names.sorted().joined(separator: "\n")
-      print("Drawing names: '\(namesText.prefix(50))...' at Y: \(nameY)")
       namesText.draw(
         at: Point(rightColumnX, nameY),
         style: nameStyle,

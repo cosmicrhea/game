@@ -23,7 +23,7 @@ extension ImageAtlas {
     let coordinator = TexturePackerXMLCoordinator()
     let xml = XMLParser(data: data)
     xml.delegate = coordinator
-    let parseResult = xml.parse()
+    xml.parse()
     //logger.trace("ImageAtlas: XML parsing result: \(parseResult)")
     //logger.trace("ImageAtlas: parsed \(coordinator.nameToRect.count) entries")
 

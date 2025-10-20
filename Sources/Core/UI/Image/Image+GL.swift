@@ -25,6 +25,12 @@ extension Image {
           return
         }
 
+        // Handle EXR files
+        if ext == "exr" {
+          self = Image.loadEXR(from: url, pixelScale: pixelScale)
+          return
+        }
+
         // Handle other image formats
         let raw = Array(data)
         let loaded: ImageFormats.Image<ImageFormats.RGBA>?
@@ -71,11 +77,11 @@ extension Image {
   public init(size: Size, pixelScale: Float = 1.0, isFlipped: Bool = false, renderBlock: () -> Void) {
     guard let renderer = Engine.shared.renderer else { fatalError() }
 
-    print("Creating offscreen image with size: \(size)")
+    logger.trace("Creating offscreen image with size: \(size)")
 
     // Create a framebuffer for offscreen rendering
     let framebufferID = renderer.createFramebuffer(size: size, scale: pixelScale)
-    print("Created framebuffer ID: \(framebufferID)")
+    logger.trace("Created framebuffer ID: \(framebufferID)")
 
     // Begin rendering to the framebuffer
     renderer.beginFramebuffer(framebufferID)
@@ -94,13 +100,13 @@ extension Image {
 
     // Create an Image from the framebuffer texture
     guard let textureID = renderer.getFramebufferTextureID(framebufferID) else {
-      print("Failed to get framebuffer texture ID, using fallback")
+      logger.warning("Failed to get framebuffer texture ID, using fallback")
       // Fallback to a 1x1 white pixel if framebuffer fails
       self = Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
       return
     }
 
-    print("Got texture ID: \(textureID)")
+    logger.trace("Got texture ID: \(textureID)")
     self = Image(
       textureID: textureID,
       naturalSize: size,

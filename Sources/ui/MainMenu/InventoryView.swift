@@ -191,12 +191,12 @@ final class InventoryView: RenderLoop {
 
   private func drawItemLabel() {
     // Position the label consistently from the bottom of the screen
-    let screenWidth = Engine.viewportSize.width
+    //let screenWidth = Engine.viewportSize.width
     let labelX: Float = 40  // Left-align with some margin
     let labelY: Float = 160  // 160 pixels from bottom of screen (same as ItemView)
 
     // Use screen width for consistent wrapping
-    let gridWidth = screenWidth * 0.8
+//    let gridWidth = screenWidth * 0.8
 
     // Draw item name
     let nameStyle = TextStyle(
@@ -232,11 +232,14 @@ final class InventoryView: RenderLoop {
 
     // Place items with different quantities
     let itemsWithQuantities: [(Item, Int?)] = [
-      (sampleItems[0], 15),  // Glock 18C - 15 rounds loaded
-      (sampleItems[1], 17),  // SIG P320 - 17 rounds loaded
-      (sampleItems[2], 240),  // 9mm Ammunition - 24 rounds
-      (sampleItems[3], nil),  // Lighter - no quantity shown
-      (sampleItems[4], nil),  // Utility Key - no quantity shown
+      (sampleItems[0], nil),
+      (sampleItems[1], 15),
+      (sampleItems[2], 17),
+      (sampleItems[3], nil),
+      (sampleItems[4], nil),
+      (sampleItems[5], nil),
+      (sampleItems[6], nil),
+      (sampleItems[7], nil),
     ]
 
     for (index, (item, quantity)) in itemsWithQuantities.enumerated() {

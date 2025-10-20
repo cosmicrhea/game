@@ -4,11 +4,12 @@ import GLFW
 @MainActor
 class Screen: RenderLoop {
   /// Navigation stack gets injected by NavigationStack when screens are pushed
-  var navigationStack: NavigationStack? {
-    didSet {
-      print("🎯 Screen.navigationStack set: \(navigationStack != nil ? "present" : "nil")")
-    }
-  }
+  var navigationStack: NavigationStack?
+  //  {
+  //    didSet {
+  //      print("🎯 Screen.navigationStack set: \(navigationStack != nil ? "present" : "nil")")
+  //    }
+  //  }
 
   // MARK: - Initialization
 
@@ -54,9 +55,9 @@ class Screen: RenderLoop {
 
   /// Navigate to a new screen
   func navigate(to screen: Screen, direction: NavigationStack.TransitionDirection = .forward) {
-    print("🎯 Screen.navigate() called - navigationStack: \(navigationStack != nil ? "present" : "nil")")
+    //print("🎯 Screen.navigate() called - navigationStack: \(navigationStack != nil ? "present" : "nil")")
     navigationStack?.push(screen, direction: direction)
-    print("🎯 Screen.navigate() - push() called")
+    //print("🎯 Screen.navigate() - push() called")
   }
 
   /// Go back to the previous screen

@@ -3,140 +3,139 @@ import GL
 import GLFW
 import GLMath
 
-import class Foundation.Bundle
-
 /// The main game loop that handles rendering and input.
-@MainActor
 final class MainLoop: RenderLoop {
 
-  // Scene and camera
-  /// The free camera for navigating the scene.
-  private var camera = FreeCamera()
+  // Gameplay state
+  private var playerPosition: vec3 = vec3(0, 0, 0)
+  private var playerRotation: Float = 0.0
+  private var moveSpeed: Float = 5.0
 
-  // Triangle demo
-  /// Test triangle renderer for basic geometry testing.
-  private let testTriangle = TestTriangle()
+  // Camera for gameplay
+  private var camera = FixedCamera()
 
-  // Assimp mesh
-  /// Array of mesh renderers for 3D objects.
-  private let meshInstances: [MeshInstance]
+  // Simple pill mesh (we'll create this procedurally)
+  private var pillMesh: MeshInstance?
 
-  // UI resources
-  /// Text style using the Determination font.
-  private let determinationStyle = TextStyle(fontName: "Determination", fontSize: 32, color: .white)
-  /// Callout UI component for displaying hints.
-  private var callout = Callout("Make your way to Kastellet", icon: .chevron)
-  /// Input prompts component for controller/keyboard icons.
-  private let promptList: PromptList
-
-  // State
-  private var objectiveVisible: Bool = true
-  private var showDebugText: Bool = false
-
-  /// The main shader program for rendering.
-  private let program = try! GLProgram("Common/basic 2")
+  // Room boundaries
+  private let roomSize: Float = 10.0
+  private let boxSize: Float = 2.0
+  private let boxPosition: vec3 = vec3(3, 0, 3)
 
   init() {
-    //let scenePath = Bundle.module.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
-    let scenePath = Bundle.module.path(forResource: "Items/old_key", ofType: "glb")!
-    let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure])
-    print("\(scene.rootNode)")
-
-    meshInstances = scene.meshes
-      .filter { $0.numberOfVertices > 0 }
-      .map { mesh in
-        let transformMatrix = scene.getTransformMatrix(for: mesh)
-        return MeshInstance(scene: scene, mesh: mesh, transformMatrix: transformMatrix)
-      }
-
-    promptList = PromptList(.itemView, axis: .horizontal)
+    setupGameplay()
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
-    guard window.isFocused else { return }
-    camera.processMousePosition(Float(x), Float(y))
+  private func setupGameplay() {
+    // Set up camera to look down at the gameplay area
+    camera.target = vec3(0, 0, 0)
+    camera.position = vec3(0, 8, 5)
+
+    // Create a simple pill mesh (capsule)
+    createPillMesh()
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
-    camera.processMouseScroll(Float(yOffset))
+  private func createPillMesh() {
+    // Generate a procedural pill mesh
+    //let (vertices, indices) = PillMeshGenerator.generatePill(diameter: 1.0, height: 2.0, segments: 16)
+
+    // TODO: Create a proper MeshInstance from the procedural data
+    // For now, we'll just store the data and create a simple placeholder
+    //print("Generated pill mesh with \(vertices.count / 8) vertices and \(indices.count / 3) triangles")
+
+    // Create a simple box as placeholder until we implement proper procedural mesh loading
+    pillMesh = nil  // No mesh for now
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    switch key {
-    case .o:
-      UISound.select()
-      toggleObjective()
+  func update(window: Window, deltaTime: Float) {
+    // Handle WASD movement
+    handleMovement(window.keyboard, deltaTime)
 
-    case .backspace:
-      UISound.select()
-      showDebugText.toggle()
+    // Update camera to follow player
+    camera.follow(playerPosition)
+  }
 
-    default:
-      break
+  private func handleMovement(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
+    let moveDistance = moveSpeed * deltaTime
+
+    // WASD movement
+    if keyboard.state(of: .w) == .pressed {
+      playerPosition.z -= moveDistance
     }
-  }
+    if keyboard.state(of: .s) == .pressed {
+      playerPosition.z += moveDistance
+    }
+    if keyboard.state(of: .a) == .pressed {
+      playerPosition.x -= moveDistance
+    }
+    if keyboard.state(of: .d) == .pressed {
+      playerPosition.x += moveDistance
+    }
 
-  func update(window: GLFWWindow, deltaTime: Float) {
-    camera.processKeyboardState(window.keyboard, deltaTime)
+    // Simple collision with room boundaries
+    let halfRoom = roomSize / 2.0
+    playerPosition.x = max(-halfRoom, min(halfRoom, playerPosition.x))
+    playerPosition.z = max(-halfRoom, min(halfRoom, playerPosition.z))
 
-    // Update callout animation
-    callout.visible = objectiveVisible
-    callout.update(deltaTime: deltaTime)
-  }
-
-  func toggleObjective() {
-    objectiveVisible.toggle()
+    // Simple collision with box
+    let halfBox = boxSize / 2.0
+    let diff = playerPosition - boxPosition
+    let diffX = diff.x * diff.x
+    let diffY = diff.y * diff.y
+    let diffZ = diff.z * diff.z
+    let distanceToBox = GLMath.sqrt(diffX + diffY + diffZ)
+    if distanceToBox < halfBox + 0.5 {  // 0.5 is player radius
+      // Push player away from box
+      let direction = diff / distanceToBox
+      playerPosition = boxPosition + direction * (halfBox + 0.5)
+    }
   }
 
   func draw() {
-    program.use()
-    program.setMat4("projection", value: GLMath.perspective(camera.zoom, 1, 0.001, 1000.0))
-    program.setMat4("view", value: camera.getViewMatrix())
-    program.setMat4("model", value: mat4(1))
+    // Clear screen
+    glClearColor(0.1, 0.1, 0.1, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-    // Triangle
-    testTriangle.draw()
+    // Set up 3D rendering
+    let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
+    let projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
+    let view = camera.getViewMatrix()
 
-    // Meshes
-    let lightDirection = normalize(vec3(0.5, -1.0, 0.3))
-    let lightColor = vec3(1.0, 1.0, 1.0)
-    let lightIntensity: Float = 1.0
-
-    meshInstances.forEach { meshInstance in
-      meshInstance.draw(
-        projection: GLMath.perspective(camera.zoom, 1, 0.001, 1000.0),
-        view: camera.getViewMatrix(),
-        lightDirection: lightDirection,
-        lightColor: lightColor,
-        lightIntensity: lightIntensity
+    // Draw player pill
+    if let pill = pillMesh {
+      let modelMatrix = GLMath.translate(mat4(1), playerPosition)
+      pill.draw(
+        projection: projection,
+        view: view,
+        modelMatrix: modelMatrix,
+        cameraPosition: camera.position,
+        lightDirection: vec3(0, -1, 0),
+        lightColor: vec3(1, 1, 1),
+        lightIntensity: 1.0,
+        fillLightDirection: vec3(-0.3, -0.5, -0.2),
+        fillLightColor: vec3(0.8, 0.9, 1.0),
+        fillLightIntensity: 0.4,
+        diffuseOnly: false
       )
+//    } else {
+//      // TODO: Draw procedural pill mesh directly
+//      print("No pill mesh loaded - procedural mesh not yet implemented")
     }
 
-    drawObjectiveCallout()
-    drawDebugPromptList()
-    drawDebugText()
+    // Draw room floor (simple quad)
+    drawRoom()
+
+    // Draw box obstacle
+    drawBox()
   }
 
-  func drawObjectiveCallout() {
-    callout.draw()
+  private func drawRoom() {
+    // Simple room visualization - just draw the floor
+    // TODO: Add proper room mesh
   }
 
-  func drawDebugPromptList() {
-    promptList.draw()
-  }
-
-  func drawDebugText() {
-    guard showDebugText else { return }
-
-    let debugText = String(
-      format: "%.1fx @ %@; %.1f; %.1f",
-      camera.zoom, StringFromGLMathVec3(camera.position), camera.yaw, camera.pitch
-    )
-
-    debugText.draw(
-      at: Point(24, Float(Engine.viewportSize.height) - 24),
-      style: determinationStyle,
-      anchor: .topLeft
-    )
+  private func drawBox() {
+    // Simple box obstacle
+    // TODO: Add proper box mesh
   }
 }

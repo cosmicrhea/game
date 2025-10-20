@@ -154,11 +154,17 @@ final class MainMenuTabs {
   func handleKeyPress(_ key: Keyboard.Key) -> Bool {
     switch key {
     case .q:
-      cycleTab(-1)
-      return true
+      if canSwitchTabs() {
+        cycleTab(-1)
+        return true
+      }
+      return false
     case .e:
-      cycleTab(1)
-      return true
+      if canSwitchTabs() {
+        cycleTab(1)
+        return true
+      }
+      return false
     default:
       return false
     }
@@ -216,11 +222,11 @@ final class MainMenuTabs {
   }
 
   private func cycleTab(_ direction: Int) {
+    UISound.select()
     let tabCount = Tab.allCases.count
     let newIndex = (currentTab.rawValue + direction + tabCount) % tabCount
     currentTab = Tab(rawValue: newIndex)!
     onTabChanged?(currentTab)
-    UISound.select()
   }
 
   private func updateIconScales(deltaTime: Float) {

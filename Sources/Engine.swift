@@ -72,7 +72,11 @@ public final class Engine {
   private init() {}
 
   private func run() {
-    print("|ω･)ﾉ♡☆")
+    #if DEBUG
+      print("|ω･)ﾉ♡☆ (debug)")
+    #else
+      print("|ω･)ﾉ♡☆")
+    #endif
 
     cli = CLIOptions.parseOrExit()
 
@@ -103,6 +107,11 @@ public final class Engine {
 
   private func setupWindow() {
     window = try! GLFWWindow(width: 1280, height: 720, title: "")
+    window.nsWindow?.styleMask.insert(.fullSizeContentView)
+    window.nsWindow?.titlebarAppearsTransparent = true
+    window.nsWindow?.toolbar = .init()
+    //window.nsWindow?.hideStandardWindowButtons()
+    //window.nsWindow?.darkenStandardWindowButtons()
 
     #if EDITOR
       editorHostingView = NSHostingView(rootView: EditorView())
@@ -151,24 +160,21 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-//      ItemView(item: Item.allItems[1]),
-      MainMenu(),
-      InventoryView(),
-      //      GradientDemo(),
-      CreditsScreen(),
+      ItemView(item: Item.allItems[1]),
       TitleScreenStack(),
-//      SVGDemo(),
-
       MainLoop(),
+      MainMenu(),
+      DocumentDemo(),
+      // InventoryView(),
+      // GradientDemo(),
+      CreditsScreen(),
+      // SVGDemo(),
       // SlotDemo(),
       // SlotGridDemo(),
-      //      LibraryView(),
-      //      MainMenu(),
-      DocumentDemo(),
-
-      //      CalloutDemo(),
-      //      PromptListDemo(),
-
+      // LibraryView(),
+      // MainMenu(),
+      // CalloutDemo(),
+      // PromptListDemo(),
       // FontsDemo(),
       // PathDemo(),
       // TextEffectsDemo(),
@@ -337,3 +343,30 @@ public final class Engine {
     }
   }
 }
+
+#if os(macOS)
+  import class AppKit.NSWindow
+  import CoreImage.CIFilterBuiltins
+
+  extension NSWindow {
+    func hideStandardWindowButtons() {
+      let buttonTypes: [ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+      for type in buttonTypes {
+        guard let button = standardWindowButton(type) else { continue }
+        button.isHidden = true
+      }
+    }
+
+    func darkenStandardWindowButtons() {
+      let filter = CIFilter.colorControls()
+      filter.brightness = -0.4
+      let buttonTypes: [ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+      for type in buttonTypes {
+        guard let button = standardWindowButton(type) else { continue }
+        button.wantsLayer = true
+        button.layer?.filters = [filter]
+        button.layer?.opacity = 0.6
+      }
+    }
+  }
+#endif

@@ -12,6 +12,7 @@ enum CreditsData {
       // https://sketchfab.com/binh6675
       // https://sketchfab.com/3d-models/glock18c-remake-3e321ef99c854f888ab32d4729b84965
       // https://sketchfab.com/3d-models/sigp320-pistol-1616f762a2c7467eadb78e3e006b3324
+      // + ammo
       "binh6675",
 
       // https://sketchfab.com/duanesmind
@@ -20,6 +21,7 @@ enum CreditsData {
 
       // https://sketchfab.com/tonken
       // https://sketchfab.com/3d-models/utility-key-af35a59d5ea94b00b9ee37d4eda10b1f
+      // https://sketchfab.com/3d-models/key-keychain-a552734ef6834a74b3084a89c6dab17d
       "tonken",
 
       // https://sketchfab.com/unknown.fbx
@@ -30,6 +32,14 @@ enum CreditsData {
       // https://sketchfab.com/AxonDesigns
       // https://sketchfab.com/3d-models/key-with-tag-16ea3fbecc6346df9859f0e18406951b
       "AxonDesigns",
+
+      // https://sketchfab.com/michaelkarel
+      // https://sketchfab.com/3d-models/m9-bayonet-knife-eb61a59f65e449d2a2eabbaef76a4a43
+      "Michael Karel",
+
+      // https://www.turbosquid.com/Search/Artists/at1012
+      // https://www.turbosquid.com/3d-models/commercial-steel-doors-1575549
+      "at1012",
     ],
 
     "Sound Designers": [
@@ -101,6 +111,9 @@ enum CreditsData {
     ],
     [
       Image("UI/Credits/Blender.png")
+    ],
+    [
+      Image("UI/Credits/Assimp.png")
     ],
     [
       Image("UI/Credits/Recast.png"),
