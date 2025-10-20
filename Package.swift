@@ -100,7 +100,7 @@ let package = Package(
         .copy("Assets/Metal"),
         .copy("Assets/Scenes"),
         .copy("Assets/UI"),
-        .process("Sources/Localizable.xcstrings"),
+        .process("Assets/Localizable.xcstrings", localization: .base),
       ],
 
       cSettings: [

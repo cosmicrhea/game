@@ -1,9 +1,9 @@
 import func Foundation.NSLocalizedString
+import Foundation
 
 final class TitleScreen: Screen {
   private let listMenu = ListMenu()
 
-  @MainActor
   override init() {
     super.init()
     setupMenu()
@@ -11,20 +11,20 @@ final class TitleScreen: Screen {
 
   private func setupMenu() {
     let menuItems = [
-      ListMenu.MenuItem(id: "new_game", label: String(localized: "New Game", bundle: .module)) {
+      ListMenu.MenuItem(id: "new_game", label: String(localized: "New Game", bundle: #bundle)) {
         print("Starting new game...")
       },
 
-      ListMenu.MenuItem(id: "continue", label: String(localized: "Continue", bundle: .module), isEnabled: false) {
+      ListMenu.MenuItem(id: "continue", label: String(localized: "Continue", bundle: #bundle), isEnabled: false) {
         print("Loading saved game...")
       },
 
-      ListMenu.MenuItem(id: "options", label: String(localized: "Options", bundle: .module)) {
+      ListMenu.MenuItem(id: "options", label: String(localized: "Options", bundle: #bundle)) {
         // Navigate to options screen
         self.navigate(to: OptionsScreen())
       },
 
-      ListMenu.MenuItem(id: "give_up", label: String(localized: "Give Up", bundle: .module)) {
+      ListMenu.MenuItem(id: "give_up", label: String(localized: "Give Up", bundle: #bundle)) {
         Task { @MainActor in
           #if os(macOS)
             Engine.shared.window.nsWindow?.animationBehavior = .utilityWindow
