@@ -1,5 +1,3 @@
-@preconcurrency import GLMath
-
 /// Enhanced light for 3D rendering with position support
 struct Light: @unchecked Sendable {
   var direction: vec3

@@ -1,6 +1,6 @@
 // Credit goes to https://github.com/chrisaljoudi/swift-log-oslog
 
-import Foundation
+import class Foundation.NSString
 import Logging
 import struct Logging.Logger
 import os

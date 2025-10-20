@@ -1,4 +1,4 @@
-import GLFW
+
 
 /// Base class for screens with built-in navigation capabilities
 @MainActor
@@ -31,15 +31,15 @@ class Screen: RenderLoop {
     // Override in subclasses
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     // Override in subclasses
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     // Override in subclasses
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     // Override in subclasses
   }
 

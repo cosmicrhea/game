@@ -1,7 +1,4 @@
 import Assimp
-import Foundation
-import GL
-import GLMath
 import ImageFormats
 
 // Flag to disable HDRI loading for now
@@ -59,6 +56,7 @@ class MeshInstance: @unchecked Sendable {
   let scene: Scene
   let mesh: Mesh
   let transformMatrix: mat4
+  private let sceneIdentifier: String
 
   // Rendering program
   private let program: GLProgram
@@ -94,17 +92,21 @@ class MeshInstance: @unchecked Sendable {
   // Loading progress callback
   typealias ProgressCallback = (Float) -> Void
 
-  init(scene: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1)) {
+  init(scene: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1), sceneIdentifier: String) {
     self.scene = scene
     self.mesh = mesh
     self.transformMatrix = transformMatrix
+    self.sceneIdentifier = sceneIdentifier
 
     // Create shader program
     self.program = try! GLProgram("Common/basic 2")
 
     glGenVertexArrays(1, &VAO)
+    GLStats.incrementBuffers()
     glGenBuffers(1, &VBO)
+    GLStats.incrementBuffers()
     glGenBuffers(1, &EBO)
+    GLStats.incrementBuffers()
 
     glBindVertexArray(VAO)
     glBindBuffer(GL_ARRAY_BUFFER, VBO)
@@ -164,6 +166,30 @@ class MeshInstance: @unchecked Sendable {
     loadHDRIEnvironmentMap()
   }
 
+  deinit {
+    if VAO != 0 {
+      glDeleteVertexArrays(1, &VAO)
+      GLStats.decrementBuffers()
+      VAO = 0
+    }
+    if VBO != 0 {
+      glDeleteBuffers(1, &VBO)
+      GLStats.decrementBuffers()
+      VBO = 0
+    }
+    if EBO != 0 {
+      glDeleteBuffers(1, &EBO)
+      GLStats.decrementBuffers()
+      EBO = 0
+    }
+    // Do NOT delete cached 2D textures; cache owns them. But delete environmentMap created per instance.
+    if environmentMap != 0 {
+      var t = environmentMap
+      glDeleteTextures(1, &t)
+      environmentMap = 0
+    }
+  }
+
   /// Async initializer that loads scene and textures with progress callbacks
   static func loadAsync(
     path: String,
@@ -201,7 +227,7 @@ class MeshInstance: @unchecked Sendable {
         .filter { $0.numberOfVertices > 0 }
         .map { mesh in
           let transformMatrix = scene.getTransformMatrix(for: mesh)
-          return MeshInstance(scene: scene, mesh: mesh, transformMatrix: transformMatrix)
+          return MeshInstance(scene: scene, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: scene.filePath)
         }
     }
 
@@ -364,8 +390,8 @@ class MeshInstance: @unchecked Sendable {
     // Try to get texture path for this type
     guard let texturePath = material.getMaterialTexture(texType: texType, texIndex: 0) else { return }
 
-    // Create scene-specific cache key for embedded textures
-    let cacheKey = texturePath.hasPrefix("*") ? "\(ObjectIdentifier(scene))_\(texturePath)" : texturePath
+    // Create stable cache key across loads for embedded textures by using scene file path
+    let cacheKey = texturePath.hasPrefix("*") ? "\(sceneIdentifier)#\(texturePath)" : texturePath
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
@@ -421,8 +447,8 @@ class MeshInstance: @unchecked Sendable {
     }
     logger.trace("Loading texture with path \(texturePath)")
 
-    // Create scene-specific cache key for embedded textures
-    let cacheKey = texturePath.hasPrefix("*") ? "\(ObjectIdentifier(scene))_\(texturePath)" : texturePath
+    // Stable cache key across reloads
+    let cacheKey = texturePath.hasPrefix("*") ? "\(sceneIdentifier)#\(texturePath)" : texturePath
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
@@ -629,51 +655,51 @@ class MeshInstance: @unchecked Sendable {
     glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap)
 
     // Load the actual HDRI EXR file
-//    do {
-      let hdriImage = Image(exrPath: "Common/hansaplatz_4k.exr")
-      logger.trace("Loaded HDRI: \(hdriImage.pixelWidth)x\(hdriImage.pixelHeight)")
+    //    do {
+    let hdriImage = Image(exrPath: "Common/hansaplatz_4k.exr")
+    logger.trace("Loaded HDRI: \(hdriImage.pixelWidth)x\(hdriImage.pixelHeight)")
 
-      // Convert HDRI to cube map
-      // For now, we'll create a simple cube map from the HDRI
-      // TODO: Implement proper equirectangular to cube map conversion
-      let cubeSize = 512
+    // Convert HDRI to cube map
+    // For now, we'll create a simple cube map from the HDRI
+    // TODO: Implement proper equirectangular to cube map conversion
+    let cubeSize = 512
 
-      // Generate cube map faces from HDRI
-      for face in 0..<6 {
-        var faceData = [UInt8](repeating: 0, count: cubeSize * cubeSize * 3)
+    // Generate cube map faces from HDRI
+    for face in 0..<6 {
+      var faceData = [UInt8](repeating: 0, count: cubeSize * cubeSize * 3)
 
-        // Simple sampling from HDRI for each cube face
-        for y in 0..<cubeSize {
-          for x in 0..<cubeSize {
-            let index = (y * cubeSize + x) * 3
+      // Simple sampling from HDRI for each cube face
+      for y in 0..<cubeSize {
+        for x in 0..<cubeSize {
+          let index = (y * cubeSize + x) * 3
 
-            // Sample from HDRI based on cube face direction
-            let (u, v) = getCubeMapUV(face: face, x: x, y: y, size: cubeSize)
-            let (hdriX, hdriY) = (Int(u * Float(hdriImage.pixelWidth)), Int(v * Float(hdriImage.pixelHeight)))
+          // Sample from HDRI based on cube face direction
+          let (u, v) = getCubeMapUV(face: face, x: x, y: y, size: cubeSize)
+          let (hdriX, hdriY) = (Int(u * Float(hdriImage.pixelWidth)), Int(v * Float(hdriImage.pixelHeight)))
 
-            if hdriX >= 0 && hdriX < hdriImage.pixelWidth && hdriY >= 0 && hdriY < hdriImage.pixelHeight {
-              let hdriIndex = (hdriY * hdriImage.pixelWidth + hdriX) * 4  // RGBA
-              if let pixelBytes = hdriImage.pixelBytes, hdriIndex + 2 < pixelBytes.count {
-                faceData[index] = pixelBytes[hdriIndex]  // R
-                faceData[index + 1] = pixelBytes[hdriIndex + 1]  // G
-                faceData[index + 2] = pixelBytes[hdriIndex + 2]  // B
-              }
+          if hdriX >= 0 && hdriX < hdriImage.pixelWidth && hdriY >= 0 && hdriY < hdriImage.pixelHeight {
+            let hdriIndex = (hdriY * hdriImage.pixelWidth + hdriX) * 4  // RGBA
+            if let pixelBytes = hdriImage.pixelBytes, hdriIndex + 2 < pixelBytes.count {
+              faceData[index] = pixelBytes[hdriIndex]  // R
+              faceData[index + 1] = pixelBytes[hdriIndex + 1]  // G
+              faceData[index + 2] = pixelBytes[hdriIndex + 2]  // B
             }
           }
         }
-
-        glTexImage2D(
-          GL_TEXTURE_CUBE_MAP_POSITIVE_X + Int32(face),
-          0, GL_RGB, GLsizei(cubeSize), GLsizei(cubeSize),
-          0, GL_RGB, GL_UNSIGNED_BYTE, faceData
-        )
       }
-//    } catch {
-//      logger.error("Failed to load HDRI: \(error)")
-//      // Fallback to procedural environment
-//      loadProceduralEnvironment()
-//      return
-//    }
+
+      glTexImage2D(
+        GL_TEXTURE_CUBE_MAP_POSITIVE_X + Int32(face),
+        0, GL_RGB, GLsizei(cubeSize), GLsizei(cubeSize),
+        0, GL_RGB, GL_UNSIGNED_BYTE, faceData
+      )
+    }
+    //    } catch {
+    //      logger.error("Failed to load HDRI: \(error)")
+    //      // Fallback to procedural environment
+    //      loadProceduralEnvironment()
+    //      return
+    //    }
 
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR)

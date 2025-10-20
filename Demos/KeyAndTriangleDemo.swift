@@ -1,8 +1,4 @@
 import Assimp
-import GL
-import GLFW
-import GLMath
-
 import class Foundation.Bundle
 
 /// A demo that renders a triangle and a key.
@@ -54,16 +50,16 @@ final class KeyAndTriangleDemo: RenderLoop {
     promptList = PromptList(.itemView, axis: .horizontal)
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     guard window.isFocused else { return }
     camera.processMousePosition(Float(x), Float(y))
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
     camera.processMouseScroll(Float(yOffset))
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .o:
       UISound.select()
@@ -78,7 +74,7 @@ final class KeyAndTriangleDemo: RenderLoop {
     }
   }
 
-  func update(window: GLFWWindow, deltaTime: Float) {
+  func update(window: Window, deltaTime: Float) {
     camera.processKeyboardState(window.keyboard, deltaTime)
 
     // Update callout animation

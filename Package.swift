@@ -6,6 +6,8 @@ import PackageDescription
 let package = Package(
   name: "Game",
 
+  defaultLocalization: "en",
+
   platforms: [
     // .macOS(.v13), // FIXME: build assimp for v13
     .macOS(.v15),
@@ -98,6 +100,7 @@ let package = Package(
         .copy("Assets/Metal"),
         .copy("Assets/Scenes"),
         .copy("Assets/UI"),
+        .process("Sources/Localizable.xcstrings"),
       ],
 
       cSettings: [

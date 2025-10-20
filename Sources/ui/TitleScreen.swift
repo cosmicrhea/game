@@ -1,6 +1,5 @@
-import GLFW
+import func Foundation.NSLocalizedString
 
-/// Menu-only component for the title screen
 final class TitleScreen: Screen {
   private let listMenu = ListMenu()
 
@@ -12,20 +11,20 @@ final class TitleScreen: Screen {
 
   private func setupMenu() {
     let menuItems = [
-      ListMenu.MenuItem(id: "new_game", label: "New Game") {
+      ListMenu.MenuItem(id: "new_game", label: String(localized: "New Game", bundle: .module)) {
         print("Starting new game...")
       },
 
-      ListMenu.MenuItem(id: "continue", label: "Continue", isEnabled: false) {
+      ListMenu.MenuItem(id: "continue", label: String(localized: "Continue", bundle: .module), isEnabled: false) {
         print("Loading saved game...")
       },
 
-      ListMenu.MenuItem(id: "options", label: "Options") {
+      ListMenu.MenuItem(id: "options", label: String(localized: "Options", bundle: .module)) {
         // Navigate to options screen
         self.navigate(to: OptionsScreen())
       },
 
-      ListMenu.MenuItem(id: "give_up", label: "Give Up") {
+      ListMenu.MenuItem(id: "give_up", label: String(localized: "Give Up", bundle: .module)) {
         Task { @MainActor in
           #if os(macOS)
             Engine.shared.window.nsWindow?.animationBehavior = .utilityWindow
@@ -45,11 +44,11 @@ final class TitleScreen: Screen {
     listMenu.update(deltaTime: deltaTime)
   }
 
-  override func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     listMenu.handleKeyPressed(key)
   }
 
-  override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  override func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     if button == .left {
       let mousePosition = Point(
         Float(window.mouse.position.x), Float(Engine.viewportSize.height) - Float(window.mouse.position.y))
@@ -57,7 +56,7 @@ final class TitleScreen: Screen {
     }
   }
 
-  override func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  override func onMouseMove(window: Window, x: Double, y: Double) {
     let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     listMenu.handleMouseMove(at: mousePosition)
   }
@@ -100,15 +99,15 @@ final class TitleScreenStack: RenderLoop {
     animatedVignetteStrength += vignetteDelta
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     navigationStack.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     navigationStack.onMouseButtonPressed(window: window, button: button, mods: mods)
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     navigationStack.onMouseMove(window: window, x: x, y: y)
   }
 

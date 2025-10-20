@@ -1,13 +1,10 @@
-import Foundation
-import GLFW
-
 /// Demo showcasing the Gradient drawing system
 public final class GradientDemo: RenderLoop {
   private var time: Float = 0
 
   public init() {}
 
-  public func update(window: GLFWWindow, deltaTime: Float) {
+  public func update(window: Window, deltaTime: Float) {
     time += deltaTime
   }
 

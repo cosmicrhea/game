@@ -1,5 +1,3 @@
-import Foundation
-
 /// A gradient defines a transition between colors over a range from 0.0 to 1.0.
 /// The gradient can be drawn as either a linear or radial gradient.
 public struct Gradient: Sendable, Equatable {

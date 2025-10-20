@@ -1,5 +1,3 @@
-import GLMath
-
 /// A fixed camera that looks at a target point from a fixed position
 class FixedCamera {
   var position: vec3

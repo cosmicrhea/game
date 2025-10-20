@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 // Default inspection camera values
 private let defaultDistance: Float = 0.3  // Closer by default for better inspection
 private let defaultSensitivity: Float = 0.3
@@ -287,7 +283,7 @@ class ItemInspectionCamera {
   }
 
   /// Process keyboard state for camera control (polling-based)
-  @MainActor func processKeyboardState(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
+  @MainActor func processKeyboardState(_ keyboard: Keyboard, _ deltaTime: Float) {
     // Don't process keyboard input during reset animation
     guard !isResetting else { return }
 

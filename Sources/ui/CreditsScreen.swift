@@ -1,7 +1,3 @@
-import Foundation
-import GL
-import GLFW
-import GLMath
 import ImageFormats
 
 private let nameStyle = TextStyle(
@@ -32,11 +28,11 @@ final class CreditsScreen: RenderLoop {
   // Offscreen rendering
   private var creditsImage: Image?
 
-  func onKey(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
+  func onKey(window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
     if key == .leftAlt || key == .rightAlt { scrollTurbo = state == .pressed }
   }
 
-  func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
     #if DEBUG
       if button == .left { scrollTurbo = state == .pressed }
     #endif

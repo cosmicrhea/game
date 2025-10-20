@@ -1,7 +1,3 @@
-import Foundation
-import GLFW
-import GLMath
-
 /// Demo showcasing SVG loading and rendering capabilities
 @MainActor
 final class SVGDemo: RenderLoop {
@@ -56,7 +52,7 @@ final class SVGDemo: RenderLoop {
     }
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .minus:
       if currentSizeIndex > 0 {

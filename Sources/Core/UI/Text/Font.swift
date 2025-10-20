@@ -1,8 +1,24 @@
-import Foundation
 import STBTrueType
 
 /// The representation of a font in the game.
 public final class Font {
+  // MARK: - Cache
+
+  private struct CacheKey: Hashable {
+    let fontPath: String
+    let pixelHeight: Int
+  }
+
+  private struct CachedFont {
+    let trueTypeFont: TrueTypeFont
+    let baselinePx: Float
+    let maxAboveBaseline: Float
+    let maxBelowBaseline: Float
+  }
+
+  private nonisolated(unsafe) static var cache: [CacheKey: CachedFont] = [:]
+  private static let cacheLock = NSLock()
+
   private let trueTypeFont: TrueTypeFont
   private let maxAboveBaseline: Float
   private let maxBelowBaseline: Float
@@ -11,74 +27,45 @@ public final class Font {
   // MARK: - Font Discovery
 
   /// Information about a resolved font file.
-  public struct ResolvedFont {
+  public struct ResolvedFont: Sendable {
     /// The URL of the font file.
     public let url: URL
     /// The display name of the font.
     public let displayName: String
-    /// The base name of the font (without size suffix).
+    /// The base name of the font (kept for compatibility; equals displayName).
     public let baseName: String
-    /// The pixel size of the font, if specified in the filename.
+    /// The pixel size of the font, if specified in the filename. Always nil now.
     public let pixelSize: Int?
   }
 
   private static let defaultFontsPath = "Fonts"
 
-  /// The available fonts in the game.
-  /// - Returns: An array of resolved font information, sorted by display name.
-  public static var availableFonts: [ResolvedFont] {
+  /// The available fonts in the game, scanned once.
+  public static let availableFonts: [ResolvedFont] = {
     let extensions = ["ttf", "otf"]
     var entries: [ResolvedFont] = []
-
     for ext in extensions {
       let urls = Bundle.module.urls(forResourcesWithExtension: ext, subdirectory: defaultFontsPath) ?? []
-
       for url in urls {
         let name = url.deletingPathExtension().lastPathComponent
-        let (base, size) = parseBaseAndSize(from: name)
-        entries.append(ResolvedFont(url: url, displayName: name, baseName: base, pixelSize: size))
+        entries.append(ResolvedFont(url: url, displayName: name, baseName: name, pixelSize: nil))
       }
     }
-
     return entries.sorted { $0.displayName > $1.displayName }
-  }
+  }()
 
   /// Resolves a font by name from the available fonts.
   /// - Parameter name: The name of the font to resolve.
   /// - Returns: The resolved font information, or `nil` if not found.
   public static func resolve(name: String) -> ResolvedFont? {
-    let (requestedBase, requestedSize) = parseBaseAndSize(from: name)
-    let matches = availableFonts.filter { $0.displayName == name || $0.baseName == requestedBase }
-    if matches.isEmpty { return nil }
-
-    if let size = requestedSize {
-      let sized = matches.first(where: { $0.pixelSize == size })
-      if let sized = sized { return sized }
-    }
-
-    // Prefer TTF if both TTF/OTF exist for the same base name
-    if let preferred = matches.first(where: { $0.url.pathExtension.lowercased() == "ttf" }) {
-      return preferred
-    }
-    return matches.first
+    // Exact match first
+    if let exact = availableFonts.first(where: { $0.displayName == name }) { return exact }
+    // Case-insensitive fallback
+    if let ci = availableFonts.first(where: { $0.displayName.lowercased() == name.lowercased() }) { return ci }
+    return nil
   }
 
-  private static func parseBaseAndSize(from displayName: String) -> (String, Int?) {
-    // Matches: Name (13px)
-    guard let open = displayName.lastIndex(of: "("),
-      let close = displayName.lastIndex(of: ")"),
-      open < close
-    else {
-      return (displayName, nil)
-    }
-
-    let sizePart = displayName[displayName.index(after: open)..<close]
-    if sizePart.hasSuffix("px"), let num = Int(sizePart.dropLast(2)) {
-      let base = displayName[..<displayName.index(before: open)].trimmingCharacters(in: .whitespaces)
-      return (String(base), num)
-    }
-    return (displayName, nil)
-  }
+  // Removed legacy name parsing; filenames are used as-is.
 
   // MARK: - Font Loading
 
@@ -89,21 +76,35 @@ public final class Font {
   /// - Returns: A new font instance, or `nil` if the font could not be loaded.
   public init?(fontName: String, pixelHeight: Float? = nil) {
     guard let entry = Font.resolve(name: fontName) else { return nil }
-    let resolvedPixelHeight = pixelHeight ?? entry.pixelSize.map(Float.init) ?? 16
+    let resolvedPixelHeight = pixelHeight ?? 16
 
-    guard let trueTypeFont = TrueTypeFont(path: entry.url.path, pixelHeight: resolvedPixelHeight) else {
+    let key = CacheKey(fontPath: entry.url.path, pixelHeight: Int(resolvedPixelHeight.rounded()))
+
+    // Fast path: cached
+    Font.cacheLock.lock()
+    if let cached = Font.cache[key] {
+      Font.cacheLock.unlock()
+      self.trueTypeFont = cached.trueTypeFont
+      self.baselinePx = cached.baselinePx
+      self.maxAboveBaseline = cached.maxAboveBaseline
+      self.maxBelowBaseline = cached.maxBelowBaseline
+      return
+    }
+    Font.cacheLock.unlock()
+
+    // Load and compute, then cache
+    guard let ttf = TrueTypeFont(path: entry.url.path, pixelHeight: resolvedPixelHeight) else {
       return nil
     }
 
-    self.trueTypeFont = trueTypeFont
-    self.baselinePx = trueTypeFont.getBaseline()
+    let baseline = ttf.getBaseline()
 
     // Precompute conservative line metrics by scanning ASCII range
     var above: Float = 0
     var below: Float = 0
 
     for codepoint in 32...126 {
-      if let glyphBitmap = trueTypeFont.getGlyphBitmap(for: Int32(codepoint)) {
+      if let glyphBitmap = ttf.getGlyphBitmap(for: Int32(codepoint)) {
         let glyphAbove = max(0, -Float(glyphBitmap.yoff))
         let glyphBelow = max(0, Float(glyphBitmap.yoff + glyphBitmap.height))
         above = max(above, glyphAbove)
@@ -111,6 +112,14 @@ public final class Font {
       }
     }
 
+    let cached = CachedFont(trueTypeFont: ttf, baselinePx: baseline, maxAboveBaseline: above, maxBelowBaseline: below)
+
+    Font.cacheLock.lock()
+    Font.cache[key] = cached
+    Font.cacheLock.unlock()
+
+    self.trueTypeFont = ttf
+    self.baselinePx = baseline
     self.maxAboveBaseline = above
     self.maxBelowBaseline = below
   }

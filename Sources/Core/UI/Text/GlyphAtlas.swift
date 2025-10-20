@@ -1,9 +1,17 @@
-import Foundation
-import GL
 import STBTrueType
 
 /// Manages glyph texture atlas for efficient text rendering
 public final class GlyphAtlas {
+  // MARK: - Cache
+  private struct CacheKey: Hashable {
+    let fontId: ObjectIdentifier
+    let padding: Int32
+    let codepointsSignature: [Int32]  // sorted unique codepoints for stability
+  }
+
+  private nonisolated(unsafe) static var cache: [CacheKey: GlyphAtlas] = [:]
+  private static let cacheLock = NSLock()
+
   let texture: GLuint
   let width: Int32
   let height: Int32
@@ -15,6 +23,7 @@ public final class GlyphAtlas {
 
     var tex: GLuint = 0
     glGenTextures(1, &tex)
+    GLStats.incrementTextures()
     glBindTexture(GL_TEXTURE_2D, tex)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
     glTexImage2D(
@@ -51,19 +60,28 @@ public final class GlyphAtlas {
   deinit {
     var t = texture
     glDeleteTextures(1, &t)
+    GLStats.decrementTextures()
   }
 
   /// Build a new glyph atlas for the given text and font
   static func build(for text: String, font: TrueTypeFont, padding: Int32 = 2) -> GlyphAtlas? {
     // Collect unique codepoints from the text using Unicode scalars
-    var codepoints: [Int32] = []
-    var seen = Set<Int32>()
+    var codepointsSet = Set<Int32>()
     for scalar in text.unicodeScalars {
-      let codepoint = Int32(scalar.value)
-      if seen.insert(codepoint).inserted {
-        codepoints.append(codepoint)
-      }
+      codepointsSet.insert(Int32(scalar.value))
     }
+    var codepoints = Array(codepointsSet)
+    codepoints.sort()
+
+    // Cache key: specific font instance + padding + sorted unique codepoints
+    let key = CacheKey(fontId: ObjectIdentifier(font), padding: padding, codepointsSignature: codepoints)
+
+    cacheLock.lock()
+    if let cached = cache[key] {
+      cacheLock.unlock()
+      return cached
+    }
+    cacheLock.unlock()
 
     // Load glyph data
     var glyphs: [Glyph] = []
@@ -123,7 +141,13 @@ public final class GlyphAtlas {
       cursorX += glyphBitmap.width + padding
     }
 
-    return GlyphAtlas(pixels: pixels, width: atlasWidth, height: atlasHeight, glyphs: glyphs)
+    let atlas = GlyphAtlas(pixels: pixels, width: atlasWidth, height: atlasHeight, glyphs: glyphs)
+
+    cacheLock.lock()
+    cache[key] = atlas
+    cacheLock.unlock()
+
+    return atlas
   }
 }
 

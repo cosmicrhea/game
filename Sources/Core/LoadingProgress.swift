@@ -1,5 +1,3 @@
-import Foundation
-
 /// Tracks loading progress for async scene and texture loading
 @MainActor
 final class LoadingProgress {

@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 extension Document {
   static let all: [Self?] = [
     .jaritsJournal,
@@ -107,7 +103,7 @@ final class DocumentView: RenderLoop {
     }
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .left, .a: previousPage()
     case .right, .d: nextPage()
@@ -119,7 +115,7 @@ final class DocumentView: RenderLoop {
     }
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     switch button {
     case .left:
       let totalPages = getTotalPageCount()

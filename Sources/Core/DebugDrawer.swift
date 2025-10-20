@@ -1,7 +1,3 @@
-import Foundation
-import GL
-import GLMath
-
 /// Simple debug drawing utility for drawing rectangles and other debug shapes
 public final class DebugDrawer {
   private let program: GLProgram

@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// A global screen fade system for transitions
 @MainActor
 public final class ScreenFade {

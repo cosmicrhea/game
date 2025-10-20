@@ -1,6 +1,3 @@
-import Foundation
-import GLMath
-
 extension Transform2D {
   /// Converts the Transform2D to a 4x4 matrix for OpenGL
   public func toMatrix() -> mat4 {

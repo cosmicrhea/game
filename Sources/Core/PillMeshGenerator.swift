@@ -1,6 +1,3 @@
-import GL
-import GLMath
-
 /// Generates a procedural pill (capsule) mesh
 class PillMeshGenerator {
 

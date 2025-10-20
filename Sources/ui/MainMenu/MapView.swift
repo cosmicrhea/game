@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 @Editor(.grouped)
 class MapView: RenderLoop {
   private var mapEffect = GLScreenEffect("Common/MapView")

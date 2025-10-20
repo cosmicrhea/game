@@ -1,5 +1,3 @@
-import Foundation
-
 /// Demo for testing EXR image loading functionality
 public struct EXRDemo {
   public static func run() {

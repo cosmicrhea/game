@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 // Default orbit camera values
 private let defaultDistance: Float = 0.25
 private let defaultSensitivity: Float = 0.3
@@ -206,7 +202,7 @@ class OrbitCamera {
   }
 
   /// Process keyboard state for camera control (polling-based)
-  @MainActor func processKeyboardState(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
+  @MainActor func processKeyboardState(_ keyboard: Keyboard, _ deltaTime: Float) {
     // Don't process keyboard input during reset animation
     guard !isResetting else { return }
 

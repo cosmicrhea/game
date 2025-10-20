@@ -1,6 +1,3 @@
-import GL
-import GLFW
-
 @MainActor
 final class CalloutDemo: RenderLoop {
   private var objectiveCallouts: [Callout] = []
@@ -13,7 +10,7 @@ final class CalloutDemo: RenderLoop {
   private let verticalGap: Float = 16
   private let staggerDelay: Float = 0.15  // Delay between each callout animation
 
-  func onAttach(window: GLFWWindow) {
+  func onAttach(window: Window) {
     // Create objective callouts for each icon
     objectiveCallouts = CalloutIcon.allCases.map { icon in
       Callout("Make your way to Kastellet", icon: icon)

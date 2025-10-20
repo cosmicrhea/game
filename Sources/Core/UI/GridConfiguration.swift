@@ -1,5 +1,3 @@
-import GLMath
-
 /// Configuration for a grid layout
 public struct GridConfiguration {
   public let columns: Int

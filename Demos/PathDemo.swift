@@ -1,13 +1,10 @@
-import Foundation
-import GLFW
-
 /// Demo showcasing bezier path drawing capabilities
 public class PathDemo: RenderLoop {
   private var time: Float = 0
 
   public init() {}
 
-  public func update(window: GLFWWindow, deltaTime: Float) {
+  public func update(window: Window, deltaTime: Float) {
     time += deltaTime
   }
 

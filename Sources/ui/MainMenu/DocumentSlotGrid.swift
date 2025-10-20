@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// A specialized SlotGrid for displaying documents
 @MainActor
 public final class DocumentSlotGrid {

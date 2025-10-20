@@ -1,5 +1,3 @@
-import GL
-
 /// Available icon types for callouts.
 public enum CalloutIcon: String, CaseIterable {
   /// A chevron arrow icon.

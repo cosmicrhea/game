@@ -1,10 +1,4 @@
 import Assimp
-import GL
-import GLFW
-import GLMath
-
-import class Foundation.Bundle
-import class Foundation.NSArray
 
 final class ItemView: RenderLoop {
   private let item: Item
@@ -79,7 +73,7 @@ final class ItemView: RenderLoop {
     camera.processKeyboardState(window.keyboard, deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .escape:
       UISound.cancel()
@@ -116,11 +110,11 @@ final class ItemView: RenderLoop {
     }
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
     camera.processMouseScroll(Float(yOffset))
   }
 
-  func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
     if button == .left {
       if state == .pressed {
         camera.startDragging()
@@ -134,7 +128,7 @@ final class ItemView: RenderLoop {
     }
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     let isAltPressed =
       window.keyboard.state(of: .leftAlt) == .pressed || window.keyboard.state(of: .rightAlt) == .pressed
     camera.processMousePosition(Float(x), Float(y), isAltPressed: isAltPressed)

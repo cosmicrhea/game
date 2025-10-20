@@ -1,5 +1,3 @@
-import Foundation
-
 /// A single entry in an image atlas, representing a subimage within a larger texture.
 public struct ImageAtlasEntry {
   /// The name identifier for this atlas entry.

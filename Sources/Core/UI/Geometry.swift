@@ -1,5 +1,3 @@
-import Foundation
-
 /// A 2D point with floating-point coordinates.
 public struct Point: Equatable, Hashable, Sendable {
   /// The x-coordinate of the point.

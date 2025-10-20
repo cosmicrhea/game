@@ -1,5 +1,3 @@
-import Foundation
-import GL
 import ImageFormats
 
 /// An object that manages image data in the game.
@@ -8,6 +6,9 @@ public struct Image: Sendable {
   public let naturalSize: Size
   public let pixelScale: Float
   let framebufferID: UInt64?
+
+  // If non-nil, this Image instance owns the GL texture lifetime
+  private let textureHandle: GLTextureHandle?
 
   let pixelBytes: [UInt8]?
   let pixelWidth: Int
@@ -19,6 +20,7 @@ public struct Image: Sendable {
     self.naturalSize = naturalSize
     self.pixelScale = pixelScale
     self.framebufferID = framebufferID
+    self.textureHandle = nil
     self.pixelBytes = nil
     self.pixelWidth = Int(naturalSize.width)
     self.pixelHeight = Int(naturalSize.height)
@@ -30,6 +32,7 @@ public struct Image: Sendable {
     self.naturalSize = Size(Float(width), Float(height))
     self.pixelScale = pixelScale
     self.framebufferID = nil
+    self.textureHandle = nil
     self.pixelBytes = pixels
     self.pixelWidth = width
     self.pixelHeight = height
@@ -43,9 +46,22 @@ public struct Image: Sendable {
     self.naturalSize = naturalSize
     self.pixelScale = pixelScale
     self.framebufferID = framebufferID
+    self.textureHandle = nil
     self.pixelBytes = pixelBytes
     self.pixelWidth = pixelWidth
     self.pixelHeight = pixelHeight
+  }
+
+  // Internal initializer for adopting an existing GLTextureHandle
+  init(handle: GLTextureHandle, naturalSize: Size, pixelScale: Float) {
+    self.textureID = UInt64(handle.id)
+    self.naturalSize = naturalSize
+    self.pixelScale = pixelScale
+    self.framebufferID = nil
+    self.textureHandle = handle
+    self.pixelBytes = nil
+    self.pixelWidth = Int(naturalSize.width)
+    self.pixelHeight = Int(naturalSize.height)
   }
 
   /// Draws the image at the specified point, optionally specifying a size.

@@ -1,6 +1,5 @@
 import AppKit
 import CoreVideo
-import Foundation
 import Metal
 import MetalKit
 import QuartzCore

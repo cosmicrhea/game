@@ -1,5 +1,5 @@
 
-import GLFW
+
 
 /// Protocol for focusable, mouse/keyboard-driven option controls (e.g., Slider, Picker).
 @MainActor
@@ -74,7 +74,7 @@ class OptionsPanel: Screen {
     return false
   }
 
-  override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  override func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     guard button == .left else { return }
     let p = mousePoint(window)
     guard panelRect.contains(p) else { return }
@@ -91,7 +91,7 @@ class OptionsPanel: Screen {
     }
   }
 
-  override func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  override func onMouseMove(window: Window, x: Double, y: Double) {
     let p = mousePoint(window)
     guard panelRect.contains(p) else { return }
     rows.forEach { $0.control.handleMouseMove(at: p) }
@@ -148,7 +148,7 @@ class OptionsPanel: Screen {
     }
   }
 
-  private func mousePoint(_ window: GLFWWindow) -> Point {
+  private func mousePoint(_ window: Window) -> Point {
     Point(Float(window.mouse.position.x), Float(Engine.viewportSize.height) - Float(window.mouse.position.y))
   }
 }

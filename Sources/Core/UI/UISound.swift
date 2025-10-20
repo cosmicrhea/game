@@ -1,12 +1,10 @@
-@preconcurrency import Miniaudio
-import class Foundation.Bundle
-import class Foundation.Thread
+//@preconcurrency import Miniaudio
 
 #if os(macOS)
-//  import class AppKit.NSSound
+  import class AppKit.NSSound
 #endif
 
-private let engine = try! AudioEngine()
+//private let engine = try! AudioEngine()
 
 extension UISound {
   static func select() { play("RE_SELECT02") }
@@ -30,7 +28,7 @@ extension UISound {
 enum UISound {
   nonisolated(unsafe) static var volume: Float = 1.0
 
-  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
+//  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
   private nonisolated(unsafe) static var lastPlayedSounds: [String: String] = [:]
 
   static func play(_ soundName: String, volume: Float = 1) {
@@ -38,6 +36,10 @@ enum UISound {
       logger.error("failed to load \(soundName)")
       return
     }
+
+    let sound = NSSound(contentsOfFile: path, byReference: true)!
+    sound.volume = volume * Self.volume
+    sound.play()
 
 //    var sound = sounds[soundName]
 //    if sound == nil {
@@ -54,7 +56,7 @@ enum UISound {
 
 
 //    let sound =
-    engine.playSound(contentsOfFile: path, spatial: false)
+//    engine.playSound(contentsOfFile: path, spatial: false)
 //    sound.volume = volume * Self.volume
 
     // guard let sound else { return }

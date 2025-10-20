@@ -1,8 +1,3 @@
-import Foundation
-import GL
-import GLMath
-import STBTrueType
-
 public final class GLRenderer: Renderer {
   private let imageProgram: GLProgram
   private let pathProgram: GLProgram
@@ -876,6 +871,14 @@ public final class GLRenderer: Renderer {
 
   public func destroyFramebuffer(_ framebufferID: UInt64) {
     framebuffers.removeValue(forKey: framebufferID)
+  }
+
+  /// Adopt the color texture from a framebuffer, removing the FBO and returning the texture ID.
+  /// The framebuffer object and its depth buffer are deleted; the texture persists for the caller.
+  public func adoptTexture(from framebufferID: UInt64) -> UInt64? {
+    guard let framebuffer = framebuffers.removeValue(forKey: framebufferID) else { return nil }
+    let tex = framebuffer.detachTexture()
+    return tex
   }
 
   public func beginFramebuffer(_ framebufferID: UInt64) {

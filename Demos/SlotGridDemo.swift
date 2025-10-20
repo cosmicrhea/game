@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// Demo for testing the slot grid component with context menu support
 @MainActor
 final class SlotGridDemo: RenderLoop {
@@ -58,7 +54,7 @@ final class SlotGridDemo: RenderLoop {
     slotGrid.update(deltaTime: deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     // Let SlotGrid handle all input (including menu)
     if slotGrid.handleKey(key) {
       return
@@ -105,7 +101,7 @@ final class SlotGridDemo: RenderLoop {
     }
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     lastMouseX = x
     lastMouseY = y
     // Flip Y coordinate to match screen coordinates (top-left origin)
@@ -113,7 +109,7 @@ final class SlotGridDemo: RenderLoop {
     slotGrid.handleMouseMove(at: mousePosition)
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
     if button == .left {

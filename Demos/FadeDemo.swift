@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// Demo for testing the global screen fade system
 @MainActor
 final class FadeDemo: RenderLoop {
@@ -17,7 +13,7 @@ final class FadeDemo: RenderLoop {
     // Screen fade is updated by the main loop
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .space:
       // Toggle screen fade

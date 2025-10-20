@@ -1,5 +1,3 @@
-import Foundation
-
 /// A path that consists of straight and curved line segments.
 public struct BezierPath {
   /// A single path element (move, line, curve, etc.)

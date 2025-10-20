@@ -1,8 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
-@MainActor
 final class DocumentDemo: RenderLoop {
   private let documents: [Document]
   private var documentView: DocumentView!
@@ -24,11 +19,11 @@ final class DocumentDemo: RenderLoop {
     }
   }
 
-  func onAttach(window: GLFWWindow) {
+  func onAttach(window: Window) {
     documentView.onAttach(window: window)
   }
 
-  func onDetach(window: GLFWWindow) {
+  func onDetach(window: Window) {
     documentView.onDetach(window: window)
   }
 
@@ -36,7 +31,7 @@ final class DocumentDemo: RenderLoop {
     documentView.update(deltaTime: deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .up: cycleDocument(forward: false)
     case .down: cycleDocument(forward: true)
@@ -54,7 +49,7 @@ final class DocumentDemo: RenderLoop {
     }
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     if isFadedOut && !isFadingToBlack {
       // Click to fade back in when faded out and not currently fading to black
       fadeBackIn()
@@ -63,11 +58,11 @@ final class DocumentDemo: RenderLoop {
     }
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     documentView.onMouseMove(window: window, x: x, y: y)
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
     documentView.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
   }
 

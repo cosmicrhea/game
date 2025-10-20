@@ -1,4 +1,4 @@
-import GLFW
+
 
 /// A navigation stack that manages multiple RenderLoops with smooth transitions
 @MainActor
@@ -125,7 +125,7 @@ public class NavigationStack: RenderLoop {
     }
   }
 
-  public func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  public func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     if isTransitioning {
       // Don't handle input during transitions
       return
@@ -136,7 +136,7 @@ public class NavigationStack: RenderLoop {
     }
   }
 
-  public func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  public func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     if isTransitioning {
       return
     }
@@ -146,7 +146,7 @@ public class NavigationStack: RenderLoop {
     }
   }
 
-  public func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  public func onMouseMove(window: Window, x: Double, y: Double) {
     if isTransitioning {
       return
     }

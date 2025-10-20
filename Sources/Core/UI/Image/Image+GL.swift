@@ -1,9 +1,3 @@
-import GL
-
-import class Foundation.Bundle
-import struct Foundation.Data
-import class Foundation.FileManager
-import struct Foundation.URL
 import struct ImageFormats.Image
 import struct ImageFormats.RGBA
 
@@ -98,27 +92,32 @@ extension Image {
     // End framebuffer rendering
     renderer.endFramebuffer()
 
-    // Create an Image from the framebuffer texture
-    guard let textureID = renderer.getFramebufferTextureID(framebufferID) else {
+    // Create an Image from the framebuffer texture; adopt texture and destroy FBO to avoid leaks
+    if let glRenderer = renderer as? GLRenderer, let adoptedTex = glRenderer.adoptTexture(from: framebufferID) {
+      logger.trace("Adopted texture ID: \(adoptedTex) from FBO \(framebufferID)")
+      // Wrap adopted texture in a handle so its lifetime is owned by Image
+      let handle = GLTextureHandle(id: GLuint(adoptedTex))
+      self = Image(handle: handle, naturalSize: size, pixelScale: pixelScale)
+    } else if let textureID = renderer.getFramebufferTextureID(framebufferID) {
+      logger.trace("Got texture ID without adoption: \(textureID)")
+      self = Image(
+        textureID: textureID,
+        naturalSize: size,
+        pixelScale: pixelScale,
+        framebufferID: framebufferID
+      )
+    } else {
       logger.warning("Failed to get framebuffer texture ID, using fallback")
       // Fallback to a 1x1 white pixel if framebuffer fails
       self = Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
-      return
     }
-
-    logger.trace("Got texture ID: \(textureID)")
-    self = Image(
-      textureID: textureID,
-      naturalSize: size,
-      pixelScale: pixelScale,
-      framebufferID: framebufferID
-    )
   }
 
   /// Upload RGBA8 pixels to GL and return a GPU-backed Image.
   public static func uploadToGL(pixels: [UInt8], width: Int, height: Int, pixelScale: Float = 1.0) -> Image {
     var tex: GLuint = 0
     glGenTextures(1, &tex)
+    let handle = GLTextureHandle(id: tex)
     glBindTexture(GL_TEXTURE_2D, tex)
     pixels.withUnsafeBytes { raw in
       glTexImage2D(
@@ -138,14 +137,6 @@ extension Image {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 
-    return Image(
-      textureID: UInt64(tex),
-      naturalSize: Size(Float(width), Float(height)),
-      pixelScale: pixelScale,
-      framebufferID: nil,
-      pixelBytes: pixels,
-      pixelWidth: width,
-      pixelHeight: height
-    )
+    return Image(handle: handle, naturalSize: Size(Float(width), Float(height)), pixelScale: pixelScale)
   }
 }

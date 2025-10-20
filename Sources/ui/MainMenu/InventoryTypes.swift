@@ -1,6 +1,3 @@
-import GL
-import GLMath
-
 extension Item {
   static let allItems = [
     Item(

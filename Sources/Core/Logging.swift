@@ -1,4 +1,3 @@
-import GL
 import Logging
 
 let logger = Logger(label: "local.Glass")

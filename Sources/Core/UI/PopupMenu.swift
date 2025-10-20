@@ -1,10 +1,3 @@
-import Foundation
-import GL
-import GLFW
-import GLMath
-
-// MenuAnchor has been replaced with the centralized Alignment enum in Geometry.swift
-
 // MARK: - Menu Item
 public struct MenuItem {
   public let id: String

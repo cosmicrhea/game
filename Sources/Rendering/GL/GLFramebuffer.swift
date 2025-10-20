@@ -1,7 +1,3 @@
-import Foundation
-import GL
-import GLMath
-
 /// OpenGL Framebuffer Object for off-screen rendering
 public final class GLFramebuffer {
   private var fbo: GLuint = 0
@@ -36,6 +32,7 @@ public final class GLFramebuffer {
 
     // Create texture
     glGenTextures(1, &texture)
+    GLStats.incrementTextures()
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(
       GL_TEXTURE_2D, 0, GL_RGBA,
@@ -76,12 +73,20 @@ public final class GLFramebuffer {
     }
     if texture != 0 {
       glDeleteTextures(1, &texture)
+      GLStats.decrementTextures()
       texture = 0
     }
     if rbo != 0 {
       glDeleteRenderbuffers(1, &rbo)
       rbo = 0
     }
+  }
+
+  /// Detach and return the color texture ID, preventing it from being deleted on destroy.
+  func detachTexture() -> UInt64 {
+    let id = UInt64(texture)
+    texture = 0
+    return id
   }
 
   public func bind() {

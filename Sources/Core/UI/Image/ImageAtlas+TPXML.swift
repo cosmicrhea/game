@@ -1,5 +1,3 @@
-import class Foundation.Bundle
-import struct Foundation.Data
 import class Foundation.NSObject
 import class Foundation.XMLParser
 import protocol Foundation.XMLParserDelegate

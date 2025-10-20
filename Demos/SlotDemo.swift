@@ -1,8 +1,3 @@
-import Foundation
-import GL
-import GLFW
-import GLMath
-
 /// Demo for testing the slot shader with textured border
 @MainActor
 final class SlotDemo: RenderLoop {
@@ -32,7 +27,7 @@ final class SlotDemo: RenderLoop {
     noiseScale += sin(time * 0.5) * 0.001
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .w:
       panelSize.height += 10

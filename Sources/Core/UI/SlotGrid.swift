@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// A grid of slots with configurable spacing and layout
 @MainActor
 public final class SlotGrid {

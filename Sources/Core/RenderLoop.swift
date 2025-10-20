@@ -1,9 +1,9 @@
 import enum GLFW.ButtonState
-import class GLFW.GLFWWindow
+@preconcurrency import class GLFW.GLFWWindow
 import struct GLFW.Keyboard
 import struct GLFW.Mouse
 
-typealias Window = GLFW.GLFWWindow
+public typealias Window = GLFW.GLFWWindow
 
 @MainActor
 protocol RenderLoop {

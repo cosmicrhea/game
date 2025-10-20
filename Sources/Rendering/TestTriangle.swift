@@ -1,7 +1,3 @@
-import Foundation
-import GL
-import GLMath
-
 final class TestTriangle {
   private var vertexBuffer: GLuint = 0
   private var vertexArray: GLuint = 0

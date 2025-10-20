@@ -1,6 +1,3 @@
-import Foundation
-import GL
-
 /// Text alignment options
 public enum TextAlignment: Sendable {
   case left

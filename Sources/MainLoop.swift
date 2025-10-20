@@ -1,8 +1,4 @@
 import Assimp
-import GL
-import GLFW
-import GLMath
-
 /// The main game loop that handles rendering and input.
 final class MainLoop: RenderLoop {
 
@@ -55,7 +51,7 @@ final class MainLoop: RenderLoop {
     camera.follow(playerPosition)
   }
 
-  private func handleMovement(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
+  private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
     let moveDistance = moveSpeed * deltaTime
 
     // WASD movement

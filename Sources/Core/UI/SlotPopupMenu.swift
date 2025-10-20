@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// An action that can be performed on a slot.
 public enum SlotAction: String, CaseIterable {
   case use, inspect, combine, discard

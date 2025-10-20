@@ -1,4 +1,3 @@
-import Foundation
 import STBTrueType
 
 /// Handles text layout, line wrapping, and measurement

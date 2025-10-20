@@ -1,10 +1,5 @@
-//import Foundation
-//import GL
-//import GLFW
-//import GLMath
-//
 //final class PhysicsDemo: RenderLoop {
-//  private var window: GLFWWindow?
+//  private var window: Window?
 //  private var camera = FreeCamera()
 //
 //  // Physics world
@@ -33,30 +28,30 @@
 //    self.inputPrompts = InputPromptsRenderer()
 //  }
 //
-//  @MainActor func onAttach(window: GLFWWindow) {
+//  @MainActor func onAttach(window: Window) {
 //    self.window = window
 //    setupPhysics()
 //  }
 //
-//  @MainActor func onDetach(window: GLFWWindow) {
+//  @MainActor func onDetach(window: Window) {
 //    self.window = nil
 //    physicsBodies.removeAll()
 //  }
 //
-//  @MainActor func onMouseMove(window: GLFWWindow, x: Double, y: Double) -> Bool {
+//  @MainActor func onMouseMove(window: Window, x: Double, y: Double) -> Bool {
 //    guard window.isFocused else { return false }
 //    camera.processMousePosition(Float(x), Float(y))
 //    GLScreenEffect.mousePosition = (Float(x), Float(y))
 //    return false
 //  }
 //
-//  @MainActor func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) -> Bool {
+//  @MainActor func onScroll(window: Window, xOffset: Double, yOffset: Double) -> Bool {
 //    camera.processMouseScroll(Float(yOffset))
 //    return false
 //  }
 //
 //  @MainActor func onKey(
-//    window: GLFWWindow, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier
+//    window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier
 //  ) -> Bool {
 //    guard state == .pressed else { return false }
 //

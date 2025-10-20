@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 @MainActor
 final class InventoryView: RenderLoop {
   private let promptList = PromptList(.inventory)
@@ -77,7 +73,7 @@ final class InventoryView: RenderLoop {
     slotGrid.update(deltaTime: deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     if isShowingItem {
       // Handle escape to return to inventory view
       if key == .escape {
@@ -104,7 +100,7 @@ final class InventoryView: RenderLoop {
     }
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     lastMouseX = x
     lastMouseY = y
 
@@ -119,7 +115,7 @@ final class InventoryView: RenderLoop {
     slotGrid.handleMouseMove(at: mousePosition)
   }
 
-  func onMouseButton(window: GLFWWindow, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
     if isShowingItem {
       // Forward mouse input to ItemView
       currentItemView?.onMouseButton(window: window, button: button, state: state, mods: mods)
@@ -127,7 +123,7 @@ final class InventoryView: RenderLoop {
     }
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     if isShowingItem {
       // Forward mouse input to ItemView
       currentItemView?.onMouseButtonPressed(window: window, button: button, mods: mods)
@@ -141,7 +137,7 @@ final class InventoryView: RenderLoop {
     }
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
     if isShowingItem {
       // Forward scroll input to ItemView
       currentItemView?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)

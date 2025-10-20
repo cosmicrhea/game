@@ -1,9 +1,3 @@
-import GL
-import GLMath
-import Logging
-
-import class Foundation.Bundle
-
 /// Errors that can occur during shader operations
 enum GLProgramError: Error {
   case fileReadFailed(String, String)

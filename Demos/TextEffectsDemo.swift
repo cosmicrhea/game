@@ -1,6 +1,3 @@
-import GL
-import GLFW
-import GLMath
 import STBRectPack
 
 @MainActor

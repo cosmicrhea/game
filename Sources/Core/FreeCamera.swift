@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 // Default camera values
 private let defaultYaw: Float = -90.0
 private let defaultPitch: Float = 0.0
@@ -94,7 +90,7 @@ class FreeCamera {
   }
 
   /// Processes GLFW keyboard state.
-  @MainActor func processKeyboardState(_ keyboard: GLFW.Keyboard, _ deltaTime: Float) {
+  @MainActor func processKeyboardState(_ keyboard: Keyboard, _ deltaTime: Float) {
     var speed: Float = 1
 
     if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed { speed = 3 }

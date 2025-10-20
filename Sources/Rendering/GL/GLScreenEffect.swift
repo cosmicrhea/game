@@ -1,11 +1,3 @@
-import GL
-
-import enum GLFW.GLFWSession
-
-// Usage:
-// let effect = GLScreenEffect()
-// effect.draw(texture: someTexture)
-
 class GLScreenEffect {
   @MainActor static var mousePosition: (Float, Float) = (0, 0)
 

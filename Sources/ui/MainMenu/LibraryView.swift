@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 final class LibraryView: RenderLoop {
   private let promptList = PromptList(.library)
   private var documentSlotGrid: DocumentSlotGrid
@@ -83,7 +79,7 @@ final class LibraryView: RenderLoop {
     }
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     if isShowingDocument {
       // Handle escape to return to library view
       if key == .escape {
@@ -110,7 +106,7 @@ final class LibraryView: RenderLoop {
     }
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     lastMouseX = x
     lastMouseY = y
 
@@ -124,7 +120,7 @@ final class LibraryView: RenderLoop {
     documentSlotGrid.handleMouseMove(at: mousePosition)
   }
 
-  func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     if isShowingDocument {
       // Forward mouse input to DocumentView
       currentDocumentView?.onMouseButtonPressed(window: window, button: button, mods: mods)

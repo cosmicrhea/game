@@ -1,9 +1,28 @@
 import ArgumentParser
-import GL
-import GLFW
-import GLMath
+@_exported import GL
+@_exported @preconcurrency import GLFW
+@_exported import GLMath
 import Logging
 import unistd
+
+@_exported import class Foundation.Bundle
+@_exported import struct Foundation.Data
+@_exported import struct Foundation.Date
+@_exported import class Foundation.DateFormatter
+@_exported import class Foundation.FileManager
+@_exported import class Foundation.JSONSerialization
+@_exported import struct Foundation.Locale
+@_exported import class Foundation.NSArray
+@_exported import class Foundation.NSLock
+@_exported import class Foundation.Thread
+@_exported import struct Foundation.URL
+@_exported import func Foundation.NSLocalizedString
+
+#if canImport(Darwin)
+  @_exported import Darwin
+#else
+  @_exported import Glibc
+#endif
 
 #if EDITOR
   import SwiftUI
@@ -68,6 +87,7 @@ public final class Engine {
   // Timing
   private var deltaTime: Float = 0.0
   private var lastFrame: Float = 0.0
+  private var lastTitleUpdateTime: Double = 0.0
 
   private init() {}
 
@@ -123,14 +143,16 @@ public final class Engine {
 
     window.position = .zero
     window.context.makeCurrent()
+
+    // We shouldn’t need this icon for release; it’ll be embedded in .app/.exe/etc.
     window.setIcon(Image("UI/AppIcon/icon~masked.webp").glfwImage)
 
     let dotCursorImage = Image("UI/Cursors/dot_large.png").glfwImage
     let dotCursor = Mouse.Cursor.custom(
-      dotCursorImage, center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2)
+      dotCursorImage,
+      center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2
+    )
     window.mouse.setCursor(to: dotCursor)
-
-    // Note: GLFW should automatically handle viewport updates, but we'll ensure it in beginFrame()
   }
 
   private func setupRenderer() {
@@ -160,15 +182,17 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      ItemView(item: Item.allItems[1]),
+      // ItemView(item: Item.allItems[1]),
       TitleScreenStack(),
-      MainLoop(),
+      // MainLoop(),
       MainMenu(),
-      DocumentDemo(),
+      //       DocumentDemo(),
+      // CreditsScreen(),
+
       // InventoryView(),
       // GradientDemo(),
-      CreditsScreen(),
-      // SVGDemo(),
+
+      //       SVGDemo(),
       // SlotDemo(),
       // SlotGridDemo(),
       // LibraryView(),
@@ -176,7 +200,7 @@ public final class Engine {
       // CalloutDemo(),
       // PromptListDemo(),
       // FontsDemo(),
-      // PathDemo(),
+      //       PathDemo(),
       // TextEffectsDemo(),
       // FadeDemo(),
     ]
@@ -300,6 +324,18 @@ public final class Engine {
     InputSource.player1 = allSources[nextIndex]
   }
 
+  #if os(macOS)
+    private func updateWindowTitle() {
+      let tex = GLStats.textureCount
+      let bufs = GLStats.bufferCount
+      let memMB = Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
+      window.nsWindow?.title = String(
+        format: "GL textures: %d | GL buffers: %d | Memory: %.1f MB",
+        tex, bufs, memMB
+      )
+    }
+  #endif
+
   private func runMainLoop() {
     while !window.shouldClose {
       let currentFrame = Float(GLFWSession.currentTime)
@@ -322,6 +358,14 @@ public final class Engine {
       }
 
       renderer.endFrame()
+
+      #if os(macOS)
+        let now = GLFWSession.currentTime
+        if now - lastTitleUpdateTime > 1.0 {
+          lastTitleUpdateTime = now
+          updateWindowTitle()
+        }
+      #endif
 
       if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
         requestScreenshot = true

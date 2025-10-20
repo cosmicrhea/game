@@ -1,10 +1,3 @@
-import GL
-
-import struct Foundation.Data
-import struct Foundation.Date
-import class Foundation.DateFormatter
-import struct Foundation.Locale
-import struct Foundation.URL
 import struct ImageFormats.Image
 import struct ImageFormats.RGBA
 

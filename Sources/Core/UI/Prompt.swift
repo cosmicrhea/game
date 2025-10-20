@@ -1,5 +1,3 @@
-import Foundation
-
 /// A single input prompt that can render just an icon without text.
 /// Usage: Prompt([["keyboard_tab_icon"], ["xbox_button_color_x"], ["playstation_button_color_square"]])
 public final class Prompt {

@@ -1,7 +1,3 @@
-// import GL
-import GLFW
-import GLMath
-
 final class MainMenu: RenderLoop {
   // Tab views
   private let mapView = MapView()
@@ -39,7 +35,7 @@ final class MainMenu: RenderLoop {
     activeView.update(window: window, deltaTime: deltaTime)
   }
 
-  func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     // Handle tab switching first
     if tabs.handleKeyPress(key) {
       return
@@ -57,7 +53,7 @@ final class MainMenu: RenderLoop {
     activeView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
   }
 
-  func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  func onMouseMove(window: Window, x: Double, y: Double) {
     activeView.onMouseMove(window: window, x: x, y: y)
   }
 
@@ -80,7 +76,7 @@ final class MainMenu: RenderLoop {
     activeView.onMouseButtonReleased(window: window, button: button, mods: mods)
   }
 
-  func onScroll(window: GLFWWindow, xOffset: Double, yOffset: Double) {
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
     activeView.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
   }
 

@@ -1,4 +1,4 @@
-import GLFW
+
 
 /// Simple options screen that's just a ListMenu
 final class OptionsScreen: Screen {
@@ -47,7 +47,7 @@ final class OptionsScreen: Screen {
     listMenu.update(deltaTime: deltaTime)
   }
 
-  override func onKeyPressed(window: GLFWWindow, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+  override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     if showingAudio {
       if key == .escape {
         UISound.select()
@@ -68,7 +68,7 @@ final class OptionsScreen: Screen {
     }
   }
 
-  override func onMouseButtonPressed(window: GLFWWindow, button: Mouse.Button, mods: Keyboard.Modifier) {
+  override func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     switch button {
     case .left:
       let mousePosition = Point(
@@ -94,7 +94,7 @@ final class OptionsScreen: Screen {
     }
   }
 
-  override func onMouseMove(window: GLFWWindow, x: Double, y: Double) {
+  override func onMouseMove(window: Window, x: Double, y: Double) {
     let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     if showingAudio {
       audioPanel.onMouseMove(window: window, x: x, y: y)

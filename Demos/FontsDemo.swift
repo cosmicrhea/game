@@ -1,7 +1,4 @@
-import GLFW
-
 final class FontsDemo: RenderLoop {
-
   private let fontStyles: [(TextStyle, Font.ResolvedFont)] = Font.availableFonts
     .compactMap { resolvedFont -> (TextStyle, Font.ResolvedFont)? in
       let style = TextStyle(fontName: resolvedFont.displayName, fontSize: 24, color: .white)

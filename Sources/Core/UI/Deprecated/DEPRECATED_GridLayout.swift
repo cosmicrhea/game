@@ -1,7 +1,3 @@
-import GL
-import GLFW
-import GLMath
-
 /// A reusable grid layout component with keyboard and mouse navigation
 public final class DEPRECATED_GridLayout<T> {
   // MARK: - Configuration

@@ -1,11 +1,6 @@
-import Foundation
-import GLFW
-import GLMath
-
 /// A reusable menu component that can be used in different screens
 @MainActor
 public class ListMenu {
-
   // MARK: - MenuItem
   public struct MenuItem {
     public let id: String
