@@ -107,6 +107,7 @@ final class DocumentView: RenderLoop {
     switch key {
     case .left, .a: previousPage()
     case .right, .d: nextPage()
+    case .f, .space, .enter, .numpadEnter: `continue`()
     case .escape:
       UISound.cancel()
       onDocumentFinished?()
@@ -118,15 +119,7 @@ final class DocumentView: RenderLoop {
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     switch button {
     case .left:
-      let totalPages = getTotalPageCount()
-      if currentPage >= totalPages - 1 {
-        // We're on the last page, but only trigger completion callback if not animating
-        guard !isAnimating else { return }
-        UISound.cancel()
-        onDocumentFinished?()
-      } else {
-        nextPage()
-      }
+      `continue`()
     case .right:
       UISound.cancel()
       onDocumentFinished?()
@@ -157,6 +150,18 @@ final class DocumentView: RenderLoop {
     startPageAnimation()
     startBackgroundOpacityAnimation()
     UISound.pageTurn()
+  }
+
+  private func `continue`() {
+    let totalPages = getTotalPageCount()
+    if currentPage >= totalPages - 1 {
+      // We're on the last page, but only trigger completion callback if not animating
+      guard !isAnimating else { return }
+      UISound.cancel()
+      onDocumentFinished?()
+    } else {
+      nextPage()
+    }
   }
 
   private func getTotalPageCount() -> Int {

@@ -227,17 +227,17 @@ final class InventoryView: RenderLoop {
       (.glock17, 15),
       (.glock18, 17),
       (.sigp320, 0),
-      (.beretta92, 17),
+//      (.beretta92, 17),
       (.fnx45, 15),
       (.handgunAmmo, 69),
       (.utilityKey, nil),
       (.metroKey, nil),
-      (.tagKey, nil),
+//      (.tagKey, nil),
       (.cryoGloves, nil),
       (.lighter, nil),
-      (.remington870, 8),
-      (.spas12, 10),
-      (.mp5sd, 30),
+//      (.remington870, 8),
+//      (.spas12, 10),
+//      (.mp5sd, 30),
     ]
 
     for (index, (item, quantity)) in itemsWithQuantities.enumerated() {

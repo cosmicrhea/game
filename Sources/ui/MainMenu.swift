@@ -206,7 +206,7 @@ final class MainMenuTabs {
         return Float(Engine.viewportSize.width) - totalWidth - rightMargin
       }
     }()
-    let iconY: Float = Float(Engine.viewportSize.height) - 80
+    let iconY: Float = 80
 
     for (index, tab) in Tab.allCases.enumerated() {
       let iconX = startX + Float(index) * iconSpacing

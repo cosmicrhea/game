@@ -305,8 +305,13 @@ class ItemInspectionCamera {
     // Don't process keyboard input during reset animation
     guard !isResetting else { return }
 
+    // Speed modifiers
+    var speed: Float = 1
+    if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed { speed = 3 }
+    if keyboard.state(of: .leftAlt) == .pressed || keyboard.state(of: .rightAlt) == .pressed { speed = 1 / 3 }
+
     // WASD and Arrow keys for model rotation
-    let rotationSpeed = keyboardSensitivity * deltaTime
+    let rotationSpeed = keyboardSensitivity * deltaTime * speed
 
     if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
       modelPitch += rotationSpeed
@@ -326,7 +331,7 @@ class ItemInspectionCamera {
     }
 
     // Q and E for zoom (using momentum system)
-    let zoomSpeed = keyboardZoomSpeed * deltaTime
+    let zoomSpeed = keyboardZoomSpeed * deltaTime * speed
     if keyboard.state(of: .q) == .pressed || keyboard.state(of: .equal) == .pressed {
       zoomVelocity += zoomSpeed
     }
