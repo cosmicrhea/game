@@ -11,4 +11,6 @@ final class Config {
   // Settings
   @ConfigValue("volume") var volume: Double = 0.8
   @ConfigValue("resolution") var resolution: String = "1280x720"
+  // UI Layout
+  @ConfigValue("centeredLayout") var centeredLayout: Bool = false
 }

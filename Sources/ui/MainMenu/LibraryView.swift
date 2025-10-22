@@ -2,6 +2,7 @@ final class LibraryView: RenderLoop {
   private let promptList = PromptList(.library)
   private var documentSlotGrid: DocumentSlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
+  private let itemDescriptionView = ItemDescriptionView()
 
   // Mouse tracking
   private var lastMouseX: Double = 0
@@ -41,9 +42,9 @@ final class LibraryView: RenderLoop {
 
   init() {
     documentSlotGrid = DocumentSlotGrid(
-      columns: 5,
-      rows: 3,
-      slotSize: 96.0,
+      columns: 4,
+      rows: 4,
+      slotSize: 72.0,
       spacing: 3.0,
       selectionWraps: true
     )
@@ -59,13 +60,20 @@ final class LibraryView: RenderLoop {
     recenterGrid()
   }
 
-  /// Recalculate and set the grid position to keep it centered
+  /// Recalculate and set the grid position based on layout preference
   private func recenterGrid() {
     let totalSize = documentSlotGrid.totalSize
-    let gridPosition = Point(
-      (Float(Engine.viewportSize.width) - totalSize.width) * 0.5,  // Center X
-      (Float(Engine.viewportSize.height) - totalSize.height) * 0.5  // Center Y
-    )
+    let isCentered = Config.current.centeredLayout
+    let x: Float = {
+      if isCentered {
+        return (Float(Engine.viewportSize.width) - totalSize.width) * 0.5
+      } else {
+        let rightMargin: Float = 152
+        return Float(Engine.viewportSize.width) - totalSize.width - rightMargin
+      }
+    }()
+    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 80
+    let gridPosition = Point(x, y)
     documentSlotGrid.setPosition(gridPosition)
   }
 
@@ -76,6 +84,9 @@ final class LibraryView: RenderLoop {
       recenterGrid()
       // Update document label based on current selection
       updateDocumentLabel()
+      // Keep the shared description view in sync
+      itemDescriptionView.title = currentDocumentName
+      itemDescriptionView.descriptionText = ""
     }
   }
 
@@ -83,6 +94,7 @@ final class LibraryView: RenderLoop {
     if isShowingDocument {
       // Handle escape to return to library view
       if key == .escape {
+        UISound.cancel()
         hideDocument()
         return
       }
@@ -156,8 +168,8 @@ final class LibraryView: RenderLoop {
       // Draw the prompt list
       promptList.draw()
 
-      // Draw document label
-      drawDocumentLabel()
+      // Draw document label via shared ItemDescriptionView
+      itemDescriptionView.draw()
     }
   }
 
@@ -216,13 +228,5 @@ final class LibraryView: RenderLoop {
     }
   }
 
-  private func drawDocumentLabel() {
-    // Position the label underneath the grid, centered
-    let gridPosition = documentSlotGrid.gridPosition
-    let gridWidth = documentSlotGrid.totalSize.width
-    let labelX = gridPosition.x + gridWidth * 0.5  // Center horizontally
-    let labelY: Float = 96.0
-
-    currentDocumentName.draw(at: Point(labelX, labelY), style: .itemName, anchor: .bottom)
-  }
+  // No separate drawDocumentLabel: handled by ItemDescriptionView
 }

@@ -20,6 +20,10 @@ uniform float uSpikeFreq;   // spikes per circle (e.g., 120)
 uniform float uSpikeThreshold; // only positive excursions above this create spikes (0..1)
 uniform float uGlow;        // additive halo strength
 uniform float uDangerArc;   // fraction of the circle to mark as danger (0..0.5)
+uniform float uRadius;      // base ring radius in normalized space [0,1]
+uniform float uSpikeLen;    // outward spike length scale
+uniform float uGlowRadius;  // halo thickness control (normalized)
+uniform float uInnerAlpha;  // inner haze intensity
 
 // simple hash for noise
 float hash(vec2 p) {
@@ -56,12 +60,12 @@ void main() {
     float pulse = sin(t * 3.0) * 0.05 + 1.0;
 
     // Base ring radius in normalized space
-    float baseRadius = 0.65;
+    float baseRadius = clamp(uRadius, 0.45, 0.9);
 
     // Angular noise for choppy outline and spikes (only outward)
     float n = noise(vec2(an * uSpikeFreq, t * 0.7));
     float spike = max(0.0, (n - uSpikeThreshold)) * (uSpikeAmp);
-    float targetRadius = baseRadius + spike * 0.12; // scale spikes outward
+    float targetRadius = baseRadius + spike * uSpikeLen; // scale spikes outward
 
     // Ring band with analytic AA
     float band = abs(r - targetRadius);
@@ -72,8 +76,8 @@ void main() {
     float distortion = noise(p * (6.0 + (1.0 - health) * 12.0) + t * 0.5);
     ring *= 1.0 - distortion * (1.0 - health) * 0.7;
 
-    // fade out ring as health drops
-    float alpha = smoothstep(0.0, 0.3, 1.0 - r) * mix(1.0, 0.2, 1.0 - health);
+    // Fixed radial alpha (no health-based fade)
+    float alpha = smoothstep(0.0, 0.3, 1.0 - r);
 
     // color shifts from cyan → red on a danger arc proportion near the right side
     float dangerMask = step(1.0 - clamp(uDangerArc, 0.0, 0.5), an);
@@ -96,7 +100,14 @@ void main() {
     vec3 darkenedBase = mix(baseColor.rgb, baseColor.rgb * uBgDim, dimAmount);
 
     // Additive halo around the ring
-    float glow = smoothstep(0.08, 0.0, band) * uGlow * inside;
-    vec3 outRGB = darkenedBase + color * ringAlpha + mix(vec3(0.0), baseCyan, 0.7) * glow;
+    float glow = smoothstep(uGlowRadius, 0.0, band) * uGlow * inside;
+
+    // Inner haze to avoid a dead void in the middle (strictly inside ring and rect)
+    float innerMask = 1.0 - smoothstep(targetRadius - 0.35, targetRadius, r);
+    float innerNoise = noise(p * 12.0 + vec2(t * 0.6, -t * 0.5));
+    vec3 innerColor = mix(baseCyan * 0.08, baseCyan * 0.25, innerNoise)
+                    * (uInnerAlpha * innerMask * inside);
+
+    vec3 outRGB = darkenedBase + innerColor + color * ringAlpha + mix(vec3(0.0), baseCyan, 0.7) * glow;
     FragColor = vec4(outRGB, 1.0);
 }

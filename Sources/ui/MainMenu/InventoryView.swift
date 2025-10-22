@@ -42,13 +42,21 @@ final class InventoryView: RenderLoop {
     recenterGrid()
   }
 
-  /// Recalculate and set the grid position to keep it centered
+  /// Recalculate and set the grid position based on layout preference
   private func recenterGrid() {
     let totalSize = slotGrid.totalSize
-    let gridPosition = Point(
-      (Float(Engine.viewportSize.width) - totalSize.width) * 0.5,  // Center X
-      (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 80  // Slightly above center Y
-    )
+    let isCentered = Config.current.centeredLayout
+    let x: Float = {
+      if isCentered {
+        return (Float(Engine.viewportSize.width) - totalSize.width) * 0.5
+      } else {
+        // Align to the right side with a comfortable margin
+        let rightMargin: Float = 152
+        return Float(Engine.viewportSize.width) - totalSize.width - rightMargin
+      }
+    }()
+    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 80
+    let gridPosition = Point(x, y)
     slotGrid.setPosition(gridPosition)
   }
 
@@ -200,9 +208,11 @@ final class InventoryView: RenderLoop {
   private func updateItemDescription() {
     let selectedIndex = slotGrid.selectedIndex
     if let slotData = slotGrid.getSlotData(at: selectedIndex), let item = slotData.item {
-      itemDescriptionView.item = item
+      itemDescriptionView.title = item.name
+      itemDescriptionView.descriptionText = item.description ?? ""
     } else {
-      itemDescriptionView.item = nil
+      itemDescriptionView.title = ""
+      itemDescriptionView.descriptionText = ""
     }
   }
 

@@ -469,7 +469,7 @@ public final class SlotGrid {
         return [.equip, .inspect, .exchange]
       }
     case .recovery:
-      return [.use, .inspect, .combine, .exchange, .discard]
+      return [.use, .inspect, .exchange, .discard]
     case .key:
       return [.inspect, .combine, .exchange]
     case .ammo:

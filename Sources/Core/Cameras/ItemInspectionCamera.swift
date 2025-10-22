@@ -327,10 +327,10 @@ class ItemInspectionCamera {
 
     // Q and E for zoom (using momentum system)
     let zoomSpeed = keyboardZoomSpeed * deltaTime
-    if keyboard.state(of: .q) == .pressed {
+    if keyboard.state(of: .q) == .pressed || keyboard.state(of: .equal) == .pressed {
       zoomVelocity += zoomSpeed
     }
-    if keyboard.state(of: .e) == .pressed {
+    if keyboard.state(of: .e) == .pressed || keyboard.state(of: .minus) == .pressed {
       zoomVelocity -= zoomSpeed
     }
 

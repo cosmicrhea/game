@@ -192,8 +192,7 @@ public class PopupMenu {
       return true
     case .f, .space, .enter, .numpadEnter:
       if selectedIndex < menuItems.count {
-        let item = menuItems[selectedIndex]
-        if item.isEnabled {
+        if let item = menuItems[safe: selectedIndex], item.isEnabled {
           item.action()
           UISound.select()
           hide()
@@ -292,7 +291,7 @@ public class PopupMenu {
 
       // Draw item text - properly centered with fade
       let textStyle = item.isEnabled ? TextStyle.contextMenu : TextStyle.contextMenuDisabled
-      let textHeight = textStyle.fontSize * 1.2  // Approximate text height
+      let textHeight = textStyle.fontSize * 1.1  // Approximate text height
       let textY = itemY + itemHeight - (itemHeight - textHeight) * 0.5  // Center vertically (flipped)
 
       // Apply fade to text color

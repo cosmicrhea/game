@@ -136,7 +136,7 @@ public class Callout {
       case .objective(let offset):
         let w = Float(Engine.viewportSize.width) / 3
         let h: Float = 36
-        let topMargin: Float = 96
+        let topMargin: Float = 128
         let origin = Point(0, Float(Engine.viewportSize.height) - h - topMargin - offset)
         return (Rect(origin: origin, size: Size(w, h)), .right)
       case .tutorial:
@@ -157,7 +157,7 @@ public class Callout {
         let origin = Point(Engine.viewportSize.width - w, 96)
         return (Rect(origin: origin, size: Size(w, h)), .left)
       case .healthDisplay:
-        let w: Float = 128 + 25
+        let w: Float = 128 + 44 * 2
         let h: Float = 128
         let origin = Point(0, 96)
         return (Rect(origin: origin, size: Size(w, h)), .right)
@@ -195,7 +195,8 @@ public class Callout {
       let drawBorders: Float =
         switch style {
         case .objective, .tutorial: 1.0
-        case .promptList, .itemDescription, .healthDisplay: 1.0
+        case .promptList, .itemDescription: 1.0
+        case .healthDisplay: 1.0
         }
 
       program.setFloat("uDrawBorders", value: drawBorders)

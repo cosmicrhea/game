@@ -28,7 +28,8 @@ final class ItemView: RenderLoop {
 
   init(item: Item) {
     self.item = item
-    self.itemDescriptionView.item = item
+    self.itemDescriptionView.title = item.name
+    self.itemDescriptionView.descriptionText = item.description ?? ""
 
     // Start async loading if model is available
     if let modelPath = item.modelPath {

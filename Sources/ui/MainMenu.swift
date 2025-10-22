@@ -1,4 +1,7 @@
+@MainActor
 final class MainMenu: RenderLoop {
+  private let objectiveCallout = Callout("Make your way to Kastellet", icon: .location)
+
   // Tab views
   private let mapView = MapView()
   private let inventoryView = InventoryView()
@@ -33,6 +36,7 @@ final class MainMenu: RenderLoop {
   func update(window: Window, deltaTime: Float) {
     tabs.update(deltaTime: deltaTime)
     activeView.update(window: window, deltaTime: deltaTime)
+    objectiveCallout.update(deltaTime: deltaTime)
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -89,6 +93,7 @@ final class MainMenu: RenderLoop {
       && !(tabs.activeTab == .inventory && inventoryView.showingItem)
     {
       tabs.draw()
+      objectiveCallout.draw()
     }
   }
 
@@ -96,6 +101,7 @@ final class MainMenu: RenderLoop {
 
 // MARK: - MainMenuTabs
 
+@MainActor
 final class MainMenuTabs {
   // Tab management
   enum Tab: Int, CaseIterable {
@@ -190,7 +196,16 @@ final class MainMenuTabs {
     }
     let iconSpacing: Float = 72
     let totalWidth = Float(Tab.allCases.count - 1) * iconSpacing
-    let startX = (Float(Engine.viewportSize.width) - totalWidth) * 0.5
+    let isCentered = Config.current.centeredLayout
+    let startX: Float = {
+      if isCentered {
+        return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
+      } else {
+        // Right-align the tabs; include extra margin to align with grid
+        let rightMargin: Float = 229
+        return Float(Engine.viewportSize.width) - totalWidth - rightMargin
+      }
+    }()
     let iconY: Float = Float(Engine.viewportSize.height) - 80
 
     for (index, tab) in Tab.allCases.enumerated() {
@@ -250,7 +265,16 @@ final class MainMenuTabs {
   private func drawTabIcons() {
     let iconSpacing: Float = 72
     let totalWidth = Float(Tab.allCases.count - 1) * iconSpacing
-    let startX = (Float(Engine.viewportSize.width) - totalWidth) * 0.5
+    let isCentered = Config.current.centeredLayout
+    let startX: Float = {
+      if isCentered {
+        return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
+      } else {
+        // Shift a bit further left than the grid's margin to center over grid
+        let rightMargin: Float = 229
+        return Float(Engine.viewportSize.width) - totalWidth - rightMargin
+      }
+    }()
     let iconY: Float = Float(Engine.viewportSize.height) - 80
 
     // Draw prompts further down

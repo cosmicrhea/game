@@ -134,8 +134,8 @@ void main() {
   float denominator1 = 4.0 * max(dot(N, V), 0.0) * NdotL1 + 0.0001;
   vec3 specular1 = numerator1 / denominator1;
   
-  // Boost specular for more dynamic look
-  specular1 *= 1.5;
+  // Toned down specular boost for less harsh highlights
+  specular1 *= 1.1;
   
   // Calculate BRDF for fill light
   vec3 F2 = fresnelSchlick(max(dot(H2, V), 0.0), F0);
@@ -145,8 +145,8 @@ void main() {
   float denominator2 = 4.0 * max(dot(N, V), 0.0) * NdotL2 + 0.0001;
   vec3 specular2 = numerator2 / denominator2;
   
-  // Boost specular for more dynamic look
-  specular2 *= 1.5;
+  // Toned down specular boost for less harsh highlights
+  specular2 *= 1.1;
   
   vec3 kS1 = F1;
   vec3 kD1 = vec3(1.0) - kS1;
@@ -174,9 +174,9 @@ void main() {
     environmentReflection = textureLod(environmentMap, R, roughnessLOD).rgb;
   } else {
     // Fallback to procedural environment
-    vec3 skyColor = vec3(0.4, 0.6, 1.0);  // Blue sky
+    vec3 skyColor = vec3(0.6, 0.6, 0.6);  // Neutral sky
     vec3 groundColor = vec3(0.1, 0.1, 0.05);  // Dark ground
-    vec3 horizonColor = vec3(0.2, 0.3, 0.4);  // Horizon
+    vec3 horizonColor = vec3(0.45, 0.45, 0.45);  // Neutral horizon
     
     if (R.y > 0.0) {
       environmentReflection = mix(horizonColor, skyColor, R.y);
@@ -191,12 +191,12 @@ void main() {
   // Add rim lighting effect for more pop
   float rimFactor = 1.0 - max(dot(N, V), 0.0);
   rimFactor = pow(rimFactor, 2.0);
-  vec3 rimLight = vec3(0.3, 0.4, 0.6) * rimFactor * (1.0 - materialRoughness);
+  vec3 rimLight = vec3(0.2) * rimFactor * (1.0 - materialRoughness);
   
-  vec3 environment = environmentReflection * F_env * (1.0 - materialRoughness) + rimLight;
+  vec3 environment = environmentReflection * F_env * (1.0 - materialRoughness) * 0.5 + rimLight;
   
   // Add subsurface scattering for more realistic materials
-  vec3 subsurface = albedo * 0.1 * max(0.0, -dot(N, L1)) * lightColor * lightIntensity;
+  vec3 subsurface = albedo * 0.05 * max(0.0, -dot(N, L1)) * lightColor * lightIntensity;
   
   // Enhanced material response - make metals more metallic
   vec3 enhancedSpecular1 = specular1;
@@ -215,7 +215,7 @@ void main() {
   // Combine all lighting with enhanced effects
   vec3 color = (ambient + subsurface) * microDetails + 
                (diffuse1 + enhancedSpecular1) * lightColor * lightIntensity * NdotL1 +
-               (diffuse2 + enhancedSpecular2) * fillLightColor * fillLightIntensity * NdotL2 +
+               (diffuse2 + enhancedSpecular2) * fillLightColor * fillLightIntensity * NdotL2 * 0.8 +
                environment +  // Add environment reflections
                emissive;  // Add emissive lighting
   
@@ -223,15 +223,15 @@ void main() {
   // Reinhard tone mapping with slight modification for more contrast
   vec3 reinhard = color / (color + vec3(1.0));
   
-  // Add slight contrast boost
-  vec3 contrastBoost = pow(reinhard, vec3(0.9));
+  // Remove extra contrast boost to avoid brightening
+  vec3 contrastBoost = reinhard;
   
   // Enhanced gamma correction
   color = pow(contrastBoost, vec3(1.0/2.2));
   
-  // Add slight saturation boost for more vibrant colors
+  // Slight desaturation to reduce color cast
   float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-  color = mix(vec3(luminance), color, 1.1);
+  color = mix(vec3(luminance), color, 0.9);
   
   FragColor = vec4(color, 1.0);
 }
