@@ -185,19 +185,30 @@ public struct Image: Sendable {
   /// Writes the image to a PNG file.
   /// - Parameter filePath: The path to save the PNG file to.
   public func write(toFile filePath: String) throws {
-    guard let framebufferID = framebufferID else {
-      throw ImageError.noFramebufferAvailable
-    }
-
     let width = Int(naturalSize.width)
     let height = Int(naturalSize.height)
 
     // Store the currently bound framebuffer
-    var currentFramebuffer: GLint = 0
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFramebuffer)
+    var previousFBO: GLint = 0
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFBO)
 
-    // Bind our framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, GLuint(framebufferID))
+    var fboToRead: GLuint = 0
+    var createdTempFBO = false
+
+    if let framebufferID = framebufferID {
+      fboToRead = GLuint(framebufferID)
+    } else {
+      // Create a temporary FBO and attach our texture so we can read back
+      createdTempFBO = true
+      glGenFramebuffers(1, &fboToRead)
+      glBindFramebuffer(GL_FRAMEBUFFER, fboToRead)
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GLuint(textureID), 0)
+    }
+
+    // If not created temp FBO from above, bind the existing one for readback
+    if !createdTempFBO {
+      glBindFramebuffer(GL_FRAMEBUFFER, fboToRead)
+    }
 
     // Read pixels from the framebuffer
     var pixelBytes = [UInt8](repeating: 0, count: width * height * 4)
@@ -209,8 +220,14 @@ public struct Image: Sendable {
       }
     }
 
-    // Restore the previously bound framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, GLuint(currentFramebuffer))
+    // Cleanup temporary FBO if we created one
+    if createdTempFBO {
+      var delFBO = fboToRead
+      glDeleteFramebuffers(1, &delFBO)
+    }
+
+    // Restore previous FBO binding
+    glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previousFBO))
 
     // Flip rows to convert from OpenGL's bottom-left origin to top-left
     let rowStride = width * 4

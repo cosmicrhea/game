@@ -86,10 +86,20 @@ final class CreditsScreen: RenderLoop {
     // Draw the offscreen credits image with scrolling
     if let creditsImage = creditsImage {
       let screenHeight = Engine.viewportSize.height
+      let screenWidth = Engine.viewportSize.width
       let yPosition = screenHeight - scrollOffset
-      let drawPoint = Point(0, yPosition.rounded(.down))
+      let drawY = yPosition.rounded(.down)
+      let drawX = ((screenWidth - creditsImage.naturalSize.width) / 2).rounded(.down)
 
-      creditsImage.draw(at: drawPoint)
+      // The Image.draw helper auto-flips framebuffer images by using a negative height.
+      // We want upright draw here, so pass a rect with negative height to cancel that internal flip.
+      let rect = Rect(
+        x: drawX,
+        y: drawY,
+        width: creditsImage.naturalSize.width,
+        height: -creditsImage.naturalSize.height
+      )
+      creditsImage.draw(in: rect)
     }
 
     promptList.draw()
@@ -146,14 +156,14 @@ final class CreditsScreen: RenderLoop {
     let leftColumnX = (screenWidth - totalWidth) / 2
     let rightColumnX = leftColumnX + leftColumnWidth + gap
 
-//    print(
-//      "Column positions: left=\(leftColumnX), right=\(rightColumnX), widths: \(leftColumnWidth)x\(rightColumnWidth)")
-//    print("GraphicsContext isFlipped: \(GraphicsContext.current?.isFlipped ?? false)")
+    //    print(
+    //      "Column positions: left=\(leftColumnX), right=\(rightColumnX), widths: \(leftColumnWidth)x\(rightColumnWidth)")
+    //    print("GraphicsContext isFlipped: \(GraphicsContext.current?.isFlipped ?? false)")
 
     var currentY: Float = 0  // Start at the top of the image (Y=0 in flipped coordinates)
 
     for (category, names) in CreditsData.credits {
-//      print("Drawing category: '\(category)' at Y: \(currentY)")
+      //      print("Drawing category: '\(category)' at Y: \(currentY)")
 
       // Draw category (gray text, right-aligned in left column)
       category.draw(

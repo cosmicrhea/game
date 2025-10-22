@@ -45,8 +45,8 @@ struct CLIOptions: ParsableArguments {
   @Flag(help: "Exit after 2 seconds.")
   var exit: Bool = false
 
-  #if canImport(Darwin)
-    @Flag(help: "Use Metal renderer instead of OpenGL on Apple platforms. (Unfinished.)")
+  #if canImport(Metal)
+    @Flag(help: "Use Metal renderer instead of OpenGL on supported platforms. (Unfinished.)")
     var metal: Bool = false
   #else
     let metal = false
@@ -60,7 +60,7 @@ public final class Engine {
   public static func main() { shared.run() }
 
   // TODO: learn about Swift concurrency and how to use it correctly
-  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(960, 540)
+  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 720)
   public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
   private var config: Config { .current }
@@ -103,7 +103,7 @@ public final class Engine {
 
     cli = CLIOptions.parseOrExit()
 
-    sleep(1) // ffs, apple… https://developer.apple.com/forums/thread/765445
+    sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
     setupGLFW()
     setupWindow()
@@ -187,23 +187,22 @@ public final class Engine {
       // ItemView(item: Item.allItems[1]),
       TitleScreenStack(),
       // MainLoop(),
-      MainMenu(),
-      UIDemo(),
-      DocumentDemo(),
-      // CreditsScreen(),
+      // MainMenu(),
+      // UIDemo(),
+      // DocumentDemo(),
+      CreditsScreen(),
 
-      // InventoryView(),
+      // // InventoryView(),
       // GradientDemo(),
 
-      //       SVGDemo(),
+      // SVGDemo(),
       // SlotDemo(),
       // SlotGridDemo(),
-      // LibraryView(),
-      // MainMenu(),
+      // // LibraryView(),
       // CalloutDemo(),
       // PromptListDemo(),
       // FontsDemo(),
-      //       PathDemo(),
+      // PathDemo(),
       // TextEffectsDemo(),
       // FadeDemo(),
     ]
@@ -221,7 +220,7 @@ public final class Engine {
     }
 
     currentLoopIndex = config.currentLoopIndex
-    activeLoop = loops[currentLoopIndex]
+    activeLoop = loops[safe: currentLoopIndex] ?? loops.first
     activeLoop.onAttach(window: window)
 
     // Schedule CLI actions relative to current time

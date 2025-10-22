@@ -8,6 +8,10 @@ private let maxDistance: Float = 0.6  // Don't need to go as far
 /// This keeps lighting consistent while allowing you to see all sides of the object.
 /// Note: Unlike other cameras, this one provides a model matrix for rotating the object.
 class ItemInspectionCamera {
+  enum VerticalRotationMode {
+    case rotateModel
+    case orbitCamera
+  }
   // Fixed camera position - we don't move the camera, we rotate the model.
   var position: vec3
 
@@ -17,6 +21,9 @@ class ItemInspectionCamera {
   // Model rotation angles (this is what we change, not camera angles)
   var modelYaw: Float
   var modelPitch: Float
+
+  // Whether vertical input rotates the model or orbits the camera
+  var verticalRotationMode: VerticalRotationMode = .rotateModel
 
   // Distance from camera to object (for zoom)
   var distance: Float
@@ -90,9 +97,14 @@ class ItemInspectionCamera {
 
   /// Returns the model transformation matrix (this is what rotates the object)
   func getModelMatrix() -> mat4 {
-    // Only rotate the model around Y-axis (yaw) - like spinning a turntable
-    // The pitch is handled by moving the camera up/down instead
-    return GLMath.rotate(mat4(1), radians(modelYaw), vec3(0, 1, 0))
+    // When in rotateModel mode, apply pitch (X) then yaw (Y) to the model
+    // Otherwise, only yaw rotates the model; pitch is handled by camera orbit
+    var model = mat4(1)
+    if verticalRotationMode == .rotateModel {
+      model = GLMath.rotate(model, radians(modelPitch), vec3(1, 0, 0))
+    }
+    model = GLMath.rotate(model, radians(modelYaw), vec3(0, 1, 0))
+    return model
   }
 
   /// Update the camera with momentum/inertia and reset animation
@@ -363,14 +375,25 @@ class ItemInspectionCamera {
 
   /// Updates the camera position based on target, distance, and pitch
   private func updateCameraPosition() {
-    // Calculate camera position based on distance and pitch
-    // This is similar to OrbitCamera but we keep the model at the center
-    position =
-      target
-      + vec3(
-        0.0,  // Keep X at 0 for simple rotation
-        distance * GLMath.sin(radians(modelPitch)),  // Y based on pitch
-        distance * GLMath.cos(radians(modelPitch))  // Z based on pitch
-      )
+    if verticalRotationMode == .orbitCamera {
+      // Calculate camera position based on distance and pitch
+      // This is similar to OrbitCamera but we keep the model at the center
+      position =
+        target
+        + vec3(
+          0.0,
+          distance * GLMath.sin(radians(modelPitch)),
+          distance * GLMath.cos(radians(modelPitch))
+        )
+    } else {
+      // Keep camera on the horizontal plane while rotating the model vertically
+      position = target + vec3(0.0, 0.0, distance)
+    }
+  }
+
+  /// Toggle vertical rotation behavior between rotating the model and orbiting the camera
+  func toggleVerticalRotationMode() {
+    verticalRotationMode = (verticalRotationMode == .rotateModel) ? .orbitCamera : .rotateModel
+    updateCameraPosition()
   }
 }
