@@ -184,27 +184,27 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      // ItemView(item: Item.allItems[1]),
+      ItemView(item: Item.sigp320),
       TitleScreenStack(),
-      // MainLoop(),
-      // MainMenu(),
-      // UIDemo(),
-      // DocumentDemo(),
+       MainLoop(),
+       MainMenu(),
+       UIDemo(),
+       DocumentDemo(),
       CreditsScreen(),
 
       // // InventoryView(),
       // GradientDemo(),
 
-      // SVGDemo(),
-      // SlotDemo(),
-      // SlotGridDemo(),
-      // // LibraryView(),
-      // CalloutDemo(),
-      // PromptListDemo(),
-      // FontsDemo(),
-      // PathDemo(),
-      // TextEffectsDemo(),
-      // FadeDemo(),
+       SVGDemo(),
+       SlotDemo(),
+       SlotGridDemo(),
+       // LibraryView(),
+       CalloutDemo(),
+       PromptListDemo(),
+       FontsDemo(),
+       PathDemo(),
+       TextEffectsDemo(),
+       FadeDemo(),
     ]
 
     // Handle CLI demo selection

@@ -40,6 +40,14 @@ enum CreditsData {
       // https://www.turbosquid.com/Search/Artists/at1012
       // https://www.turbosquid.com/3d-models/commercial-steel-doors-1575549
       "at1012",
+
+      // https://sketchfab.com/beyondmatter
+      // https://sketchfab.com/3d-models/grenade-launcher-ammo-e021bc26e7ae4371a909b1ea0f185371
+      "beyondmatter",
+
+      // https://sketchfab.com/ecler
+      // Weapons
+      "Ecler",
     ],
 
     "Sound Designers": [
@@ -106,6 +114,12 @@ enum CreditsData {
 
   static let logos = [
     [
+      Image("UI/Credits/Jolt.png"),
+      Image("UI/Credits/Recast.png"),
+      Image("UI/Credits/Swift.png"),
+      // Image("UI/Credits/Xcode.png"),
+    ],
+    [
       Image("UI/Credits/OpenGL.png"),
       Image("UI/Credits/glTF.png"),
     ],
@@ -114,12 +128,6 @@ enum CreditsData {
     ],
     [
       Image("UI/Credits/Assimp.png")
-    ],
-    [
-      Image("UI/Credits/Recast.png"),
-      Image("UI/Credits/Jolt.png"),
-      Image("UI/Credits/Swift.png"),
-      // Image("UI/Credits/Xcode.png"),
     ],
   ]
 }

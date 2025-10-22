@@ -85,14 +85,14 @@
         }
       }
       .onAppear {
-        let allItems = object.getEditableProperties()
+        let editableProperties = object.getEditableProperties()
 
         // Check if we have grouped properties by looking at the first item
-        if allItems.first is EditablePropertyGroup {
-          groups = allItems.compactMap { $0 as? EditablePropertyGroup }
+        if editableProperties.first is EditablePropertyGroup {
+          groups = editableProperties.compactMap { $0 as? EditablePropertyGroup }
           properties = []
         } else {
-          properties = allItems.compactMap { $0 as? AnyEditableProperty }
+          properties = editableProperties.compactMap { $0 as? AnyEditableProperty }
           groups = []
         }
       }

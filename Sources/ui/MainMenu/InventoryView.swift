@@ -8,12 +8,10 @@ final class InventoryView: RenderLoop {
   private var lastMouseX: Double = 0
   private var lastMouseY: Double = 0
 
-  // Sample items for testing
-  private var sampleItems: [Item] = []
-
   // Item label properties
   private var currentItemName: String = ""
   private var currentItemDescription: String = ""
+  private let itemCallout = Callout(style: .itemDescription)
 
   // Item inspection state
   private var currentItemView: ItemView? = nil
@@ -27,16 +25,13 @@ final class InventoryView: RenderLoop {
   init() {
     slotGrid = SlotGrid(
       columns: 4,
-      rows: 2,
+      rows: 4,
       slotSize: 96.0,
       spacing: 3.0
     )
     slotGrid.onSlotAction = { [weak self] action, slotIndex in
       self?.handleSlotAction(action, slotIndex: slotIndex)
     }
-
-    // Load sample items
-    loadSampleItems()
 
     // Set up slot data with some sample items
     setupSlotData()
@@ -186,6 +181,8 @@ final class InventoryView: RenderLoop {
   }
 
   private func drawItemLabel() {
+    itemCallout.draw()
+
     // Position the label consistently from the bottom of the screen
     //let screenWidth = Engine.viewportSize.width
     let labelX: Float = 40  // Left-align with some margin
@@ -217,25 +214,27 @@ final class InventoryView: RenderLoop {
       at: Point(labelX, descriptionY), style: descriptionStyle)
   }
 
-  private func loadSampleItems() {
-    // Load weapon images from Items/Weapons
-    sampleItems = Item.allItems
-  }
-
   private func setupSlotData() {
     let totalSlots = slotGrid.columns * slotGrid.rows
     var slotData: [SlotData?] = Array(repeating: nil, count: totalSlots)
 
     // Place items with different quantities
     let itemsWithQuantities: [(Item, Int?)] = [
-      (sampleItems[0], nil),
-      (sampleItems[1], 15),
-      (sampleItems[2], 17),
-      (sampleItems[3], 0),
-      (sampleItems[4], 69),
-      (sampleItems[5], nil),
-      (sampleItems[6], nil),
-      (sampleItems[7], nil),
+      (.knife, nil),
+      (.glock17, 15),
+      (.glock18, 17),
+      (.sigp320, 0),
+      (.beretta92, 17),
+      (.fnx45, 15),
+      (.handgunAmmo, 69),
+      (.utilityKey, nil),
+      (.metroKey, nil),
+      (.tagKey, nil),
+      (.cryoGloves, nil),
+      (.lighter, nil),
+      (.remington870, 8),
+      (.spas12, 10),
+      (.mp5sd, 30),
     ]
 
     for (index, (item, quantity)) in itemsWithQuantities.enumerated() {

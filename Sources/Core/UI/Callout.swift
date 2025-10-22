@@ -16,6 +16,8 @@ public enum CalloutStyle {
   case tutorial
   /// Prompt list callout - bottom-right with custom width
   case promptList(width: Float = Engine.viewportSize.width / 3)
+  /// Item description - bottom-ish-right
+  case itemDescription
 }
 
 /// Fade effect options for callout edges.
@@ -31,7 +33,7 @@ public enum CalloutFade {
 }
 
 /// A UI callout component that displays text and optional icons with animated transitions.
-public struct Callout {
+public class Callout {
   // Content
   /// The text content to display in the callout.
   public var text: String
@@ -101,7 +103,7 @@ public struct Callout {
 
   /// Updates the callout's animation state for the current frame.
   /// - Parameter deltaTime: Time elapsed since the last frame in seconds.
-  @MainActor public mutating func update(deltaTime: Float) {
+  @MainActor public func update(deltaTime: Float) {
     let target: Float = targetVisible ? 1 : 0
     let springForce = (target - animationProgress) * springStiffness
     let dampingForce = -animationVelocity * springDamping
@@ -117,7 +119,7 @@ public struct Callout {
 
   /// Draws the callout using its style to determine position and behavior.
   /// - Parameter context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  @MainActor public mutating func draw(context: GraphicsContext? = nil) {
+  @MainActor public func draw(context: GraphicsContext? = nil) {
     // Update icon cache if needed
     if cachedIcon == nil, let icon = icon, let path = iconResourcePath(icon) {
       cachedIcon = Image(path)
@@ -147,6 +149,11 @@ public struct Callout {
         let h: Float = 57
         let origin = Point(Float(Engine.viewportSize.width) - w, 0)
         return (Rect(origin: origin, size: Size(w, h)), .left)
+      case .itemDescription:
+        let w: Float = 180
+        let h: Float = 200
+        let origin = Point(Engine.viewportSize.width - w, Engine.viewportSize.height - 120)
+        return (Rect(origin: origin, size: Size(w, h)), .left)
       }
     }()
 
@@ -160,8 +167,8 @@ public struct Callout {
     // Configure fades
     let fadeWidth: Float = {
       switch style {
-      case .promptList:
-        return 50.0  // Fixed 50px fade for prompt list
+      case .promptList, .itemDescription:
+        return 50.0  // Fixed 50px fade for prompt list & item description
       case .objective, .tutorial:
         return max(0, fadeWidthRatio) * w  // Use ratio for other styles
       }
@@ -181,7 +188,7 @@ public struct Callout {
       let drawBorders: Float =
         switch style {
         case .objective, .tutorial: 1.0
-        case .promptList: 1.0
+        case .promptList, .itemDescription: 1.0
         }
 
       program.setFloat("uDrawBorders", value: drawBorders)
@@ -195,7 +202,7 @@ public struct Callout {
       case .objective:
         // Apply slide animation for objectives
         return left + iconPaddingX - slideDistance * (1.0 - animationProgress)
-      case .tutorial, .promptList:
+      case .tutorial, .promptList, .itemDescription:
         // No slide animation for other styles
         return left + iconPaddingX
       }
@@ -233,7 +240,7 @@ public struct Callout {
       let contentStartX = baseCenter.0 - totalContentWidth * 0.5
       let textX = contentStartX + (cachedIcon != nil ? 20 + iconTextGap : 0)
       labelPoint = Point(textX, lineTopY)
-    case .objective, .promptList:
+    case .objective, .promptList, .itemDescription:
       // Use the existing left-aligned positioning
       labelPoint = Point(contentX, lineTopY)
     }
@@ -241,6 +248,8 @@ public struct Callout {
     // Don't draw text for promptList style
     if case .promptList = style {
       // Skip text for promptList
+    } else if case .itemDescription = style {
+      // Ditto
     } else {
       text.draw(at: labelPoint, style: labelStyle, context: context)
     }
