@@ -1,6 +1,5 @@
+import Miniaudio
 
-
-/// Audio options implemented using the generic OptionsPanel.
 final class AudioOptionsPanel: OptionsPanel {
   private let voice = Slider(minimumValue: 0, maximumValue: 100, value: 70, tickCount: 11)
   private let music = Slider(minimumValue: 0, maximumValue: 100, value: 65, tickCount: 11)
@@ -17,6 +16,10 @@ final class AudioOptionsPanel: OptionsPanel {
 
   override init() {
     super.init()
+
+    print(try! AudioDevice.outputDevices.map { ($0.id, $0.name, $0.isDefault) })
+
+    ui.onValueChanged = { UISound.volume = $0 / 100 }
 
     setRows([
       Row(label: "Voice Volume", control: voice),

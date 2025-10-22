@@ -17,6 +17,7 @@ public final class SlotGrid {
 
   // MARK: - Rendering
   private var slotEffect = GLScreenEffect("Common/Slot")
+  private let quantityAnchor: AnchorPoint = .bottomRight
 
   // MARK: - Colors
   public var slotColor = Color.slotBackground
@@ -338,7 +339,7 @@ public final class SlotGrid {
       at: slotCenter,
       slotIndex: slotIndex,
       slotPosition: slotPosition,
-      availableActions: [.use, .inspect, .combine, .discard],
+      availableActions: [.use, .inspect, .combine, .exchange, .discard],
       openedWithKeyboard: openedWithKeyboard,
       slotSize: Size(slotSize, slotSize)
     )
@@ -410,7 +411,7 @@ public final class SlotGrid {
         )
         image.draw(in: imageRect)
 
-        // Draw quantity number in bottom-right corner if should show quantity
+        // Draw quantity number with configurable bottom anchor if should show quantity
         if slotData.shouldShowQuantity {
           let quantityText = "\(slotData.quantity!)"
           let quantityStyle = TextStyle(
@@ -422,18 +423,37 @@ public final class SlotGrid {
           )
 
           let fadeWidth: Float = 8 + quantityText.size(with: quantityStyle).width * 2
-          let fadeRect = Rect(origin: slotPosition + Point(3, 5), size: Size(fadeWidth, 21))
-          GraphicsContext.current?.drawLinearGradient(
-            Gradient(startingColor: .black.withAlphaComponent(0.8), endingColor: .clear),
-            // Gradient(colors: [.clear, Color.black.withAlphaComponent(0.8), .clear]),
-            in: fadeRect,
-            angle: 0
-          )
+          let fadeOrigin: Point = {
+            switch quantityAnchor {
+            case .bottomRight:
+              return Point(slotPosition.x + slotSize - fadeWidth - 3, slotPosition.y + 5)
+            default:
+              return Point(slotPosition.x + 3, slotPosition.y + 5)
+            }
+          }()
+          let fadeRect = Rect(origin: fadeOrigin, size: Size(fadeWidth, 21))
+          let gradient: Gradient = {
+            switch quantityAnchor {
+            case .bottomRight:
+              return Gradient(startingColor: .clear, endingColor: .black.withAlphaComponent(0.8))
+            default:
+              return Gradient(startingColor: .black.withAlphaComponent(0.8), endingColor: .clear)
+            }
+          }()
+          GraphicsContext.current?.drawLinearGradient(gradient, in: fadeRect, angle: 0)
 
-          // Position in bottom-right corner of slot with proper padding
-          let quantityX = slotPosition.x + 9
+          // Position with proper padding based on anchor
+          let quantityX: Float = {
+            switch quantityAnchor {
+            case .bottomRight:
+              return slotPosition.x + slotSize - 9
+            default:
+              return slotPosition.x + 9
+            }
+          }()
           let quantityY = slotPosition.y + 6
-          quantityText.draw(at: Point(quantityX, quantityY), style: quantityStyle, anchor: .bottomLeft)
+          let textAnchor: AnchorPoint = (quantityAnchor == .bottomRight) ? .bottomRight : .bottomLeft
+          quantityText.draw(at: Point(quantityX, quantityY), style: quantityStyle, anchor: textAnchor)
         }
       }
     }

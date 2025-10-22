@@ -174,15 +174,6 @@ final class SlotGridDemo: RenderLoop {
   // MARK: - Private Methods
 
   private func handleSlotAction(_ action: SlotAction, slotIndex: Int) {
-    switch action {
-    case .use:
-      lastAction = "Used slot \(slotIndex)"
-    case .inspect:
-      lastAction = "Inspected slot \(slotIndex)"
-    case .combine:
-      lastAction = "Combined slot \(slotIndex)"
-    case .discard:
-      lastAction = "Discarded slot \(slotIndex)"
-    }
+    print(action, slotIndex)
   }
 }

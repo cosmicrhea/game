@@ -1,5 +1,7 @@
 // Credit goes to https://github.com/chrisaljoudi/swift-log-oslog
 
+#if canImport(os)
+
 import class Foundation.NSString
 import Logging
 import struct Logging.Logger
@@ -85,3 +87,4 @@ extension OSLogType {
   }
 }
 
+#endif

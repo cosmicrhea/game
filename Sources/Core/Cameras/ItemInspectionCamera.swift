@@ -113,6 +113,8 @@ class ItemInspectionCamera {
       let targetPanOffset = vec3(0, 0, 0)
       panOffset = resetStartPanOffset + (targetPanOffset - resetStartPanOffset) * easedProgress
       target = initialTarget + panOffset
+      // Update camera position as distance/pitch/target change during reset
+      updateCameraPosition()
 
       if progress >= 1.0 {
         isResetting = false
@@ -121,6 +123,8 @@ class ItemInspectionCamera {
         distance = resetTargetDistance
         panOffset = vec3(0, 0, 0)
         target = initialTarget
+        // Ensure final camera position matches the reset targets
+        updateCameraPosition()
       }
       return
     }

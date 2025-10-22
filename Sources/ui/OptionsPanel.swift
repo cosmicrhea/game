@@ -1,6 +1,3 @@
-
-
-
 /// Protocol for focusable, mouse/keyboard-driven option controls (e.g., Slider, Picker).
 @MainActor
 public protocol OptionsControl: AnyObject {
@@ -23,8 +20,8 @@ class OptionsPanel: Screen {
 
   // Layout configuration
   var sidePadding: Float = 20
-  var contentTop: Float = 24
-  var contentBottom: Float = 24
+  var topMargin: Float = 96
+  var bottomMargin: Float = 20
   var rowHeight: Float = 60
   var labelStyle: TextStyle = TextStyle.menuItem.withFontSize(22).withColor(.gray300)
   var rightPaneRatio: Float = 0.70
@@ -126,9 +123,9 @@ class OptionsPanel: Screen {
 
     let left = w * (1.0 - rightPaneRatio)
     let width = w * rightPaneRatio - 2 * sidePadding
-    let top = contentTop
-    let height = h - contentTop - contentBottom
-    panelRect = Rect(x: left + sidePadding, y: top, width: width, height: height)
+    let bottom = bottomMargin
+    let height = h - bottomMargin - topMargin
+    panelRect = Rect(x: left + sidePadding, y: bottom, width: width, height: height)
 
     // Rows rects and control frames anchored to bottom of panelRect
     let totalRowsHeight = Float(rows.count) * rowHeight

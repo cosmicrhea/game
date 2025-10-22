@@ -13,10 +13,10 @@ import unistd
 @_exported import class Foundation.JSONSerialization
 @_exported import struct Foundation.Locale
 @_exported import class Foundation.NSArray
+@_exported import func Foundation.NSLocalizedString
 @_exported import class Foundation.NSLock
 @_exported import class Foundation.Thread
 @_exported import struct Foundation.URL
-@_exported import func Foundation.NSLocalizedString
 
 #if canImport(Darwin)
   @_exported import Darwin
@@ -60,7 +60,7 @@ public final class Engine {
   public static func main() { shared.run() }
 
   // TODO: learn about Swift concurrency and how to use it correctly
-  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 720)
+  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(960, 540)
   public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
   private var config: Config { .current }
@@ -79,10 +79,11 @@ public final class Engine {
     private var editorHostingView: NSHostingView<EditorView>?
   #endif
 
-  // State variables - these are now managed by config
+  // State variables
   private var requestScreenshot = false
   private var scheduleScreenshotAt: Double? = nil
   private var scheduleExitAt: Double? = nil
+  private var showStats = false
 
   // Timing
   private var deltaTime: Float = 0.0
@@ -98,9 +99,12 @@ public final class Engine {
       print("|ω･)ﾉ♡☆")
     #endif
 
+    LoggingSystem.bootstrap { OSLogHandler(label: $0) }
+
     cli = CLIOptions.parseOrExit()
 
-    setupLogging()
+    sleep(1) // ffs, apple… https://developer.apple.com/forums/thread/765445
+
     setupGLFW()
     setupWindow()
     setupRenderer()
@@ -108,11 +112,6 @@ public final class Engine {
     setupInputHandlers()
 
     runMainLoop()
-  }
-
-  private func setupLogging() {
-    LoggingSystem.bootstrap { OSLogHandler(label: $0) }
-    sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
   }
 
   private func setupGLFW() {
@@ -127,11 +126,20 @@ public final class Engine {
 
   private func setupWindow() {
     window = try! GLFWWindow(width: 1280, height: 720, title: "")
-    window.nsWindow?.styleMask.insert(.fullSizeContentView)
-    window.nsWindow?.titlebarAppearsTransparent = true
-    window.nsWindow?.toolbar = .init()
-    //window.nsWindow?.hideStandardWindowButtons()
-    //window.nsWindow?.darkenStandardWindowButtons()
+
+    #if canImport(AppKit)
+      NSWindowSwizzling.run()
+      window.nsWindow?.styleMask.insert(.fullSizeContentView)
+      window.nsWindow?.titlebarAppearsTransparent = true
+      window.nsWindow?.toolbar = .init()
+      //window.nsWindow?.hideStandardWindowButtons()
+      window.nsWindow?.darkenStandardWindowButtons()
+    //      window.nsWindow?.setValue(NSTextField(), forKey: "_customTitleCell")
+    //    print(window.nsWindow?.value(forKey: "titlebarViewController"))
+    //    print((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view"))
+    //    print(((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view") as? NSObject)?.value(forKey: "_titleTextFieldView"))
+    //    print(((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view") as? NSObject)?.value(forKey: "titleFont"))
+    #endif
 
     #if EDITOR
       editorHostingView = NSHostingView(rootView: EditorView())
@@ -144,15 +152,9 @@ public final class Engine {
     window.position = .zero
     window.context.makeCurrent()
 
-    // We shouldn’t need this icon for release; it’ll be embedded in .app/.exe/etc.
-    window.setIcon(Image("UI/AppIcon/icon~masked.webp").glfwImage)
-
-    let dotCursorImage = Image("UI/Cursors/dot_large.png").glfwImage
-    let dotCursor = Mouse.Cursor.custom(
-      dotCursorImage,
-      center: GLFW.Point(dotCursorImage.width, dotCursorImage.height) / 2
-    )
-    window.mouse.setCursor(to: dotCursor)
+    // We shouldn’t need this icon thing for release; it’ll be embedded in .app/.exe/etc.
+    window.setIcon(GLFW.Image("UI/AppIcon/icon~masked.webp"))
+    window.mouse.setCursor(to: .dot)
   }
 
   private func setupRenderer() {
@@ -186,7 +188,8 @@ public final class Engine {
       TitleScreenStack(),
       // MainLoop(),
       MainMenu(),
-      //       DocumentDemo(),
+      UIDemo(),
+      DocumentDemo(),
       // CreditsScreen(),
 
       // InventoryView(),
@@ -232,7 +235,7 @@ public final class Engine {
       self.activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onKeyPressed(window: window, key: key, scancode: Int32(scancode), mods: mods)
-        handleGlobalDebugCommand(key: key)
+        handleGlobalDebugCommand(key: key, modifiers: mods)
       }
     }
 
@@ -259,7 +262,7 @@ public final class Engine {
     }
   }
 
-  private func handleGlobalDebugCommand(key: Keyboard.Key) {
+  private func handleGlobalDebugCommand(key: Keyboard.Key, modifiers: Keyboard.Modifier) {
     switch key {
     case .comma:
       UISound.select()
@@ -282,12 +285,22 @@ public final class Engine {
       UISound.select()
       cycleInputSources()
 
-    #if EDITOR
-      case .backslash:
+    case .backslash:
+      if modifiers.contains(.shift) {
         UISound.select()
-        config.editorEnabled.toggle()
-        editorHostingView?.isHidden = !config.editorEnabled
-    #endif
+        showStats.toggle()
+        if showStats {
+          updateWindowTitle()
+        } else {
+          window.title = ""
+        }
+      } else {
+        #if EDITOR
+          UISound.select()
+          config.editorEnabled.toggle()
+          editorHostingView?.isHidden = !config.editorEnabled
+        #endif
+      }
 
     default:
       break
@@ -329,7 +342,7 @@ public final class Engine {
       let tex = GLStats.textureCount
       let bufs = GLStats.bufferCount
       let memMB = Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
-      window.nsWindow?.title = String(
+      window.title = String(
         format: "GL textures: %d | GL buffers: %d | Memory: %.1f MB",
         tex, bufs, memMB
       )
@@ -359,13 +372,10 @@ public final class Engine {
 
       renderer.endFrame()
 
-      #if os(macOS)
-        let now = GLFWSession.currentTime
-        if now - lastTitleUpdateTime > 1.0 {
-          lastTitleUpdateTime = now
-          updateWindowTitle()
-        }
-      #endif
+      if showStats && GLFWSession.currentTime - lastTitleUpdateTime > 1.0 {
+        lastTitleUpdateTime = GLFWSession.currentTime
+        updateWindowTitle()
+      }
 
       if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
         requestScreenshot = true
@@ -387,30 +397,3 @@ public final class Engine {
     }
   }
 }
-
-#if os(macOS)
-  import class AppKit.NSWindow
-  import CoreImage.CIFilterBuiltins
-
-  extension NSWindow {
-    func hideStandardWindowButtons() {
-      let buttonTypes: [ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-      for type in buttonTypes {
-        guard let button = standardWindowButton(type) else { continue }
-        button.isHidden = true
-      }
-    }
-
-    func darkenStandardWindowButtons() {
-      let filter = CIFilter.colorControls()
-      filter.brightness = -0.4
-      let buttonTypes: [ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-      for type in buttonTypes {
-        guard let button = standardWindowButton(type) else { continue }
-        button.wantsLayer = true
-        button.layer?.filters = [filter]
-        button.layer?.opacity = 0.6
-      }
-    }
-  }
-#endif

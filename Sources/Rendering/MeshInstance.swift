@@ -203,7 +203,7 @@ class MeshInstance: @unchecked Sendable {
         do {
           let scenePath = Bundle.module.path(forResource: path, ofType: "glb")!
           let scene = try Assimp.Scene(
-            file: scenePath, flags: [.triangulate, .validateDataStructure, .flipUVs, .calcTangentSpace]
+            file: scenePath, flags: [.triangulate, /*.validateDataStructure, */ .flipUVs, .calcTangentSpace]
           ) {
             progress in
             Task { @MainActor in
@@ -227,7 +227,8 @@ class MeshInstance: @unchecked Sendable {
         .filter { $0.numberOfVertices > 0 }
         .map { mesh in
           let transformMatrix = scene.getTransformMatrix(for: mesh)
-          return MeshInstance(scene: scene, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: scene.filePath)
+          return MeshInstance(
+            scene: scene, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: scene.filePath)
         }
     }
 
@@ -401,7 +402,7 @@ class MeshInstance: @unchecked Sendable {
       return
     }
 
-    logger.info("Loading \(texType) texture with path \(texturePath)")
+    //logger.info("Loading \(texType) texture with path \(texturePath)")
 
     // Check if it's an embedded texture (starts with "*")
     if texturePath.hasPrefix("*") {
@@ -501,7 +502,7 @@ class MeshInstance: @unchecked Sendable {
       logger.trace("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
 
       do {
-        let image: ImageFormats.Image<ImageFormats.RGBA>
+        var image: ImageFormats.Image<ImageFormats.RGBA>?
 
         // Try to determine format from hint
         if texture.achFormatHint.lowercased().contains("png") {
@@ -515,17 +516,31 @@ class MeshInstance: @unchecked Sendable {
         } else if texture.achFormatHint.lowercased().contains("webp") {
           image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
           onProgress(1.0)
+        } else if texture.achFormatHint.lowercased().contains("jpg")
+          || texture.achFormatHint.lowercased().contains("jpeg")
+        {
+          // Decode JPEG as RGB and upload as RGB
+          let jpg = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: data)
+          jpg.bytes.withUnsafeBytes { bytes in
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGB,
+              GLsizei(jpg.width), GLsizei(jpg.height),
+              0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
+          onProgress(1.0)
+          image = nil
         } else {
           // Try generic loader
           image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: data)
           onProgress(1.0)
         }
-
-        image.bytes.withUnsafeBytes { bytes in
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        if let image {
+          image.bytes.withUnsafeBytes { bytes in
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         }
       } catch {
         logger.error("Failed to decode compressed texture: \(error)")
@@ -588,28 +603,42 @@ class MeshInstance: @unchecked Sendable {
       logger.trace("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
 
       do {
-        let image: ImageFormats.Image<ImageFormats.RGBA>
-
         // Try to determine format from hint
         if texture.achFormatHint.lowercased().contains("png") {
-          image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { progress in
+          let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { progress in
             //print("Loading PNG texture: \(progress * 100)%")
           }
+          image.bytes.withUnsafeBytes { bytes in
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         } else if texture.achFormatHint.lowercased().contains("webp") {
-          image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
+          let image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
+          image.bytes.withUnsafeBytes { bytes in
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
+
+        } else if texture.achFormatHint.lowercased().contains("jpg")
+          || texture.achFormatHint.lowercased().contains("jpeg")
+        {
+          let image = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: data)
+          image.bytes.withUnsafeBytes { bytes in
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGB,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         } else {
-          // Try generic loader
-          image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: data)
+          logger.error("Unsupported texture format: \(texture.achFormatHint)")
         }
 
-        image.bytes.withUnsafeBytes { bytes in
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
-        }
       } catch {
-        logger.error("Failed to decode compressed texture \(texturePath): \(error)")
+        logger.error("Failed to decode compressed \(texture.achFormatHint) texture \(texturePath): \(error)")
         glBindTexture(GL_TEXTURE_2D, 0)
         return
       }

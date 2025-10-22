@@ -127,6 +127,61 @@ public struct Image: Sendable {
     )
   }
 
+  /// Draws the image in the specified rectangle with rotation and scale applied around the rect center.
+  /// - Parameters:
+  ///   - rect: Destination rectangle in points.
+  ///   - rotation: Rotation in radians, applied around rect center.
+  ///   - scale: Optional scale (default 1,1), applied around rect center.
+  ///   - tint: Optional color tint.
+  ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
+  public func draw(
+    in rect: Rect,
+    rotation: Float,
+    scale: Point = Point(1, 1),
+    tint: Color? = nil,
+    context: GraphicsContext? = nil
+  ) {
+    let ctx = context ?? GraphicsContext.current
+    guard let ctx else { return }
+    guard textureID != 0 else { return }
+
+    // Framebuffer-backed images need Y-flip due to OpenGL coordinate system differences
+    let adjustedRect: Rect
+    if framebufferID != nil {
+      adjustedRect = Rect(
+        x: rect.minX,
+        y: rect.minY,
+        width: rect.width,
+        height: -rect.height
+      )
+    } else {
+      adjustedRect = rect
+    }
+
+    ctx.renderer.drawImageTransformed(
+      textureID: textureID,
+      in: adjustedRect,
+      rotation: rotation,
+      scale: scale,
+      tint: tint
+    )
+  }
+
+  /// Draws the image at a point with optional size, rotation, and scale.
+  /// Note: Rotation is applied around the center of the destination rect.
+  public func draw(
+    at point: Point,
+    size: Size? = nil,
+    rotation: Float,
+    scale: Point = Point(1, 1),
+    tint: Color? = nil,
+    context: GraphicsContext? = nil
+  ) {
+    let drawSize = size ?? naturalSize
+    let rect = Rect(origin: point, size: drawSize)
+    draw(in: rect, rotation: rotation, scale: scale, tint: tint, context: context)
+  }
+
   /// Writes the image to a PNG file.
   /// - Parameter filePath: The path to save the PNG file to.
   public func write(toFile filePath: String) throws {

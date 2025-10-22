@@ -1,6 +1,12 @@
 /// An action that can be performed on a slot.
 public enum SlotAction: String, CaseIterable {
-  case use, inspect, combine, discard
+  case use
+//  case equip
+//  case unequip
+  case inspect
+  case combine
+  case exchange
+  case discard
 }
 
 extension SlotAction {
@@ -12,15 +18,13 @@ extension SlotAction {
     case .use: return Image("UI/Icons/phosphor-icons/gear-bold.svg", size: 20)
     case .inspect: return Image("UI/Icons/phosphor-icons/magnifying-glass-bold.svg", size: 20)
     case .combine: return Image("UI/Icons/phosphor-icons/plus-circle-bold.svg", size: 20)
+    case .exchange: return Image("UI/Icons/phosphor-icons/hand-arrow-up-bold.svg", size: 20)
     case .discard: return Image("UI/Icons/phosphor-icons/trash-bold.svg", size: 20)
     }
   }
 
   func isEnabled(for slotIndex: Int) -> Bool {
-    switch self {
-    case .use, .inspect, .combine, .discard:
-      return true
-    }
+    true
   }
 }
 
@@ -44,7 +48,7 @@ public final class SlotMenu: PopupMenu {
     at position: Point,
     slotIndex: Int,
     slotPosition: Point,
-    availableActions: [SlotAction] = [.use, .inspect, .combine, .discard],
+    availableActions: [SlotAction] = [.use, .inspect, .combine, .exchange, .discard],
     openedWithKeyboard: Bool = false,
     slotSize: Size
   ) {

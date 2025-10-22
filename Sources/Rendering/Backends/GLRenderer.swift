@@ -199,6 +199,114 @@ public final class GLRenderer: Renderer {
     glDeleteVertexArrays(1, &vao)
   }
 
+  public func drawImageTransformed(
+    textureID: UInt64,
+    in rect: Rect,
+    rotation: Float,
+    scale: Point,
+    tint: Color?
+  ) {
+    // Apply coordinate flipping if the current GraphicsContext is flipped
+    let finalRect: Rect
+    if let context = GraphicsContext.current, context.isFlipped {
+      finalRect = context.flipRect(rect)
+    } else {
+      finalRect = rect
+    }
+
+    let x = finalRect.origin.x
+    let y = finalRect.origin.y
+    let w = finalRect.size.width
+    let h = finalRect.size.height
+
+    // Compute rotated quad on CPU around center in pixel space
+    let cx = x + w * 0.5
+    let cy = y + h * 0.5
+    let hw = (w * scale.x) * 0.5
+    let hh = (h * scale.y) * 0.5
+    let c = cos(rotation)
+    let s = sin(rotation)
+
+    func rot(_ px: Float, _ py: Float) -> (Float, Float) {
+      // rotate (px,py) around origin then translate to center
+      let rx = px * c - py * s
+      let ry = px * s + py * c
+      return (cx + rx, cy + ry)
+    }
+
+    // corners relative to center (counter-clockwise starting bottom-left to match UVs)
+    let bl = rot(-hw, -hh)
+    let br = rot(hw, -hh)
+    let tr = rot(hw, hh)
+    let tl = rot(-hw, hh)
+
+    // Interleaved vertices x,y,u,v
+    let verts: [Float] = [
+      bl.0, bl.1, 0, 0,
+      br.0, br.1, 1, 0,
+      tr.0, tr.1, 1, 1,
+      tl.0, tl.1, 0, 1,
+    ]
+    let indices: [UInt32] = [0, 1, 2, 2, 3, 0]
+
+    var vao: GLuint = 0
+    var vbo: GLuint = 0
+    var ebo: GLuint = 0
+    glGenVertexArrays(1, &vao)
+    glGenBuffers(1, &vbo)
+    glGenBuffers(1, &ebo)
+
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(
+      GL_ARRAY_BUFFER, verts.count * MemoryLayout<Float>.stride, verts, GL_DYNAMIC_DRAW
+    )
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    glBufferData(
+      GL_ELEMENT_ARRAY_BUFFER, indices.count * MemoryLayout<UInt32>.stride, indices,
+      GL_DYNAMIC_DRAW)
+
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(
+      0, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 0)
+    )
+    let uvOff = UnsafeRawPointer(bitPattern: 2 * MemoryLayout<Float>.stride)
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(1, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), uvOff)
+
+    Self.withUIContext {
+      imageProgram.use()
+      // Use standard orthographic MVP mapping pixel positions to clip space
+      var viewport: [GLint] = [0, 0, 0, 0]
+      glGetIntegerv(GL_VIEWPORT, &viewport)
+      let W = Float(viewport[2])
+      let H = Float(viewport[3])
+      let mvp: [Float] = [
+        2 / W, 0, 0, 0,
+        0, 2 / H, 0, 0,
+        0, 0, -1, 0,
+        -1, -1, 0, 1,
+      ]
+      mvp.withUnsafeBufferPointer { buf in imageProgram.setMat4("uMVP", value: buf.baseAddress!) }
+
+      let tintColor = tint ?? .white
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      glActiveTexture(GL_TEXTURE0)
+      glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
+      imageProgram.setInt("uTexture", value: 0)
+
+      glBindVertexArray(vao)
+      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+      glBindVertexArray(0)
+    }
+
+    glDeleteBuffers(1, &vbo)
+    glDeleteBuffers(1, &ebo)
+    glDeleteVertexArrays(1, &vao)
+  }
+
   public func drawImageRegion(
     textureID: UInt64,
     in rect: Rect,

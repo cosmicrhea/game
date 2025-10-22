@@ -309,6 +309,80 @@ public final class MTLRenderer: Renderer {
     )
   }
 
+  public func drawImageTransformed(
+    textureID: UInt64,
+    in rect: Rect,
+    rotation: Float,
+    scale: Point,
+    tint: Color?
+  ) {
+    guard let renderEncoder = currentRenderEncoder,
+      let vertexBuffer = imageVertexBuffer,
+      let indexBuffer = imageIndexBuffer
+    else {
+      print("MTLRenderer.drawImageTransformed: No active render encoder or buffers")
+      return
+    }
+
+    let x = rect.origin.x
+    let y = rect.origin.y
+    let w = rect.size.width
+    let h = rect.size.height
+
+    // Compute rotated quad around center
+    let cx = x + w * 0.5
+    let cy = y + h * 0.5
+    let hw = (w * scale.x) * 0.5
+    let hh = (h * scale.y) * 0.5
+    let c = cos(rotation)
+    let s = sin(rotation)
+
+    func rot(_ px: Float, _ py: Float) -> (Float, Float) {
+      let rx = px * c - py * s
+      let ry = px * s + py * c
+      return (cx + rx, cy + ry)
+    }
+
+    let bl = rot(-hw, -hh)
+    let br = rot(hw, -hh)
+    let tr = rot(hw, hh)
+    let tl = rot(-hw, hh)
+
+    let vertices: [Float] = [
+      bl.0, bl.1, 0, 0,
+      br.0, br.1, 1, 0,
+      tr.0, tr.1, 1, 1,
+      tl.0, tl.1, 0, 1,
+    ]
+    let indices: [UInt32] = [0, 1, 2, 2, 3, 0]
+
+    // Check buffer capacity
+    let maxVertices = vertexBuffer.length / MemoryLayout<Float>.size
+    let maxIndices = indexBuffer.length / MemoryLayout<UInt32>.size
+    guard vertices.count <= maxVertices && indices.count <= maxIndices else { return }
+
+    let vertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: vertices.count)
+    vertexData.initialize(from: vertices, count: vertices.count)
+    let indexData = indexBuffer.contents().bindMemory(to: UInt32.self, capacity: indices.count)
+    indexData.initialize(from: indices, count: indices.count)
+
+    renderEncoder.setRenderPipelineState(imagePipelineState)
+    renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+
+    var uniforms = ImageUniforms(
+      mvp: createOrthographicMatrix(viewportSize: currentViewportSize),
+      tint: SIMD4<Float>((tint ?? .white).red, (tint ?? .white).green, (tint ?? .white).blue, (tint ?? .white).alpha)
+    )
+    renderEncoder.setVertexBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+    renderEncoder.setFragmentBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+
+    // TODO: bind real texture by textureID when texture binding is implemented
+    print("MTLRenderer.drawImageTransformed: textureID=\(textureID), rotation=\(rotation)")
+
+    renderEncoder.drawIndexedPrimitives(
+      type: .triangle, indexCount: indices.count, indexType: .uint32, indexBuffer: indexBuffer, indexBufferOffset: 0)
+  }
+
   public func setClipRect(_ rect: Rect?) {
     // TODO: Implement Metal scissor rect
     print("MTLRenderer.setClipRect: \(rect != nil ? "Rect" : "nil")")

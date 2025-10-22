@@ -35,6 +35,21 @@ public protocol Renderer {
   ///   - tint: Optional color tint to apply to the image.
   func drawImage(textureID: UInt64, in rect: Rect, tint: Color?)
 
+  /// Draws an image with translation/rotation/scale around its center.
+  /// - Parameters:
+  ///   - textureID: The ID of the texture to draw.
+  ///   - rect: Destination rectangle before transform.
+  ///   - rotation: Rotation in radians, applied around rect center.
+  ///   - scale: Optional scale (1,1 by default), applied around rect center.
+  ///   - tint: Optional color tint.
+  func drawImageTransformed(
+    textureID: UInt64,
+    in rect: Rect,
+    rotation: Float,
+    scale: Point,
+    tint: Color?
+  )
+
   /// Draws a region of an image with the specified texture ID and UV coordinates.
   /// - Parameters:
   ///   - textureID: The ID of the texture to draw.

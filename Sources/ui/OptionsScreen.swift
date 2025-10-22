@@ -1,18 +1,20 @@
-
-
-/// Simple options screen that's just a ListMenu
 final class OptionsScreen: Screen {
+  enum Panel {
+    case controls
+    case camera
+    case display
+    case audio
+    case language
+    case graphics
+  }
+
   private let listMenu = ListMenu()
   private let audioPanel = AudioOptionsPanel()
   private var showingAudio = false
 
-  @MainActor
   override init() {
     super.init()
-    setupMenu()
-  }
 
-  private func setupMenu() {
     let menuItems = [
       ListMenu.MenuItem(id: "controls", label: "Controls") {
         print("Opening controls settings...")

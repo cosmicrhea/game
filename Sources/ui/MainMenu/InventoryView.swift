@@ -231,8 +231,8 @@ final class InventoryView: RenderLoop {
       (sampleItems[0], nil),
       (sampleItems[1], 15),
       (sampleItems[2], 17),
-      (sampleItems[3], nil),
-      (sampleItems[4], nil),
+      (sampleItems[3], 0),
+      (sampleItems[4], 69),
       (sampleItems[5], nil),
       (sampleItems[6], nil),
       (sampleItems[7], nil),
@@ -267,6 +267,8 @@ final class InventoryView: RenderLoop {
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
         print("Combining item: \(item.name)")
       }
+      break
+    case .exchange:
       break
     case .discard:
       // Handle item discard
