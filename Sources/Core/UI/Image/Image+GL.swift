@@ -36,7 +36,7 @@ extension Image {
           loaded = try? ImageFormats.Image<ImageFormats.RGBA>.load(from: raw)
         }
         if let image = loaded {
-          logger.info("Decoded image at \(path)")
+          logger.trace("Decoded image at \(path)")
           width = image.width
           height = image.height
           bytes = image.bytes

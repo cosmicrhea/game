@@ -1,8 +1,8 @@
 /// An action that can be performed on a slot.
 public enum SlotAction: String, CaseIterable {
   case use
-//  case equip
-//  case unequip
+  case equip
+  case unequip
   case inspect
   case combine
   case exchange
@@ -16,6 +16,8 @@ extension SlotAction {
   var icon: Image? {
     switch self {
     case .use: return Image("UI/Icons/phosphor-icons/gear-bold.svg", size: 20)
+    case .equip: return Image("UI/Icons/gun.svg", size: 20)
+    case .unequip: return Image("UI/Icons/gun.svg", size: 20)
     case .inspect: return Image("UI/Icons/phosphor-icons/magnifying-glass-bold.svg", size: 20)
     case .combine: return Image("UI/Icons/phosphor-icons/plus-circle-bold.svg", size: 20)
     case .exchange: return Image("UI/Icons/phosphor-icons/hand-arrow-up-bold.svg", size: 20)

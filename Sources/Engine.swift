@@ -280,7 +280,7 @@ public final class Engine {
       UISound.select()
       cycleLoops(+1)
 
-    case .f19, .f9, .home:
+    case .home:
       UISound.select()
       cycleInputSources()
 

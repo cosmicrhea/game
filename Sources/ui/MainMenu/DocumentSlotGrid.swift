@@ -223,7 +223,7 @@ public final class DocumentSlotGrid {
       return moveSelection(direction: .left)
     case .d, .right:
       return moveSelection(direction: .right)
-    case .f, .space, .enter:
+    case .f, .space, .enter, .numpadEnter:
       // Call document selection callback
       let document = slotData.indices.contains(selectedIndex) ? slotData[selectedIndex]?.document : nil
       onDocumentSelected?(document)

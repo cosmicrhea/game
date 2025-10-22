@@ -4,6 +4,7 @@ final class ItemView: RenderLoop {
   private let item: Item
   private let promptList = PromptList(.itemView)
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
+  private let itemDescriptionView = ItemDescriptionView()
 
   // 3D model rendering
   private var meshInstances: [MeshInstance] = []
@@ -27,6 +28,7 @@ final class ItemView: RenderLoop {
 
   init(item: Item) {
     self.item = item
+    self.itemDescriptionView.item = item
 
     // Start async loading if model is available
     if let modelPath = item.modelPath {
@@ -154,7 +156,7 @@ final class ItemView: RenderLoop {
     }
 
     // Draw item information
-    drawItemInfo()
+    itemDescriptionView.draw()
 
     // Draw prompt list
     promptList.draw()
@@ -190,51 +192,6 @@ final class ItemView: RenderLoop {
         fillLightColor: fillLight.color,
         fillLightIntensity: fillLight.intensity,
         diffuseOnly: useDiffuseOnly
-      )
-    }
-  }
-
-  private func drawItemInfo() {
-    let screenWidth = Float(Engine.viewportSize.width)
-
-    // Position text at the bottom of the screen, similar to InventoryView
-    // but using consistent bottom positioning instead of grid-relative positioning
-    let labelX: Float = 40  // Left-align with some margin
-    let labelY: Float = 160  // 160 pixels from bottom of screen
-
-    // Use the same styles as InventoryView
-    let nameStyle = TextStyle(
-      fontName: "CreatoDisplay-Bold",
-      fontSize: 28,
-      color: .white,
-      strokeWidth: 2,
-      strokeColor: .gray700
-    )
-
-    let descriptionStyle = TextStyle(
-      fontName: "CreatoDisplay-Medium",
-      fontSize: 20,
-      color: .gray300,
-      strokeWidth: 1,
-      strokeColor: .gray900
-    )
-
-    // Draw item name
-    item.name.draw(
-      at: Point(labelX, labelY),
-      style: nameStyle,
-      wrapWidth: screenWidth * 0.8,
-      anchor: .topLeft
-    )
-
-    // Draw item description below the name
-    if let description = item.description {
-      let descriptionY = labelY - 40
-      description.draw(
-        at: Point(labelX, descriptionY),
-        style: descriptionStyle,
-        wrapWidth: screenWidth * 0.8,
-        anchor: .topLeft
       )
     }
   }

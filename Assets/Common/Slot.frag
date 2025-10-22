@@ -10,6 +10,10 @@ uniform float uCornerRadius;
 uniform float uNoiseScale;
 uniform float uNoiseStrength;
 uniform float uRadialGradientStrength;
+uniform float uPulse; // 0.0 disabled, 1.0 enabled
+
+// Optional time (provided by GLScreenEffect if present)
+uniform float iTime;
 
 // Colors
 uniform vec3 uPanelColor;
@@ -112,6 +116,11 @@ void main() {
     
     // Combine colors
     vec3 finalColor = mix(panelColor, borderColor, borderMask);
+
+    // Subtle pulsing multiplier when enabled
+    float pulseAmount = 0.06; // ~±6%
+    float pulse = 1.0 + uPulse * pulseAmount * sin(iTime * 3.2);
+    finalColor *= pulse;
     
     // Add subtle vignette to central area
     float vignette = 1.0 - smoothstep(0.0, length(halfSize) * 0.9, length(uv - center));

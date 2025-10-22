@@ -1,4 +1,15 @@
 extension Item {
+  // MARK: - Recovery
+
+  static let morphine = Item(
+    id: "morphine",
+    kind: .recovery,
+    name: "Morphine Sulfate",
+    description: "Pills that restore a large amount of vitality.",
+  )
+
+  // MARK: - Mêlée
+
   static let knife = Item(
     id: "knife",
     kind: .weapon,
@@ -39,7 +50,7 @@ extension Item {
   static let fnx45 = Item(
     id: "fnx45",
     kind: .weapon,
-    name: "FNX 45",
+    name: "FNX-45 Tactical",
     description: "Compact, reliable, and affordable 9mm pistol.",
   )
 

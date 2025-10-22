@@ -379,7 +379,7 @@ public final class PromptList {
     if showCalloutBackground {
       let promptSize = size(for: prompts, inputSource: .player1)
       let calloutWidth = promptSize.width + 128
-      var callout = Callout(style: .promptList(width: calloutWidth))
+      let callout = Callout(style: .promptList(width: calloutWidth))
       callout.draw()
     }
 

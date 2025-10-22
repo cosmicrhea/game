@@ -221,16 +221,8 @@ final class LibraryView: RenderLoop {
     let gridPosition = documentSlotGrid.gridPosition
     let gridWidth = documentSlotGrid.totalSize.width
     let labelX = gridPosition.x + gridWidth * 0.5  // Center horizontally
-    let labelY = gridPosition.y - 80  // 80 pixels below the grid
+    let labelY: Float = 96.0
 
-    // Draw document name centered
-    let nameStyle = TextStyle(
-      fontName: "CreatoDisplay-Bold",
-      fontSize: 28,
-      color: .white,
-      strokeWidth: 2,
-      strokeColor: .gray700
-    )
-    currentDocumentName.draw(at: Point(labelX, labelY), style: nameStyle, wrapWidth: gridWidth, anchor: .center)
+    currentDocumentName.draw(at: Point(labelX, labelY), style: .itemName, anchor: .bottom)
   }
 }

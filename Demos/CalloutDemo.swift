@@ -20,7 +20,7 @@ final class CalloutDemo: RenderLoop {
     tutorialCallout = Callout("Press WASD to move", style: .tutorial)
 
     // Create prompt list callout
-    var promptList = Callout(style: .promptList())
+    let promptList = Callout(style: .promptList())
     promptList.fade = .left
     promptListCallout = promptList
   }
@@ -54,14 +54,14 @@ final class CalloutDemo: RenderLoop {
     }
 
     // Update tutorial callout
-    if var tutorial = tutorialCallout {
+    if let tutorial = tutorialCallout {
       tutorial.visible = isVisible
       tutorial.update(deltaTime: deltaTime)
       tutorialCallout = tutorial
     }
 
     // Keep prompt list callout always visible and not animated
-    if var promptList = promptListCallout {
+    if let promptList = promptListCallout {
       promptList.visible = true
       // Don't call update() on it to prevent animation
       promptListCallout = promptList
@@ -72,19 +72,19 @@ final class CalloutDemo: RenderLoop {
     // Draw objective callouts (top-left, stacked)
     var currentTop: Float = 0
     for i in objectiveCallouts.indices {
-      var callout = objectiveCallouts[i]
+      let callout = objectiveCallouts[i]
       callout.style = .objective(offset: currentTop)
       callout.draw()
       currentTop += (callout.size.height + verticalGap)
     }
 
     // Draw tutorial callout (centered)
-    if var tutorial = tutorialCallout {
+    if let tutorial = tutorialCallout {
       tutorial.draw()
     }
 
     // Draw prompt list callout (bottom-right, static)
-    if var promptList = promptListCallout {
+    if let promptList = promptListCallout {
       promptList.draw()
     }
   }

@@ -3,15 +3,15 @@ final class InventoryView: RenderLoop {
   private let promptList = PromptList(.inventory)
   private var slotGrid: SlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
+  private let healthCallout = Callout(style: .healthDisplay)
+  private let healthDisplay = HealthDisplay()
 
   // Mouse tracking
   private var lastMouseX: Double = 0
   private var lastMouseY: Double = 0
 
-  // Item label properties
-  private var currentItemName: String = ""
-  private var currentItemDescription: String = ""
-  private let itemCallout = Callout(style: .itemDescription)
+  // Item description component
+  private let itemDescriptionView = ItemDescriptionView()
 
   // Item inspection state
   private var currentItemView: ItemView? = nil
@@ -26,9 +26,11 @@ final class InventoryView: RenderLoop {
     slotGrid = SlotGrid(
       columns: 4,
       rows: 4,
-      slotSize: 96.0,
+      slotSize: 72.0,
       spacing: 3.0
     )
+    // Enable interactive moving/swapping support for inventory
+    slotGrid.allowsMoving = true
     slotGrid.onSlotAction = { [weak self] action, slotIndex in
       self?.handleSlotAction(action, slotIndex: slotIndex)
     }
@@ -60,8 +62,8 @@ final class InventoryView: RenderLoop {
       // Update slot grid (includes menu animations)
       slotGrid.update(deltaTime: deltaTime)
 
-      // Update item label based on current selection
-      updateItemLabel()
+      // Update item description based on current selection
+      updateItemDescription()
     }
 
     // Update slot grid
@@ -81,8 +83,21 @@ final class InventoryView: RenderLoop {
       return
     }
 
+    // Toggle move mode on Alt press
+    if key == .leftAlt || key == .rightAlt {
+      UISound.select()
+      slotGrid.setMovingModeActive(!slotGrid.isMovingModeActive)
+      return
+    }
+
     // Let SlotGrid handle all input (including menu)
     if slotGrid.handleKey(key) {
+      return
+    }
+
+    // Debug: adjust health with 9/0
+    if key == .num9 || key == .num0 {
+      healthDisplay.onKeyPressed(key)
       return
     }
 
@@ -129,6 +144,12 @@ final class InventoryView: RenderLoop {
 
     if button == .left {
       _ = slotGrid.handleMouseClick(at: mousePosition)
+    } else if button == .right {
+      // Right click cancels move mode
+      if slotGrid.isMovingModeActive {
+        slotGrid.cancelPendingMove()
+        slotGrid.setMovingModeActive(false)
+      }
     }
   }
 
@@ -159,59 +180,30 @@ final class InventoryView: RenderLoop {
       // Draw the slot grid (includes menu)
       slotGrid.draw()
 
-      // Draw the prompt list
-      promptList.draw()
+      // Draw the health callout
+      healthCallout.draw()
 
-      // Draw item label
-      drawItemLabel()
+      // Draw the shader-based health display above callout
+      healthDisplay.draw()
+
+      // Draw item description
+      itemDescriptionView.draw()
+
+      // Draw the prompt list
+      promptList.group = slotGrid.isMovingModeActive ? .confirmCancel : .inventory
+      promptList.draw()
     }
   }
 
   // MARK: - Private Methods
 
-  private func updateItemLabel() {
+  private func updateItemDescription() {
     let selectedIndex = slotGrid.selectedIndex
     if let slotData = slotGrid.getSlotData(at: selectedIndex), let item = slotData.item {
-      currentItemName = item.name
-      currentItemDescription = item.description ?? ""
+      itemDescriptionView.item = item
     } else {
-      currentItemName = ""
-      currentItemDescription = ""
+      itemDescriptionView.item = nil
     }
-  }
-
-  private func drawItemLabel() {
-    itemCallout.draw()
-
-    // Position the label consistently from the bottom of the screen
-    //let screenWidth = Engine.viewportSize.width
-    let labelX: Float = 40  // Left-align with some margin
-    let labelY: Float = 160  // 160 pixels from bottom of screen (same as ItemView)
-
-    // Use screen width for consistent wrapping
-//    let gridWidth = screenWidth * 0.8
-
-    // Draw item name
-    let nameStyle = TextStyle(
-      fontName: "CreatoDisplay-Bold",
-      fontSize: 28,
-      color: .white,
-      strokeWidth: 2,
-      strokeColor: .gray700
-    )
-    currentItemName.draw(at: Point(labelX, labelY), style: nameStyle)
-
-    // Draw item description
-    let descriptionStyle = TextStyle(
-      fontName: "CreatoDisplay-Medium",
-      fontSize: 20,
-      color: .gray300,
-      strokeWidth: 1,
-      strokeColor: .gray900
-    )
-    let descriptionY = labelY - 40
-    currentItemDescription.draw(
-      at: Point(labelX, descriptionY), style: descriptionStyle)
   }
 
   private func setupSlotData() {
@@ -220,6 +212,7 @@ final class InventoryView: RenderLoop {
 
     // Place items with different quantities
     let itemsWithQuantities: [(Item, Int?)] = [
+      (.morphine, nil),
       (.knife, nil),
       (.glock17, 15),
       (.glock18, 17),
@@ -248,6 +241,20 @@ final class InventoryView: RenderLoop {
 
   private func handleSlotAction(_ action: SlotAction, slotIndex: Int) {
     switch action {
+    case .equip:
+      if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
+        print("Equipping item: \(item.name)")
+        // Equip this weapon (single-weapon policy)
+        slotGrid.setEquippedWeaponId(item.id)
+      }
+      break
+    case .unequip:
+      if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
+        print("Unequipping item: \(item.name)")
+        // Only clear if this is currently equipped
+        if slotGrid.equippedWeaponId == item.id { slotGrid.setEquippedWeaponId(nil) }
+      }
+      break
     case .use:
       // Handle item use
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
@@ -273,6 +280,7 @@ final class InventoryView: RenderLoop {
       // Handle item discard
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
         print("Discarding item: \(item.name)")
+        if slotGrid.equippedWeaponId == item.id { slotGrid.setEquippedWeaponId(nil) }
         slotGrid.setSlotData(nil, at: slotIndex)
       }
       break

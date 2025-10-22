@@ -67,7 +67,7 @@ public class ListMenu {
     case .down, .s:
       cycleSelection(direction: +1)
       return true
-    case .enter, .space:
+    case .f, .space, .enter, .numpadEnter:
       handleMenuSelection()
       return true
     default:

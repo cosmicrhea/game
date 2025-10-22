@@ -82,6 +82,8 @@ public class PopupMenu {
 
   /// Hide the context menu
   public func hide() {
+    // Don't play hide animation if already hidden or already animating out
+    guard isVisible && !isAnimating else { return }
     startHideAnimation()
   }
 
@@ -188,7 +190,7 @@ public class PopupMenu {
       return true
     case .right, .d:
       return true
-    case .f, .space, .enter:
+    case .f, .space, .enter, .numpadEnter:
       if selectedIndex < menuItems.count {
         let item = menuItems[selectedIndex]
         if item.isEnabled {

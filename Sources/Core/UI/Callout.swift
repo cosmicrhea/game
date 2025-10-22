@@ -18,6 +18,8 @@ public enum CalloutStyle {
   case promptList(width: Float = Engine.viewportSize.width / 3)
   /// Item description - bottom-ish-right
   case itemDescription
+  /// Item description - bottom-ish-left
+  case healthDisplay
 }
 
 /// Fade effect options for callout edges.
@@ -150,10 +152,15 @@ public class Callout {
         let origin = Point(Float(Engine.viewportSize.width) - w, 0)
         return (Rect(origin: origin, size: Size(w, h)), .left)
       case .itemDescription:
-        let w: Float = 180
-        let h: Float = 200
-        let origin = Point(Engine.viewportSize.width - w, Engine.viewportSize.height - 120)
+        let w: Float = 480
+        let h: Float = 128
+        let origin = Point(Engine.viewportSize.width - w, 96)
         return (Rect(origin: origin, size: Size(w, h)), .left)
+      case .healthDisplay:
+        let w: Float = 128 + 25
+        let h: Float = 128
+        let origin = Point(0, 96)
+        return (Rect(origin: origin, size: Size(w, h)), .right)
       }
     }()
 
@@ -167,7 +174,7 @@ public class Callout {
     // Configure fades
     let fadeWidth: Float = {
       switch style {
-      case .promptList, .itemDescription:
+      case .promptList, .itemDescription, .healthDisplay:
         return 50.0  // Fixed 50px fade for prompt list & item description
       case .objective, .tutorial:
         return max(0, fadeWidthRatio) * w  // Use ratio for other styles
@@ -188,7 +195,7 @@ public class Callout {
       let drawBorders: Float =
         switch style {
         case .objective, .tutorial: 1.0
-        case .promptList, .itemDescription: 1.0
+        case .promptList, .itemDescription, .healthDisplay: 1.0
         }
 
       program.setFloat("uDrawBorders", value: drawBorders)
@@ -202,7 +209,7 @@ public class Callout {
       case .objective:
         // Apply slide animation for objectives
         return left + iconPaddingX - slideDistance * (1.0 - animationProgress)
-      case .tutorial, .promptList, .itemDescription:
+      case .tutorial, .promptList, .itemDescription, .healthDisplay:
         // No slide animation for other styles
         return left + iconPaddingX
       }
@@ -240,7 +247,7 @@ public class Callout {
       let contentStartX = baseCenter.0 - totalContentWidth * 0.5
       let textX = contentStartX + (cachedIcon != nil ? 20 + iconTextGap : 0)
       labelPoint = Point(textX, lineTopY)
-    case .objective, .promptList, .itemDescription:
+    case .objective, .promptList, .itemDescription, .healthDisplay:
       // Use the existing left-aligned positioning
       labelPoint = Point(contentX, lineTopY)
     }
@@ -249,6 +256,8 @@ public class Callout {
     if case .promptList = style {
       // Skip text for promptList
     } else if case .itemDescription = style {
+      // Ditto
+    } else if case .healthDisplay = style {
       // Ditto
     } else {
       text.draw(at: labelPoint, style: labelStyle, context: context)

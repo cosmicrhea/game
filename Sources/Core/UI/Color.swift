@@ -62,6 +62,7 @@ extension Color {
   public static let rose = Color(0.9569, 0.2471, 0.3686, 1)
 
   public static let gray100 = Color(0.9529, 0.9569, 0.9647, 1)
+  public static let gray200 = Color(0.8059, 0.8333, 0.8804, 1)
   public static let gray300 = Color(0.7059, 0.7333, 0.7804, 1)
   public static let gray500 = Color(0.4196, 0.4471, 0.5020, 1)
   public static let gray700 = Color(0.2706, 0.2902, 0.3294, 1)

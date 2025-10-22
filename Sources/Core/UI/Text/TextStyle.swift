@@ -44,6 +44,22 @@ extension TextStyle {
     strokeColor: Color(red: 0.078, green: 0.059, blue: 0.055, alpha: 1.0)
   )
 
+  static let itemName = TextStyle(
+    fontName: "Unageo-Medium",
+    fontSize: 24,
+    color: .gray200,
+    strokeWidth: 1,
+    strokeColor: .gray700
+  )
+
+  static let itemDescription = TextStyle(
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 24,
+    color: .gray300,
+    strokeWidth: 1,
+    strokeColor: .gray700
+  )
+
   static let menuItem = TextStyle(
     fontName: "CreatoDisplay-Bold",
     fontSize: 32,
@@ -78,7 +94,14 @@ extension TextStyle {
     fontName: "CreatoDisplay-Bold",
     fontSize: 22,
     color: .gray500.withAlphaComponent(0.95)
+  )
 
+  static let slotQuantity = TextStyle(
+    fontName: "CreatoDisplay-ExtraBold",
+    fontSize: 17,
+    color: .gray100,
+    strokeWidth: 1,
+    strokeColor: .black
   )
 
   /// Creates a menu item style based on selection and disabled state
