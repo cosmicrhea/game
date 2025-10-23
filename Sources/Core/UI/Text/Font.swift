@@ -23,6 +23,8 @@ public final class Font {
   private let maxAboveBaseline: Float
   private let maxBelowBaseline: Float
   private let baselinePx: Float
+  private let monospacedDigitsEnabled: Bool
+  private let digitAdvancePx: Float?
 
   // MARK: - Font Discovery
 
@@ -69,12 +71,22 @@ public final class Font {
 
   // MARK: - Font Loading
 
+  /// Optional typographic features for layout-time control (no GSUB shaping).
+  public struct Features: Sendable, Hashable {
+    public let monospaceDigits: Bool
+    public init(monospaceDigits: Bool = false) {
+      self.monospaceDigits = monospaceDigits
+    }
+    public static let none = Features()
+  }
+
   /// Creates and returns a font object for the specified font name and pixel size.
   /// - Parameters:
   ///   - fontName: The name of the font to load.
   ///   - pixelHeight: The pixel height of the font; defaults to the font's specified size or 16.
+  ///   - features: Optional layout features to control rendering behavior.
   /// - Returns: A new font instance, or `nil` if the font could not be loaded.
-  public init?(fontName: String, pixelHeight: Float? = nil) {
+  public init?(fontName: String, pixelHeight: Float? = nil, features: Features = .none) {
     guard let entry = Font.resolve(name: fontName) else { return nil }
     let resolvedPixelHeight = pixelHeight ?? 16
 
@@ -88,6 +100,16 @@ public final class Font {
       self.baselinePx = cached.baselinePx
       self.maxAboveBaseline = cached.maxAboveBaseline
       self.maxBelowBaseline = cached.maxBelowBaseline
+      self.monospacedDigitsEnabled = features.monospaceDigits
+      if features.monospaceDigits {
+        var maxDigitAdvance: Float = 0
+        for cp in 48...57 {  // '0'...'9'
+          maxDigitAdvance = max(maxDigitAdvance, cached.trueTypeFont.getAdvance(for: Int32(cp), next: nil))
+        }
+        self.digitAdvancePx = maxDigitAdvance
+      } else {
+        self.digitAdvancePx = nil
+      }
       return
     }
     Font.cacheLock.unlock()
@@ -122,6 +144,16 @@ public final class Font {
     self.baselinePx = baseline
     self.maxAboveBaseline = above
     self.maxBelowBaseline = below
+    self.monospacedDigitsEnabled = features.monospaceDigits
+    if features.monospaceDigits {
+      var maxDigitAdvance: Float = 0
+      for cp in 48...57 {
+        maxDigitAdvance = max(maxDigitAdvance, ttf.getAdvance(for: Int32(cp), next: nil))
+      }
+      self.digitAdvancePx = maxDigitAdvance
+    } else {
+      self.digitAdvancePx = nil
+    }
   }
 
   // MARK: - Font Metrics
@@ -149,6 +181,12 @@ public final class Font {
     return trueTypeFont
   }
 
+  /// Whether monospaced digits are enabled for this font instance.
+  public var monospaceDigits: Bool { monospacedDigitsEnabled }
+
+  /// If monospaced digits are enabled, the fixed advance used for '0'..'9'.
+  public var digitCellAdvance: Float? { digitAdvancePx }
+
   /// Measures the width of a string in points.
   /// - Parameters:
   ///   - text: The text to measure.
@@ -163,9 +201,8 @@ public final class Font {
       let codepoint = Int32(scalars[i].value)
       let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
 
-      // Use the actual font advance for all characters, including spaces
-      // This ensures measurement matches rendering exactly
-      width += trueTypeFont.getAdvance(for: codepoint, next: next) * scale
+      // Use Font-level advance so features (e.g., monospaced digits) apply
+      width += getAdvance(for: codepoint, next: next, scale: scale)
       i += 1
     }
 
@@ -179,6 +216,9 @@ public final class Font {
   ///   - scale: The scale factor to apply to the advance.
   /// - Returns: The advance width in points.
   public func getAdvance(for codepoint: Int32, next: Int32?, scale: Float = 1.0) -> Float {
+    if monospacedDigitsEnabled, codepoint >= 48, codepoint <= 57, let digitAdvancePx {
+      return digitAdvancePx * scale
+    }
     return trueTypeFont.getAdvance(for: codepoint, next: next) * scale
   }
 }

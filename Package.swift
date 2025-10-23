@@ -3,6 +3,12 @@
 import CompilerPluginSupport
 import PackageDescription
 
+import class Foundation.ProcessInfo
+
+//let env = ProcessInfo.processInfo.environment
+//let useLocal = (env["GAME_LOCAL_DEPS"] ?? "0") == "1"
+let useLocal = true
+
 let package = Package(
   name: "Game",
 
@@ -20,31 +26,31 @@ let package = Package(
   ],
 
   dependencies: [
+    .package("assimp"),
+    .package("gl"),
+    .package("gl-math"),
+    .package("glfw-swift"),
+    .package("jolt"),
+    .package("miniaudio"),
+    .package("nanosvg"),
+    .package("stb-perlin"),
+    .package("stb-rect-pack"),
+    .package("stb-text-edit"),
+    .package("stb-truetype"),
+    .package("swift-image-formats"),
+    .package("tinyexr"),
+
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
     .package(url: "https://github.com/swiftlang/swift-markdown", branch: "main"),
-//    .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
+    //    .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
     .package(url: "https://github.com/apple/swift-syntax", from: "509.0.0"),
 
     // .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
 
     // .package(url: "https://github.com/AdaEngine/msdf-atlas-gen", branch: "master"),
     // .package(url: "https://github.com/EvgenijLutz/HarfBuzz", branch: "main"),
-
-    .package(path: "../glass-deps/assimp"),
-    .package(path: "../glass-deps/gl"),
-    .package(path: "../glass-deps/gl-math"),
-    .package(path: "../glass-deps/glfw-swift"),
-    .package(path: "../glass-deps/jolt"),
-    .package(path: "../glass-deps/libtess2"),
-    .package(path: "../glass-deps/miniaudio"),
-    .package(path: "../glass-deps/nanosvg"),
-    .package(path: "../glass-deps/stb-perlin"),
-    .package(path: "../glass-deps/stb-rect-pack"),
-    .package(path: "../glass-deps/stb-truetype"),
-    .package(path: "../glass-deps/swift-image-formats"),
-    .package(path: "../glass-deps/tinyexr"),
   ],
 
   targets: [
@@ -70,11 +76,12 @@ let package = Package(
         .product(name: "GLMath", package: "gl-math"),
         .product(name: "GLFW", package: "glfw-swift"),
         .product(name: "Jolt", package: "jolt"),
-        .product(name: "Tess", package: "libtess2"),
+        //.product(name: "Tess", package: "libtess2"),
         .product(name: "Miniaudio", package: "miniaudio"),
         .product(name: "NanoSVG", package: "nanosvg"),
         .product(name: "STBPerlin", package: "stb-perlin"),
         .product(name: "STBRectPack", package: "stb-rect-pack"),
+        .product(name: "STBTextEdit", package: "stb-text-edit"),
         .product(name: "STBTrueType", package: "stb-truetype"),
         .product(name: "TinyEXR", package: "tinyexr"),
       ],
@@ -88,6 +95,7 @@ let package = Package(
         "Sources/Core/EditorMacros",
         "NOTES.md",
         "TODO.md",
+        "README.md",
       ],
 
       resources: [
@@ -101,7 +109,7 @@ let package = Package(
         .copy("Assets/Scenes"),
         .copy("Assets/UI"),
         //.process("Assets/Localizable.xcstrings", localization: .default),
-        .process("Assets/Localizable.xcstrings")
+        .process("Assets/Localizable.xcstrings"),
       ],
 
       cSettings: [
@@ -115,11 +123,11 @@ let package = Package(
       ],
 
       linkerSettings: [
-        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug)),
+        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
       ],
 
       plugins: [
-        "GlassBuildTools",
+        "GlassBuildTools"
       ]
     ),
 
@@ -140,3 +148,13 @@ let package = Package(
     ),
   ]
 )
+
+extension Package.Dependency {
+  static func package(_ name: String, branch: String = "main") -> Package.Dependency {
+    if useLocal {
+      .package(path: "../glass-deps/\(name)")
+    } else {
+      .package(url: "https://github.com/cosmicrhea-game/\(name).git", branch: branch)
+    }
+  }
+}

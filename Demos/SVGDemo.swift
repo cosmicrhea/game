@@ -1,8 +1,7 @@
 /// Demo showcasing SVG loading and rendering capabilities
-@MainActor
-final class SVGDemo: RenderLoop {
+@Editor final class SVGDemo: RenderLoop {
   private var svgData: [(image: Image, name: String)] = []
-  private var iconSize: Float = 64.0
+  @Editable(range: 16...128) var iconSize: Float = 64.0
   private let iconSizes: [Float] = [16, 24, 32, 48, 64, 80, 96, 112, 128]
   private var currentSizeIndex: Int = 4  // Start at 64
   private var svgPaths: [String] = []  // Store original paths for reloading
@@ -52,40 +51,40 @@ final class SVGDemo: RenderLoop {
     }
   }
 
-  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    switch key {
-    case .minus:
-      if currentSizeIndex > 0 {
-        currentSizeIndex -= 1
-        iconSize = iconSizes[currentSizeIndex]
-        loadImages()  // Reload images at new size
-        UISound.select()
-      }
-    case .equal:
-      if currentSizeIndex < iconSizes.count - 1 {
-        currentSizeIndex += 1
-        iconSize = iconSizes[currentSizeIndex]
-        loadImages()  // Reload images at new size
-        UISound.select()
-      }
-    case .q:  // Q key - decrease stroke width
-      if currentStrokeIndex > 0 {
-        currentStrokeIndex -= 1
-        strokeWidth = strokeWidths[currentStrokeIndex]
-        loadImages()  // Reload images with new stroke width
-        UISound.select()
-      }
-    case .e:  // E key - increase stroke width
-      if currentStrokeIndex < strokeWidths.count - 1 {
-        currentStrokeIndex += 1
-        strokeWidth = strokeWidths[currentStrokeIndex]
-        loadImages()  // Reload images with new stroke width
-        UISound.select()
-      }
-    default:
-      break
-    }
-  }
+//  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+//    switch key {
+//    case .minus:
+//      if currentSizeIndex > 0 {
+//        currentSizeIndex -= 1
+//        iconSize = iconSizes[currentSizeIndex]
+//        loadImages()  // Reload images at new size
+//        UISound.select()
+//      }
+//    case .equal:
+//      if currentSizeIndex < iconSizes.count - 1 {
+//        currentSizeIndex += 1
+//        iconSize = iconSizes[currentSizeIndex]
+//        loadImages()  // Reload images at new size
+//        UISound.select()
+//      }
+//    case .q:  // Q key - decrease stroke width
+//      if currentStrokeIndex > 0 {
+//        currentStrokeIndex -= 1
+//        strokeWidth = strokeWidths[currentStrokeIndex]
+//        loadImages()  // Reload images with new stroke width
+//        UISound.select()
+//      }
+//    case .e:  // E key - increase stroke width
+//      if currentStrokeIndex < strokeWidths.count - 1 {
+//        currentStrokeIndex += 1
+//        strokeWidth = strokeWidths[currentStrokeIndex]
+//        loadImages()  // Reload images with new stroke width
+//        UISound.select()
+//      }
+//    default:
+//      break
+//    }
+//  }
 
   func draw() {
     guard !svgData.isEmpty else { return }
@@ -125,17 +124,5 @@ final class SVGDemo: RenderLoop {
         anchor: .bottomLeft
       )
     }
-
-    // Draw current values in top-left
-    let infoStyle = TextStyle(fontName: "Determination", fontSize: 18, color: .white)
-    let strokeText = strokeWidth != nil ? "\(strokeWidth!)" : "Original"
-    let infoText =
-      "Icon Size: \(Int(iconSize))px\nStroke Width: \(strokeText)\n\nControls:\n- / + : Icon Size\nQ / E : Stroke Width"
-
-    infoText.draw(
-      at: Point(20, Float(Engine.viewportSize.height) - 20),
-      style: infoStyle,
-      anchor: .topLeft
-    )
   }
 }

@@ -56,6 +56,8 @@ public final class SlotGrid {
   // MARK: - Selection Callback (alternative to menu)
   public var onSlotSelected: ((Int) -> Void)?
   public var showMenuOnSelection: Bool = true
+  /// When false, selection/hover highlights are visually suppressed
+  public var isFocused: Bool = true
 
   // MARK: - Slot Data
   public var slotData: [SlotData?] = []
@@ -504,14 +506,14 @@ public final class SlotGrid {
           slotColor.blue + amberTintStrength * 0.15,
           slotColor.alpha
         )
-      } else if i == selectedIndex {
+      } else if isFocused && i == selectedIndex {
         // Use active color when menu is open, selected color otherwise
         currentSlotColor = slotMenu.isVisible ? Color.slotActive : selectedSlotColor
-      } else if i == hoveredIndex {
+      } else if isFocused && i == hoveredIndex {
         currentSlotColor = hoveredSlotColor
       }
 
-      // Highlight equipped weapon with a rose tint (unless it's the moving source)
+      // Mark equipped slot (weapon) for border tinting (unless it's the moving source)
       let isEquippedSlot: Bool = {
         guard let equippedId = equippedWeaponId,
           i < slotData.count,
@@ -522,15 +524,7 @@ public final class SlotGrid {
         return item.id == equippedId
       }()
       let isSource = isMovingModeActive && ((movingSourceIndex ?? -1) == i)
-      if isEquippedSlot && !isSource {
-        let roseTintStrength: Float = 0.52
-        currentSlotColor = Color(
-          currentSlotColor.red + roseTintStrength * 0.34,
-          currentSlotColor.green + roseTintStrength * 0.08,
-          currentSlotColor.blue + roseTintStrength * 0.22,
-          currentSlotColor.alpha
-        )
-      }
+      let applyEquippedBorderTint = isEquippedSlot && !isSource
 
       // Apply tint if specified
       if let tint = tint {
@@ -544,13 +538,26 @@ public final class SlotGrid {
 
       // Draw the slot
       slotEffect.draw { shader in
-        // Drive subtle pulse in shader for selected, moving source, or equipped slots
+        // Drive subtle pulse only for selected (when focused) or moving source (equipped border does not pulse)
         let pulses: Float = {
-          let isSelected = (i == selectedIndex)
+          let isSelected = isFocused && (i == selectedIndex)
           let isMoving = isSource
-          return (isSelected || isMoving || isEquippedSlot) ? 1.0 : 0.0
+          return (isSelected || isMoving) ? 1.0 : 0.0
         }()
         shader.setFloat("uPulse", value: pulses)
+        if applyEquippedBorderTint {
+          shader.setVec3("uBorderTint", value: (0.95, 0.55, 0.70))  // rose
+          shader.setFloat("uBorderTintStrength", value: 0.33)
+          shader.setFloat("uEquippedStroke", value: 1.0)
+          shader.setVec3("uEquippedStrokeColor", value: (0.98, 0.56, 0.73))
+          shader.setFloat("uEquippedStrokeWidth", value: 2.0)
+        } else {
+          shader.setVec3("uBorderTint", value: (0.0, 0.0, 0.0))
+          shader.setFloat("uBorderTintStrength", value: 0.0)
+          shader.setFloat("uEquippedStroke", value: 0.0)
+          shader.setVec3("uEquippedStrokeColor", value: (0.0, 0.0, 0.0))
+          shader.setFloat("uEquippedStrokeWidth", value: 0.0)
+        }
         shader.setVec2("uPanelSize", value: (slotSize, slotSize))
         shader.setVec2("uPanelCenter", value: (centerPosition.x, centerPosition.y))
         shader.setFloat("uBorderThickness", value: borderThickness)

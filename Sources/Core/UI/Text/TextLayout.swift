@@ -65,9 +65,8 @@ public final class TextLayout {
       let codepoint = Int32(scalars[i].value)
       let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
 
-      // Use the actual font advance for all characters, including spaces
-      // This ensures measurement matches rendering exactly
-      width += font.getTrueTypeFont().getAdvance(for: codepoint, next: next) * scale
+      // Use Font-level advance to respect features (e.g., monospaced digits)
+      width += font.getAdvance(for: codepoint, next: next, scale: scale)
       i += 1
     }
 

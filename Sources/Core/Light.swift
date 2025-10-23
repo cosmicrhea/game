@@ -1,5 +1,5 @@
 /// Enhanced light for 3D rendering with position support
-struct Light: @unchecked Sendable {
+struct Light: Equatable, @unchecked Sendable {
   var direction: vec3
   var position: vec3
   var color: vec3

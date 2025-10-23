@@ -37,10 +37,10 @@ public final class Picker: OptionsControl {
     // Current option centered
     if let current = options.indices.contains(selectedIndex) ? options[selectedIndex] as String? : nil {
       let style = isFocused ? focusedTextStyle : textStyle
-      let textSize = current.size(with: style)
-      let x = frame.midX - textSize.width * 0.5
-      let y = frame.midY - textSize.height * 0.5
-      current.draw(at: Point(x, y), style: style)
+      //let textSize = current.size(with: style)
+      let x = frame.midX
+      let y = frame.midY
+      current.draw(at: Point(x, y), style: style, anchor: .center)
     }
 
     // Chevrons at edges when focused (use images)

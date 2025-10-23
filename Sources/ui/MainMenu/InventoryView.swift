@@ -25,8 +25,8 @@ final class InventoryView: RenderLoop {
   init() {
     slotGrid = SlotGrid(
       columns: 4,
-      rows: 4,
-      slotSize: 72.0,
+      rows: 2,
+      slotSize: 80.0,
       spacing: 3.0
     )
     // Enable interactive moving/swapping support for inventory
@@ -82,6 +82,7 @@ final class InventoryView: RenderLoop {
     if isShowingItem {
       // Handle escape to return to inventory view
       if key == .escape {
+        UISound.cancel()
         hideItem()
         return
       }
@@ -222,22 +223,43 @@ final class InventoryView: RenderLoop {
 
     // Place items with different quantities
     let itemsWithQuantities: [(Item, Int?)] = [
-      (.morphine, nil),
       (.knife, nil),
       (.glock17, 15),
-      (.glock18, 17),
-      (.sigp320, 0),
-//      (.beretta92, 17),
-      (.fnx45, 15),
       (.handgunAmmo, 69),
-      (.utilityKey, nil),
+      // (.sigp320, 0),
+      (.morphine, nil),
+      // (.glock18, 17),
       (.metroKey, nil),
-//      (.tagKey, nil),
-      (.cryoGloves, nil),
-      (.lighter, nil),
-//      (.remington870, 8),
-//      (.spas12, 10),
-//      (.mp5sd, 30),
+      // (.utilityKey, nil),
+
+      // (.morphine, nil),
+      // (.knife, nil),
+      // (.glock17, 15),
+      // (.glock18, 17),
+      // (.sigp320, 0),
+      // (.fnx45, 15),
+      // (.handgunAmmo, 69),
+      // (.utilityKey, nil),
+      // (.metroKey, nil),
+      // (.cryoGloves, nil),
+      // (.lighter, nil),
+
+      // (.morphine, nil),
+      // (.knife, nil),
+      // (.glock17, 15),
+      // (.glock18, 17),
+      // (.sigp320, 0),
+      // //      (.beretta92, 17),
+      // (.fnx45, 15),
+      // (.handgunAmmo, 69),
+      // (.utilityKey, nil),
+      // (.metroKey, nil),
+      // //      (.tagKey, nil),
+      // (.cryoGloves, nil),
+      // (.lighter, nil),
+      // //      (.remington870, 8),
+      // //      (.spas12, 10),
+      // //      (.mp5sd, 30),
     ]
 
     for (index, (item, quantity)) in itemsWithQuantities.enumerated() {

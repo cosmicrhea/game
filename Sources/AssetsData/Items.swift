@@ -30,14 +30,14 @@ extension Item {
     id: "glock18c",
     kind: .weapon,
     name: "Glock 18C",
-    description: "Compact 9mm pistol with selective fire capability.",
+    description: "Compact 9mm pistol with selective fire capability and an extended magazine.",
   )
 
   static let sigp320 = Item(
     id: "sigp320",
     kind: .weapon,
     name: "SIG Sauer P320",
-    description: "Modern striker-fired pistol with modular design.",
+    description: "Modern striker-fired pistol with a modular design. Uses 9mm ammunition.",
   )
 
   static let beretta92 = Item(

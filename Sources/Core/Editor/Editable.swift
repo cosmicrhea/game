@@ -8,7 +8,7 @@ public enum EditorGrouping {
 @attached(member, names: named(getEditableProperties))
 @attached(extension, conformances: Editing)
 public macro Editor(_ grouping: EditorGrouping = .none) =
-#externalMacro(module: "GlassEditorMacros", type: "EditorMacro")
+  #externalMacro(module: "GlassEditorMacros", type: "EditorMacro")
 
 /// A property wrapper that marks properties as editable in the debug editor.
 @propertyWrapper
@@ -29,6 +29,15 @@ public struct Editable<T> {
   }
 
   public init(wrappedValue: T, displayName: String? = nil, variableName: String = "") where T: Equatable {
+    self.value = wrappedValue
+    self.displayName = displayName ?? variableName.capitalized
+    self.range = nil
+    self.variableName = variableName
+  }
+
+  /// Generic initializer for non-Equatable types (e.g., complex structs like `Light`).
+  /// No range is provided for arbitrary types; sub-editors should expose fields via the macro.
+  public init(wrappedValue: T, displayName: String? = nil, variableName: String = "") {
     self.value = wrappedValue
     self.displayName = displayName ?? variableName.capitalized
     self.range = nil

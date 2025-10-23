@@ -158,7 +158,7 @@ public class Callout {
         return (Rect(origin: origin, size: Size(w, h)), .left)
       case .healthDisplay:
         let w: Float = 128 + 44 * 2
-        let h: Float = 128
+        let h: Float = 128 + 24
         let origin = Point(0, 96)
         return (Rect(origin: origin, size: Size(w, h)), .right)
       }

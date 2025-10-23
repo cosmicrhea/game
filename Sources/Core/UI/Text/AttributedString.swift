@@ -32,6 +32,9 @@ public struct TextStyle: Sendable {
   /// Color of the shadow.
   public var shadowColor: Color
 
+  /// Layout features (e.g., monospaced digits). Applied at layout-time.
+  public var monospaceDigits: Bool = false
+
   /// Creates a new text style with the specified properties.
   /// - Parameters:
   ///   - fontName: Name of the font to use.
@@ -54,7 +57,8 @@ public struct TextStyle: Sendable {
     strokeColor: Color = .clear,
     shadowWidth: Float = 0,
     shadowOffset: Point = Point(0, 0),
-    shadowColor: Color = .clear
+    shadowColor: Color = .clear,
+    monospaceDigits: Bool = false
   ) {
     self.fontName = fontName
     self.fontSize = fontSize
@@ -66,6 +70,7 @@ public struct TextStyle: Sendable {
     self.shadowWidth = shadowWidth
     self.shadowOffset = shadowOffset
     self.shadowColor = shadowColor
+    self.monospaceDigits = monospaceDigits
   }
 
   /// Creates a new text style with a different alignment.
@@ -82,7 +87,8 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: self.strokeWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -100,7 +106,8 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -118,7 +125,8 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -136,7 +144,8 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -156,7 +165,8 @@ public struct TextStyle: Sendable {
       strokeColor: strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -177,7 +187,8 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: shadowWidth,
       shadowOffset: shadowOffset,
-      shadowColor: shadowColor
+      shadowColor: shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -195,7 +206,8 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -213,7 +225,8 @@ public struct TextStyle: Sendable {
       strokeColor: strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: self.shadowColor
+      shadowColor: self.shadowColor,
+      monospaceDigits: self.monospaceDigits
     )
   }
 
@@ -231,7 +244,27 @@ public struct TextStyle: Sendable {
       strokeColor: self.strokeColor,
       shadowWidth: self.shadowWidth,
       shadowOffset: self.shadowOffset,
-      shadowColor: shadowColor
+      shadowColor: shadowColor,
+      monospaceDigits: self.monospaceDigits
+    )
+  }
+
+  /// Creates a new text style with monospaced digits toggled.
+  /// - Parameter enabled: Whether to enable fixed-width advance for '0'..'9'.
+  /// - Returns: A new TextStyle with the specified monospace-digits flag.
+  public func withMonospacedDigits(_ enabled: Bool) -> TextStyle {
+    return TextStyle(
+      fontName: self.fontName,
+      fontSize: self.fontSize,
+      color: self.color,
+      alignment: self.alignment,
+      lineHeight: self.lineHeight,
+      strokeWidth: self.strokeWidth,
+      strokeColor: self.strokeColor,
+      shadowWidth: self.shadowWidth,
+      shadowOffset: self.shadowOffset,
+      shadowColor: self.shadowColor,
+      monospaceDigits: enabled
     )
   }
 }
@@ -506,7 +539,9 @@ extension AttributedString {
   /// - Returns: The bounding rectangle required to draw the string.
   public func boundingRect(defaultStyle: TextStyle, wrapWidth: Float? = nil) -> Rect {
     // Create font and layout for measurement
-    guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize) else {
+    let features = Font.Features(monospaceDigits: defaultStyle.monospaceDigits)
+    guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize, features: features)
+    else {
       return Rect(origin: Point(0, 0), size: Size(0, 0))
     }
 

@@ -3,6 +3,8 @@
 public protocol OptionsControl: AnyObject {
   var frame: Rect { get set }
   var isFocused: Bool { get set }
+  // Controls like section headers can opt-out of keyboard focus
+  var isFocusable: Bool { get }
   func draw()
   @discardableResult func handleKey(_ key: Keyboard.Key) -> Bool
   @discardableResult func handleMouseDown(at position: Point) -> Bool
@@ -10,9 +12,19 @@ public protocol OptionsControl: AnyObject {
   func handleMouseUp()
 }
 
+extension OptionsControl {
+  public var isFocusable: Bool { true }
+}
+
+/// Optional behavior for controls that support an Alt-click action (e.g., reset to default)
+@MainActor
+public protocol AltClickable: AnyObject {
+  func altClick(at position: Point)
+}
+
 /// Base panel for options pages. Handles layout, focus, and input dispatch.
 @MainActor
-class OptionsPanel: Screen {
+public class OptionsPanel: Screen {
   struct Row {
     let label: String
     let control: OptionsControl
@@ -28,9 +40,10 @@ class OptionsPanel: Screen {
 
   // Internal state
   private(set) var rows: [Row] = []
-  private var panelRect: Rect = .zero
-  private var rowRects: [Rect] = []
+  public var panelRect: Rect = .zero
+  public var rowRects: [Rect] = []
   private var focusedIndex: Int? { didSet { updateFocus() } }
+  private var focusViaKeyboard: Bool = false
 
   // MARK: - Configuration
   func setRows(_ rows: [Row]) {
@@ -41,26 +54,32 @@ class OptionsPanel: Screen {
   override func draw() {
     layout()
 
-    // No background; panel overlays directly on scene
-
     for (i, row) in rows.enumerated() {
       guard i < rowRects.count else { continue }
       let r = rowRects[i]
+      // Draw focus border only when navigating via keyboard
+      if focusViaKeyboard, let focusedIndex, focusedIndex == i, rows[i].control.isFocusable {
+        let focusRect = Rect(x: r.origin.x - 8, y: r.origin.y - 6, width: r.size.width + 16, height: r.size.height + 12)
+        focusRect.frame(with: Color.gray500.withAlphaComponent(0.35), lineWidth: 2)
+      }
       let labelSize = row.label.size(with: labelStyle)
       let labelY = r.origin.y + (rowHeight - labelSize.height) * 0.5
-      row.label.draw(at: Point(r.origin.x, labelY), style: labelStyle)
+      row.label.draw(at: Point(r.origin.x, labelY), style: labelStyle, anchor: .bottomLeft)
       row.control.draw()
     }
   }
 
   // MARK: - Input
   func handleKey(_ key: Keyboard.Key) -> Bool {
+    focusViaKeyboard = true
     switch key {
     case .w, .up:
-      moveFocus(+1)
+      // Move selection visually upward (previous row)
+      moveFocus(-1)
       return true
     case .s, .down:
-      moveFocus(-1)
+      // Move selection visually downward (next row)
+      moveFocus(+1)
       return true
     default:
       break
@@ -75,11 +94,21 @@ class OptionsPanel: Screen {
     guard button == .left else { return }
     let p = mousePoint(window)
     guard panelRect.contains(p) else { return }
+    focusViaKeyboard = false
 
     // End any ongoing drags before starting a new one to avoid cross-control dragging
     rows.forEach { $0.control.handleMouseUp() }
 
     for (i, row) in rows.enumerated() {
+      // Alt-click support: if Alt is pressed and control supports it and the click is within control frame, trigger it
+      if mods.contains(.alt), let alt = row.control as? AltClickable, i < rowRects.count {
+        if row.control.frame.contains(p) {
+          alt.altClick(at: p)
+          focusedIndex = i
+          UISound.select()
+          return
+        }
+      }
       if row.control.handleMouseDown(at: p) {
         focusedIndex = i
         UISound.select()
@@ -91,6 +120,7 @@ class OptionsPanel: Screen {
   override func onMouseMove(window: Window, x: Double, y: Double) {
     let p = mousePoint(window)
     guard panelRect.contains(p) else { return }
+    focusViaKeyboard = false
     rows.forEach { $0.control.handleMouseMove(at: p) }
   }
 
@@ -101,14 +131,35 @@ class OptionsPanel: Screen {
 
   // MARK: - Private
   private func moveFocus(_ delta: Int) {
-    if rows.isEmpty {
+    guard !rows.isEmpty else {
       focusedIndex = nil
       return
     }
+
+    // Gather focusable indices
+    let focusable = rows.enumerated().compactMap { (i, r) in r.control.isFocusable ? i : nil }
+    guard !focusable.isEmpty else {
+      focusedIndex = nil
+      return
+    }
+
     UISound.navigate()
-    let current = focusedIndex ?? 0
-    let next = (current + delta + rows.count) % rows.count
-    focusedIndex = next
+
+    // Initialize focus on first focusable row if none selected yet
+    if focusedIndex == nil {
+      focusedIndex = focusable.first
+      return
+    }
+
+    // Find next focusable index in the given direction
+    var idx = focusedIndex!
+    for _ in 0..<rows.count {
+      idx = (idx + delta + rows.count) % rows.count
+      if rows[idx].control.isFocusable {
+        focusedIndex = idx
+        return
+      }
+    }
   }
 
   private func updateFocus() {
@@ -117,7 +168,7 @@ class OptionsPanel: Screen {
     }
   }
 
-  private func layout() {
+  public func layout() {
     let w = Float(Engine.viewportSize.width)
     let h = Float(Engine.viewportSize.height)
 

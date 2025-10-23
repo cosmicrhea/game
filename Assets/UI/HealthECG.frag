@@ -112,20 +112,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float frostCore = 1.0 - smoothstep(0.0, width, bandShifted);
   float frostHalo = smoothstep(uGlowRadius, 0.0, bandShifted) * uGlow;
 
-  // Compose base panel/frost
+  // Compose base (transparent background = no panel dim/tint)
   vec3 col = base.rgb;
-  // Frosted panel dim + tint
-  float panelMix = edgeAlpha * uBgAlpha;
-  col = mix(col, col * (1.0 - uBgDim) + uPanelTint * 0.15, panelMix);
-  // Border
+  // Border (kept)
   col = mix(col, uBorderColor, min(borderBand, edgeAlpha));
-  // Frost grain
-  float grain = noise2D(fragCoord * 0.75 + vec2(iTime * 0.35, -iTime * 0.28));
-  col += (grain - 0.5) * 0.06 * edgeAlpha;
-  // Grid
-  col += gridCol * gridLine * uGridAlpha * inside;
-  // Frost band
-  col += frostCol * (frostCore + frostHalo + spike * 0.6) * inside;
+  // Disable grain and grid to keep background clean/transparent
+  // Frost band (stronger spikes and glow)
+  col += frostCol * (frostCore * 1.25 + frostHalo * 1.15 + spike * 2.0) * inside;
 
   // ECG waveform overlay (additive) — Resident Evil-style piecewise beat
   float speed = 0.6;

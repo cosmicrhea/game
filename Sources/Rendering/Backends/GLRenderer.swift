@@ -409,7 +409,9 @@ public final class GLRenderer: Renderer {
       finalOrigin = origin
     }
     // Create font and layout for the default style
-    guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize) else {
+    let features = Font.Features(monospaceDigits: defaultStyle.monospaceDigits)
+    guard let font = Font(fontName: defaultStyle.fontName, pixelHeight: defaultStyle.fontSize, features: features)
+    else {
       return
     }
 
@@ -784,13 +786,13 @@ public final class GLRenderer: Renderer {
 
     while i < scalars.count {
       let codepoint = Int32(scalars[i].value)
+      let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
 
       // Handle spaces - they should advance but not render
       if codepoint == 32 {  // Space character
-        // Use the actual font advance for spaces to match measurement
-        // Spaces don't have glyphs in the atlas, so we get the advance directly from the font
-        let spaceAdvance = font.getTrueTypeFont().getAdvance(for: codepoint, next: nil)
-        currentX += spaceAdvance * scale
+        // Advance using Font-level advance so features & kerning apply
+        let adv = font.getAdvance(for: codepoint, next: next, scale: 1.0)
+        currentX += adv * scale
         i += 1
         continue
       }
@@ -815,8 +817,9 @@ public final class GLRenderer: Renderer {
       ]
       vertices.append(contentsOf: quad)
 
-      // Advance to next character using proper advance
-      currentX += Float(glyphInfo.advance) * scale
+      // Advance to next character using Font-level advance (includes features and kerning)
+      let adv = font.getAdvance(for: codepoint, next: next, scale: 1.0)
+      currentX += adv * scale
       i += 1
     }
 

@@ -1,13 +1,16 @@
-import func Foundation.NSLocalizedString
 import Foundation
-import SwiftUI
+
+import func Foundation.NSLocalizedString
 
 extension String {
-  init(localized key: StaticString, defaultValue: String.LocalizationValue, table: String? = nil, locale: Locale = .current, comment: StaticString? = nil) {
-    self.init(localized: key, defaultValue: defaultValue, table: table, bundle: #bundle, locale: locale, comment: comment)
+  init(
+    localized key: StaticString, defaultValue: String.LocalizationValue, table: String? = nil,
+    locale: Locale = .current, comment: StaticString? = nil
+  ) {
+    self.init(
+      localized: key, defaultValue: defaultValue, table: table, bundle: #bundle, locale: locale, comment: comment)
   }
 }
-
 
 final class TitleScreen: Screen {
   private let listMenu = ListMenu()
@@ -145,7 +148,7 @@ final class TitleScreenStack: RenderLoop {
     promptList.draw()
 
     // Draw version text in bottom left corner
-    let versionText = "v\(Engine.versionString)"
+    let versionText = Engine.versionString
     let versionX: Float = 56
     let versionY: Float = 20
     versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)

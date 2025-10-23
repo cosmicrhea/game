@@ -83,13 +83,20 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
       if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
         for binding in variableDecl.bindings {
           if let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
-            let type = binding.typeAnnotation?.type,
             let attribute = variableDecl.attributes.first?.as(AttributeSyntax.self),
             attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "Editable"
           {
 
             let propertyName = pattern.identifier.text
-            let propertyType = type.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Prefer explicit type annotation; otherwise try to infer from initializer (handles e.g. Light.itemInspection)
+            var propertyType: String = "Any"
+            if let annotated = binding.typeAnnotation?.type {
+              propertyType = annotated.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            } else if let initExpr = binding.initializer?.value.as(MemberAccessExprSyntax.self) {
+              if let base = initExpr.base?.as(DeclReferenceExprSyntax.self) {
+                propertyType = base.baseName.text
+              }
+            }
 
             // Extract display name and range from attribute arguments
             let displayName = extractDisplayName(from: attribute) ?? propertyName.titleCased
@@ -166,25 +173,93 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
   }
 
   private static func generateUngroupedPropertiesMethod(properties: [EditablePropertyInfo]) -> FunctionDeclSyntax {
-    let returnStatements = properties.map { prop in
-      let range = prop.range ?? "0.0...1.0"
-
-      return """
-        AnyEditableProperty(
-          name: "\(prop.name)",
-          value: \(prop.name),
-          setValue: { self.\(prop.name) = $0 as! \(prop.type) },
-          displayName: "\(prop.displayName)",
-          validRange: \(range)
-        )
-        """
+    let items = properties.map { prop in
+      let trimmedType = prop.type.trimmingCharacters(in: .whitespacesAndNewlines)
+      if trimmedType == "Light" {
+        let base = prop.name
+        func floatProp(_ codeName: String, _ display: String, _ valueExpr: String, _ setExpr: String, _ range: String)
+          -> String
+        {
+          return """
+            AnyEditableProperty(
+              name: \"\(codeName)\",
+              value: \(valueExpr),
+              setValue: { newValue in
+                \(setExpr)
+              },
+              displayName: \"\(display)\",
+              validRange: \(range)
+            )
+            """
+        }
+        let pieces = [
+          floatProp(
+            "\(base)_dir_x", "Direction X", "Float(\(base).direction.x)",
+            "self.\(base).direction = vec3(newValue as! Float, self.\(base).direction.y, self.\(base).direction.z)",
+            "-1.0...1.0"),
+          floatProp(
+            "\(base)_dir_y", "Direction Y", "Float(\(base).direction.y)",
+            "self.\(base).direction = vec3(self.\(base).direction.x, newValue as! Float, self.\(base).direction.z)",
+            "-1.0...1.0"),
+          floatProp(
+            "\(base)_dir_z", "Direction Z", "Float(\(base).direction.z)",
+            "self.\(base).direction = vec3(self.\(base).direction.x, self.\(base).direction.y, newValue as! Float)",
+            "-1.0...1.0"),
+          floatProp(
+            "\(base)_pos_x", "Position X", "Float(\(base).position.x)",
+            "self.\(base).position = vec3(newValue as! Float, self.\(base).position.y, self.\(base).position.z)",
+            "-5.0...5.0"),
+          floatProp(
+            "\(base)_pos_y", "Position Y", "Float(\(base).position.y)",
+            "self.\(base).position = vec3(self.\(base).position.x, newValue as! Float, self.\(base).position.z)",
+            "-5.0...5.0"),
+          floatProp(
+            "\(base)_pos_z", "Position Z", "Float(\(base).position.z)",
+            "self.\(base).position = vec3(self.\(base).position.x, self.\(base).position.y, newValue as! Float)",
+            "-5.0...5.0"),
+          floatProp(
+            "\(base)_col_r", "Color R", "Float(\(base).color.x)",
+            "self.\(base).color = vec3(newValue as! Float, self.\(base).color.y, self.\(base).color.z)", "0.0...1.0"),
+          floatProp(
+            "\(base)_col_g", "Color G", "Float(\(base).color.y)",
+            "self.\(base).color = vec3(self.\(base).color.x, newValue as! Float, self.\(base).color.z)", "0.0...1.0"),
+          floatProp(
+            "\(base)_col_b", "Color B", "Float(\(base).color.z)",
+            "self.\(base).color = vec3(self.\(base).color.x, self.\(base).color.y, newValue as! Float)", "0.0...1.0"),
+          floatProp(
+            "\(base)_intensity", "Intensity", "\(base).intensity", "self.\(base).intensity = newValue as! Float",
+            "0.0...10.0"),
+          floatProp("\(base)_range", "Range", "\(base).range", "self.\(base).range = newValue as! Float", "0.0...20.0"),
+        ].joined(separator: ",\n          ")
+        return """
+          EditablePropertyGroup(
+            name: \"\(prop.displayName)\",
+            properties: [
+              \(pieces)
+            ]
+          )
+          """
+      } else {
+        let range = prop.range ?? "0.0...1.0"
+        return """
+          AnyEditableProperty(
+            name: \"\(prop.name)\",
+            value: \(prop.name),
+            setValue: { newValue in
+              self.\(prop.name) = newValue as! \(prop.type)
+            },
+            displayName: \"\(prop.displayName)\",
+            validRange: \(range)
+          )
+          """
+      }
     }.joined(separator: ",\n      ")
 
     let functionDecl = try! FunctionDeclSyntax(
       """
       func getEditableProperties() -> [Any] {
         return [
-          \(raw: returnStatements)
+          \(raw: items)
         ]
       }
       """)
@@ -209,33 +284,91 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
 
     let sections = groupedProperties.map { (groupName, props) in
       let sectionProperties = props.map { prop in
+        // Special-case Light to expose sub-properties
+        if prop.type.trimmingCharacters(in: .whitespacesAndNewlines) == "Light" {
+          let base = prop.name
+          func floatProp(_ codeName: String, _ display: String, _ valueExpr: String, _ setExpr: String, _ range: String)
+            -> String
+          {
+            return """
+              AnyEditableProperty(
+                name: \"\(codeName)\",
+                value: \(valueExpr),
+                setValue: { newValue in
+                  \(setExpr)
+                },
+                displayName: \"\(display)\",
+                validRange: \(range)
+              )
+              """
+          }
+          let pieces = [
+            floatProp(
+              "\(base)_dir_x", "Direction X", "Float(\(base).direction.x)",
+              "self.\(base).direction = vec3(newValue as! Float, self.\(base).direction.y, self.\(base).direction.z)",
+              "-1.0...1.0"),
+            floatProp(
+              "\(base)_dir_y", "Direction Y", "Float(\(base).direction.y)",
+              "self.\(base).direction = vec3(self.\(base).direction.x, newValue as! Float, self.\(base).direction.z)",
+              "-1.0...1.0"),
+            floatProp(
+              "\(base)_dir_z", "Direction Z", "Float(\(base).direction.z)",
+              "self.\(base).direction = vec3(self.\(base).direction.x, self.\(base).direction.y, newValue as! Float)",
+              "-1.0...1.0"),
+            floatProp(
+              "\(base)_pos_x", "Position X", "Float(\(base).position.x)",
+              "self.\(base).position = vec3(newValue as! Float, self.\(base).position.y, self.\(base).position.z)",
+              "-5.0...5.0"),
+            floatProp(
+              "\(base)_pos_y", "Position Y", "Float(\(base).position.y)",
+              "self.\(base).position = vec3(self.\(base).position.x, newValue as! Float, self.\(base).position.z)",
+              "-5.0...5.0"),
+            floatProp(
+              "\(base)_pos_z", "Position Z", "Float(\(base).position.z)",
+              "self.\(base).position = vec3(self.\(base).position.x, self.\(base).position.y, newValue as! Float)",
+              "-5.0...5.0"),
+            floatProp(
+              "\(base)_col_r", "Color R", "Float(\(base).color.x)",
+              "self.\(base).color = vec3(newValue as! Float, self.\(base).color.y, self.\(base).color.z)", "0.0...1.0"),
+            floatProp(
+              "\(base)_col_g", "Color G", "Float(\(base).color.y)",
+              "self.\(base).color = vec3(self.\(base).color.x, newValue as! Float, self.\(base).color.z)", "0.0...1.0"),
+            floatProp(
+              "\(base)_col_b", "Color B", "Float(\(base).color.z)",
+              "self.\(base).color = vec3(self.\(base).color.x, self.\(base).color.y, newValue as! Float)", "0.0...1.0"),
+            floatProp(
+              "\(base)_intensity", "Intensity", "\(base).intensity", "self.\(base).intensity = newValue as! Float",
+              "0.0...10.0"),
+            floatProp(
+              "\(base)_range", "Range", "\(base).range", "self.\(base).range = newValue as! Float", "0.0...20.0"),
+          ]
+          return pieces.joined(separator: ",\n        ")
+        }
         let range = prop.range ?? "0.0...1.0"
-
         // Remove the group name prefix from the display name
         let words = prop.displayName.components(separatedBy: " ")
         let displayName = words.count > 1 ? words.dropFirst().joined(separator: " ") : prop.displayName
-
         return """
           AnyEditableProperty(
-            name: "\(prop.name)",
+            name: \"\(prop.name)\",
             value: \(prop.name),
-            setValue: { self.\(prop.name) = $0 as! \(prop.type) },
-            displayName: "\(displayName)",
+            setValue: { newValue in
+              self.\(prop.name) = newValue as! \(prop.type)
+            },
+            displayName: \"\(displayName)\",
             validRange: \(range)
           )
           """
       }.joined(separator: ",\n        ")
-
       return """
         EditablePropertyGroup(
-          name: "\(groupName)",
+          name: \"\(groupName)\",
           properties: [
             \(sectionProperties)
           ]
         )
         """
     }.joined(separator: ",\n      ")
-
     let functionDecl = try! FunctionDeclSyntax(
       """
       func getEditableProperties() -> [Any] {
@@ -244,7 +377,6 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
         ]
       }
       """)
-
     return functionDecl
   }
 }

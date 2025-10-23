@@ -49,6 +49,10 @@ struct MeshVertex {
   var uv: (AssimpReal, AssimpReal)
   var tangent: (AssimpReal, AssimpReal, AssimpReal)
   var bitangent: (AssimpReal, AssimpReal, AssimpReal)
+
+  // Skeletal animation data
+  var boneIndices: (UInt8, UInt8, UInt8, UInt8)  // Up to 4 bone indices per vertex
+  var boneWeights: (AssimpReal, AssimpReal, AssimpReal, AssimpReal)  // Corresponding weights
 }
 
 class MeshInstance: @unchecked Sendable {
@@ -64,6 +68,11 @@ class MeshInstance: @unchecked Sendable {
   var VAO: GLuint = 0
   var VBO: GLuint = 0
   var EBO: GLuint = 0
+
+  // Skeletal animation support
+  private var boneTransforms: [mat4] = []
+  private var boneNames: [String] = []
+  private var isSkeletalMesh: Bool = false
 
   // PBR Texture support
   var diffuseTexture: GLuint = 0
@@ -98,8 +107,14 @@ class MeshInstance: @unchecked Sendable {
     self.transformMatrix = transformMatrix
     self.sceneIdentifier = sceneIdentifier
 
-    // Create shader program
-    self.program = try! GLProgram("Common/basic 2")
+    // Create shader program - use skeletal shader if mesh has bones
+    self.isSkeletalMesh = mesh.numberOfBones > 0
+    if isSkeletalMesh {
+      self.program = try! GLProgram("Common/skeletal", "Common/basic 2")
+      initializeBoneData()
+    } else {
+      self.program = try! GLProgram("Common/basic 2")
+    }
 
     glGenVertexArrays(1, &VAO)
     GLStats.incrementBuffers()
@@ -157,6 +172,18 @@ class MeshInstance: @unchecked Sendable {
       4, 3, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
       UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.bitangent)!))
 
+    // bone indices (4 components as unsigned bytes)
+    glEnableVertexAttribArray(5)
+    glVertexAttribPointer(
+      5, 4, GL_UNSIGNED_BYTE, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+      UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.boneIndices)!))
+
+    // bone weights (4 components as floats)
+    glEnableVertexAttribArray(6)
+    glVertexAttribPointer(
+      6, 4, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+      UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.boneWeights)!))
+
     glBindVertexArray(0)
 
     // Load texture if available
@@ -164,6 +191,39 @@ class MeshInstance: @unchecked Sendable {
 
     // Load HDRI environment map
     loadHDRIEnvironmentMap()
+  }
+
+  /// Initialize bone data for skeletal animation
+  private func initializeBoneData() {
+    boneTransforms = Array(repeating: mat4(1), count: mesh.numberOfBones)
+    boneNames = mesh.bones.map { $0.name ?? "Unknown" }
+  }
+
+  /// Update bone transforms for skeletal animation
+  func updateBoneTransforms(_ transforms: [String: mat4]) {
+    guard isSkeletalMesh else { return }
+
+    // Check if we have any animated transforms
+    let hasAnimatedTransforms = transforms.values.contains { $0 != mat4(1) }
+
+    if !hasAnimatedTransforms {
+      // No animation data, use identity matrices to avoid distortion
+      print("No animated transforms found, using identity matrices")
+      for index in 0..<boneTransforms.count {
+        boneTransforms[index] = mat4(1)
+      }
+      return
+    }
+
+    // Update bone transforms using bone index as key
+    for index in 0..<boneTransforms.count {
+      if let transform = transforms["\(index)"] {
+        boneTransforms[index] = transform
+      } else {
+        // Fallback to identity if no transform found
+        boneTransforms[index] = mat4(1)
+      }
+    }
   }
 
   deinit {
@@ -218,9 +278,6 @@ class MeshInstance: @unchecked Sendable {
       }
     }
 
-    print(scene.cameras)
-    print(scene.materials)
-
     // Add a small delay to make scene loading progress visible
     // try? await Task.sleep(nanoseconds: 200_000_000)  // 0.2 seconds
 
@@ -274,6 +331,20 @@ class MeshInstance: @unchecked Sendable {
     program.setMat4("projection", value: projection)
     program.setMat4("view", value: view)
     program.setMat4("model", value: modelMatrix)
+
+    // Set bone transforms for skeletal animation
+    if isSkeletalMesh {
+      program.setInt("numBones", value: Int32(boneTransforms.count))
+      for (index, transform) in boneTransforms.enumerated() {
+        program.setMat4("boneTransforms[\(index)]", value: transform)
+      }
+
+      // Debug: Print bone transform info
+      print("Skeletal mesh: \(boneTransforms.count) bone transforms")
+      for (index, transform) in boneTransforms.enumerated() {
+        print("Bone \(index): \(transform)")
+      }
+    }
 
     // Set camera position
     program.setVec3("cameraPosition", value: (cameraPosition.x, cameraPosition.y, cameraPosition.z))
@@ -845,6 +916,17 @@ extension Mesh {
     var result: [MeshVertex] = []
     result.reserveCapacity(numberOfVertices)
 
+    // Create bone weight mapping for efficient lookup (only if mesh has bones)
+    let boneWeightMap = numberOfBones > 0 ? createBoneWeightMap() : [:]
+
+    // Debug: Print bone information
+    if numberOfBones > 0 {
+      print("Mesh has \(numberOfBones) bones, weight map has \(boneWeightMap.count) entries")
+      for (index, bone) in bones.enumerated() {
+        print("Bone \(index): \(bone.name ?? "Unknown") with \(bone.numberOfWeights) weights")
+      }
+    }
+
     for i in 0..<numberOfVertices {
       let p = (
         positions[i * 3 + 0],
@@ -875,9 +957,90 @@ extension Mesh {
       } else {
         bitangent = (0, 0, 0)
       }
-      result.append(MeshVertex(position: p, normal: n, uv: t, tangent: tangent, bitangent: bitangent))
+
+      // Get bone data for this vertex
+      let (boneIndices, boneWeights) = getBoneData(for: i, boneWeightMap: boneWeightMap)
+
+      result.append(
+        MeshVertex(
+          position: p,
+          normal: n,
+          uv: t,
+          tangent: tangent,
+          bitangent: bitangent,
+          boneIndices: boneIndices,
+          boneWeights: boneWeights
+        ))
     }
     return result
+  }
+
+  /// Create a mapping from vertex index to bone weights for efficient lookup
+  private func createBoneWeightMap() -> [Int: [(boneIndex: Int, weight: AssimpReal)]] {
+    var weightMap: [Int: [(boneIndex: Int, weight: AssimpReal)]] = [:]
+
+    // Initialize with empty arrays for all vertices
+    for i in 0..<numberOfVertices {
+      weightMap[i] = []
+    }
+
+    // Process each bone's weights with error handling
+    for (boneIndex, bone) in bones.enumerated() {
+      // Check if bone has valid weight data
+      guard bone.numberOfWeights > 0 else { continue }
+
+      // Try to access bone weights safely
+      let boneWeights = bone.weights
+
+      // Check if we got valid weights
+      guard !boneWeights.isEmpty else { continue }
+
+      for weight in boneWeights {
+        let vertexIndex = weight.vertexIndex
+        if vertexIndex < numberOfVertices {
+          weightMap[vertexIndex, default: []].append((boneIndex: boneIndex, weight: weight.weight))
+        }
+      }
+    }
+
+    return weightMap
+  }
+
+  /// Get bone indices and weights for a specific vertex
+  private func getBoneData(for vertexIndex: Int, boneWeightMap: [Int: [(boneIndex: Int, weight: AssimpReal)]]) -> (
+    (UInt8, UInt8, UInt8, UInt8), (AssimpReal, AssimpReal, AssimpReal, AssimpReal)
+  ) {
+    guard let vertexWeights = boneWeightMap[vertexIndex], !vertexWeights.isEmpty else {
+      // No bone weights for this vertex
+      return ((0, 0, 0, 0), (0, 0, 0, 0))
+    }
+
+    // Sort weights by weight value (descending) and take up to 4
+    let sortedWeights = vertexWeights.sorted { $0.weight > $1.weight }.prefix(4)
+
+    var indices: (UInt8, UInt8, UInt8, UInt8) = (0, 0, 0, 0)
+    var weights: (AssimpReal, AssimpReal, AssimpReal, AssimpReal) = (0, 0, 0, 0)
+
+    for (i, weightData) in sortedWeights.enumerated() {
+      switch i {
+      case 0:
+        indices.0 = UInt8(weightData.boneIndex)
+        weights.0 = weightData.weight
+      case 1:
+        indices.1 = UInt8(weightData.boneIndex)
+        weights.1 = weightData.weight
+      case 2:
+        indices.2 = UInt8(weightData.boneIndex)
+        weights.2 = weightData.weight
+      case 3:
+        indices.3 = UInt8(weightData.boneIndex)
+        weights.3 = weightData.weight
+      default:
+        break
+      }
+    }
+
+    return (indices, weights)
   }
 
   func makeIndices32() -> [UInt32] {

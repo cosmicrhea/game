@@ -76,6 +76,19 @@ extension TextStyle {
     strokeColor: .gray900
   )
 
+  // Text field styles (no stroke)
+  static let textField = TextStyle(
+    fontName: "CreatoDisplay-Bold",
+    fontSize: 18,
+    color: .gray300
+  )
+
+  static let textFieldPlaceholder = TextStyle(
+    fontName: "CreatoDisplay-Bold",
+    fontSize: 18,
+    color: .gray500
+  )
+
   static let version = TextStyle(
     fontName: "CreatoDisplay-Bold",
     fontSize: 16,

@@ -1,8 +1,6 @@
-
-
 /// Base class for screens with built-in navigation capabilities
 @MainActor
-class Screen: RenderLoop {
+public class Screen: RenderLoop {
   /// Navigation stack gets injected by NavigationStack when screens are pushed
   var navigationStack: NavigationStack?
   //  {

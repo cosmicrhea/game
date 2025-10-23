@@ -47,9 +47,9 @@ class ItemInspectionCamera {
   private let maxAngularVelocity: Float = 150.0
 
   // Momentum/inertia for smooth zoom
-  private var zoomVelocity: Float = 0.0
-  private let zoomFriction: Float = 0.88
-  private let maxZoomVelocity: Float = 2.0
+  public var zoomVelocity: Float = 0.0
+  public var zoomFriction: Float = 0.88
+  public var maxZoomVelocity: Float = 2.0
 
   // Momentum/inertia for smooth panning
   private var panVelocity: vec3 = vec3(0, 0, 0)

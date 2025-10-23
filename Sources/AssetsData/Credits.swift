@@ -1,5 +1,3 @@
-import OrderedCollections
-
 enum CreditsData {
   static let credits: OrderedDictionary<String, [String]> = [
     "Producer & Designer": ["Freya from the Discord"],
@@ -115,8 +113,8 @@ enum CreditsData {
   static let logos = [
     [
       Image("UI/Credits/Jolt.png"),
-      Image("UI/Credits/Recast.png"),
       Image("UI/Credits/Swift.png"),
+      Image("UI/Credits/Recast.png"),
       // Image("UI/Credits/Xcode.png"),
     ],
     [

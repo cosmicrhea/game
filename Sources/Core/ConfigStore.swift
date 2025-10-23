@@ -6,9 +6,9 @@ final class ConfigStore {
   private var store: [String: Any] = [:]
 
   init() {
-    // Create Application Support directory path: ~/Library/Application Support/local.Glass/
+    // Create Application Support directory path: ~/Library/Application Support/local.game/
     let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    let appDirectory = appSupportURL.appendingPathComponent("local.Glass")
+    let appDirectory = appSupportURL.appendingPathComponent("local.cosmicrhea.Game")
 
     // Ensure the directory exists
     try? FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true)

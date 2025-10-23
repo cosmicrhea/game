@@ -1,0 +1,90 @@
+# name: Build (macOS, Linux, Windows)
+
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+
+# permissions:
+#   contents: read
+
+# jobs:
+#   build:
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         include:
+#           - os: macOS
+#             runner: macos-15
+#           - os: Linux
+#             runner: ubuntu-22.04
+#           - os: Windows
+#             runner: windows-2022
+#     runs-on: ${{ matrix.runner }}
+#     env:
+#       DEPS_REPO: cosmicrhea-game/glass-deps
+#       GAME_LOCAL_DEPS: "0"
+#     steps:
+#       - name: Checkout glass
+#         uses: actions/checkout@v4
+#         with:
+#           path: glass
+
+#       - name: Checkout glass-deps
+#         uses: actions/checkout@v4
+#         with:
+#           repository: ${{ env.DEPS_REPO }}
+#           path: glass-deps
+#           # If glass-deps is private, set a secret named DEPS_TOKEN and uncomment below:
+#           # token: ${{ secrets.DEPS_TOKEN }}
+#           persist-credentials: false
+
+#       - name: Set up Swift 6.1
+#         uses: swift-actions/setup-swift@v2
+#         with:
+#           swift-version: "6.1"
+
+#       - name: Install Linux dependencies
+#         if: runner.os == 'Linux'
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y \
+#             build-essential \
+#             cmake \
+#             ninja-build \
+#             pkg-config \
+#             xorg-dev \
+#             libwayland-dev \
+#             libxrandr-dev \
+#             libxi-dev \
+#             libxcursor-dev \
+#             libxinerama-dev \
+#             libxkbcommon-dev \
+#             mesa-common-dev \
+#             libgl1-mesa-dev \
+#             libglu1-mesa-dev \
+#             libasound2-dev \
+#             libpulse-dev \
+#             libudev-dev \
+#             zlib1g-dev
+
+#       - name: Cache SwiftPM
+#         uses: actions/cache@v4
+#         with:
+#           path: |
+#             ~/.swiftpm
+#             glass/.build
+#           key: ${{ runner.os }}-spm-${{ hashFiles('glass/Package.resolved') }}
+#           restore-keys: |
+#             ${{ runner.os }}-spm-
+
+#       - name: Show Swift version
+#         run: swift --version
+
+#       - name: Build (debug)
+#         working-directory: glass
+#         run: swift build -v
+
+#       - name: Build (release)
+#         working-directory: glass
+#         run: swift build -c release -v

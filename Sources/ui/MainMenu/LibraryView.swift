@@ -44,7 +44,7 @@ final class LibraryView: RenderLoop {
     documentSlotGrid = DocumentSlotGrid(
       columns: 4,
       rows: 4,
-      slotSize: 72.0,
+      slotSize: 80.0,
       spacing: 3.0,
       selectionWraps: true
     )

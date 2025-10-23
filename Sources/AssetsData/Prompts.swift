@@ -5,12 +5,14 @@ public enum PromptGroup: String, CaseIterable {
   case library
   case inventory
   case confirmCancel
+  case itemStorage
   case itemPickup
   case menuRoot
   case menu
   case documentView
   case `continue`
-  case modelView
+  case modelViewer
+  case modelViewerControls
   case itemView
   case mapView
 
@@ -26,13 +28,18 @@ public enum PromptGroup: String, CaseIterable {
       "Confirm": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
       "Cancel": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],
-    .inventory: [
-      "Move": [["keyboard_option"], ["xbox_button_color_x"], ["playstation_button_color_square"]],
+    .itemStorage: [
+      "Inspect": [["keyboard_option"], ["xbox_button_color_x"], ["playstation_button_color_square"]],
       "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
       "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],
     .itemPickup: [
       "Continue": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]]
+    ],
+    .inventory: [
+      "Move": [["keyboard_option"], ["xbox_button_color_x"], ["playstation_button_color_square"]],
+      "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+      "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],
     .menuRoot: [
       "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]]
@@ -48,9 +55,16 @@ public enum PromptGroup: String, CaseIterable {
     .`continue`: [
       "Continue": [["mouse_left"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]]
     ],
-    .modelView: [
+    .modelViewer: [
       "Hide Controls": [["keyboard_z"], ["xbox_button_menu"], ["playstation5_button_options"]],
       "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
+    ],
+    .modelViewerControls: [
+      "Play": [["keyboard_space_icon"], ["xbox_stick_r_horizontal"], ["playstation_stick_r_horizontal"]],
+      "Rotate": [["mouse_horizontal"], ["xbox_stick_l"], ["playstation_stick_l"]],
+      "Zoom": [["mouse_scroll_vertical"], ["xbox_stick_r_vertical"], ["playstation_stick_r_vertical"]],
+      "Move": [["mouse_move"], ["xbox_stick_l"], ["playstation_stick_l"]],
+      "Reset": [["keyboard_r"], ["xbox_button_color_x"], ["playstation_button_color_cross"]],
     ],
     .itemView: [
       "Rotate": [["mouse_move"], ["xbox_stick_l"], ["playstation_stick_l"]],

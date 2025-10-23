@@ -1,6 +1,9 @@
 @Editor(.grouped)
 class MapView: RenderLoop {
+
   private var mapEffect = GLScreenEffect("Common/MapView")
+  private var meshInstances: [MeshInstance] = []
+  private let promptList = PromptList(.mapView)
 
   @Editable(range: 8.0...64.0) var gridCellSize: Float = 32.0
   @Editable(range: 0.5...3.0) var gridThickness: Float = 1.0
@@ -12,10 +15,6 @@ class MapView: RenderLoop {
 
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid
-
-  private let promptList = PromptList(.mapView, axis: .horizontal)
-
-  private var meshInstances: [MeshInstance] = []
 
   init() {
     Task {

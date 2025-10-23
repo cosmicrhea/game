@@ -1,32 +1,9 @@
 import ArgumentParser
-@_exported import GL
-@_exported @preconcurrency import GLFW
-@_exported import GLMath
 import Logging
 import unistd
 
-@_exported import class Foundation.Bundle
-@_exported import struct Foundation.Data
-@_exported import struct Foundation.Date
-@_exported import class Foundation.DateFormatter
-@_exported import class Foundation.FileManager
-@_exported import class Foundation.JSONSerialization
-@_exported import struct Foundation.Locale
-@_exported import class Foundation.NSArray
-@_exported import func Foundation.NSLocalizedString
-@_exported import class Foundation.NSLock
-@_exported import class Foundation.Thread
-@_exported import struct Foundation.URL
-
-#if canImport(Darwin)
-  @_exported import Darwin
-#else
-  @_exported import Glibc
-#endif
-
-#if EDITOR
-  import SwiftUI
-  import Foundation
+#if canImport(AppKit)
+  import AppKit
 #endif
 
 ///// The width of the game window in pixels.
@@ -34,7 +11,6 @@ import unistd
 ///// The height of the game window in pixels.
 //public let HEIGHT = 720 // 1126
 
-/// Command-line interface options for the engine.
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
   var demo: String?
@@ -66,6 +42,7 @@ public final class Engine {
   private var config: Config { .current }
 
   private(set) var window: GLFWWindow!
+  private(set) var editorWindow: GLFWWindow!
   private(set) var activeLoop: RenderLoop!
 
   private(set) var renderer: Renderer!
@@ -75,9 +52,13 @@ public final class Engine {
   private var currentLoopIndex: Int = 0
   private var cli: CLIOptions!
 
-  #if EDITOR
-    private var editorHostingView: NSHostingView<EditorView>?
-  #endif
+  // Editor system
+  private var editorPanel: EditorPanel!
+  private var editorRenderer: Renderer!
+  private var editorGraphicsContext: GraphicsContext!
+  private var editorVisible: Bool = false
+  // Editor background effect (created lazily after a GL context is current)
+  private var editorAmbientBackground: GLScreenEffect? = nil
 
   // State variables
   private var requestScreenshot = false
@@ -103,13 +84,25 @@ public final class Engine {
 
     cli = CLIOptions.parseOrExit()
 
-    sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
+    //sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
     setupGLFW()
     setupWindow()
+    setupEditorWindow()
     setupRenderer()
     setupLoops()
     setupInputHandlers()
+
+    // Respect config: keep editor visible on launch if enabled (ensure window is shown after all setup)
+    if config.editorEnabled {
+      editorVisible = true
+      editorWindow.show()
+      // Bring focus if desired
+      editorWindow.focus(force: true)
+      updateEditorForCurrentLoop()
+    } else {
+      editorWindow.hide()
+    }
 
     runMainLoop()
   }
@@ -132,21 +125,13 @@ public final class Engine {
       window.nsWindow?.styleMask.insert(.fullSizeContentView)
       window.nsWindow?.titlebarAppearsTransparent = true
       window.nsWindow?.toolbar = .init()
-      //window.nsWindow?.hideStandardWindowButtons()
-      window.nsWindow?.darkenStandardWindowButtons()
+      window.nsWindow?.hideStandardWindowButtons()
+    //window.nsWindow?.darkenStandardWindowButtons()
     //      window.nsWindow?.setValue(NSTextField(), forKey: "_customTitleCell")
     //    print(window.nsWindow?.value(forKey: "titlebarViewController"))
     //    print((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view"))
     //    print(((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view") as? NSObject)?.value(forKey: "_titleTextFieldView"))
     //    print(((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view") as? NSObject)?.value(forKey: "titleFont"))
-    #endif
-
-    #if EDITOR
-      editorHostingView = NSHostingView(rootView: EditorView())
-      editorHostingView!.frame = NSRect(x: 0, y: 0, width: window.size.width, height: window.size.height)
-      editorHostingView!.autoresizingMask = [.minXMargin, .minYMargin, .height]
-      editorHostingView!.isHidden = !config.editorEnabled
-      window.nsWindow?.contentView?.addSubview(editorHostingView!)
     #endif
 
     window.position = .zero
@@ -155,6 +140,60 @@ public final class Engine {
     // We shouldn’t need this icon thing for release; it’ll be embedded in .app/.exe/etc.
     window.setIcon(GLFW.Image("UI/AppIcon/icon~masked.webp"))
     window.mouse.setCursor(to: .dot)
+  }
+
+  private func setupEditorWindow() {
+    // Create editor window sharing the main window's GL context so GL resources (programs, textures)
+    // are visible in both windows. Ensure it starts hidden to avoid flashing at launch.
+    let previousVisibleHint = GLFWWindow.hints.visible
+    GLFWWindow.hints.visible = false
+    editorWindow = try! GLFWWindow(width: 520, height: 720, title: "", sharedContext: window.context)
+    GLFWWindow.hints.visible = previousVisibleHint
+
+    #if canImport(AppKit)
+      object_setClass(editorWindow.nsWindow!, NSPanel.self)
+      //if let panel = editorWindow.nsWindow as? NSPanel { panel.isFloatingPanel = true }
+      editorWindow.nsWindow?.styleMask.insert(.utilityWindow)
+      editorWindow.nsWindow?.styleMask.insert(.fullSizeContentView)
+      editorWindow.nsWindow?.titlebarAppearsTransparent = true
+      //editorWindow.nsWindow?.isMovableByWindowBackground = true
+      editorWindow.nsWindow?.hideStandardWindowButtons()
+    //editorWindow.nsWindow?.darkenStandardWindowButtons()
+    #endif
+
+    // Position editor window next to main window
+    editorWindow.position = GLFW.Point(Int(window.size.width), 0)
+
+    // Don't make editor window context current during setup
+    // editorWindow.context.makeCurrent()
+
+    // Handle live resize so our layout uses the correct size
+    editorWindow.framebufferSizeChangeHandler = { [weak self] _, w, h in
+      guard let self else { return }
+      self.editorPanel.updateWindowSize(Size(Float(w), Float(h)))
+    }
+  }
+
+  private func setupEditorSystem() {
+    // Create editor renderer (shared context with main window)
+    editorRenderer = {
+      if cli.metal {
+        do {
+          return try MTLRenderer()
+        } catch {
+          logger.warning("Failed to create Metal renderer for editor, falling back to OpenGL: \(error)")
+          return GLRenderer()
+        }
+      } else {
+        return GLRenderer()
+      }
+    }()
+
+    editorGraphicsContext = GraphicsContext(renderer: editorRenderer, scale: 1, isFlipped: false)
+    editorPanel = EditorPanel()
+
+    // Initially hide the editor window
+    editorWindow.hide()
   }
 
   private func setupRenderer() {
@@ -180,31 +219,37 @@ public final class Engine {
 
     // Initialize wireframe mode from config
     renderer.setWireframeMode(config.wireframeMode)
+
+    // Setup editor system
+    setupEditorSystem()
   }
 
   private func setupLoops() {
     loops = [
+      MapView(),
       ItemView(item: Item.sigp320),
+      ItemStorageView(),
       TitleScreenStack(),
-       MainLoop(),
-       MainMenu(),
-       UIDemo(),
-       DocumentDemo(),
+      MainLoop(),
+      MainMenu(),
+      UIDemo(),
+      DocumentDemo(),
+      ModelViewer(),
       CreditsScreen(),
 
       // // InventoryView(),
       // GradientDemo(),
 
-       SVGDemo(),
-       SlotDemo(),
-       SlotGridDemo(),
-       // LibraryView(),
-       CalloutDemo(),
-       PromptListDemo(),
-       FontsDemo(),
-       PathDemo(),
-       TextEffectsDemo(),
-       FadeDemo(),
+      SVGDemo(),
+      SlotDemo(),
+      SlotGridDemo(),
+      // LibraryView(),
+      CalloutDemo(),
+      PromptListDemo(),
+      FontsDemo(),
+      PathDemo(),
+      TextEffectsDemo(),
+      FadeDemo(),
     ]
 
     // Handle CLI demo selection
@@ -230,7 +275,11 @@ public final class Engine {
 
   private func setupInputHandlers() {
     window.keyInputHandler = { [weak self] window, key, scancode, state, mods in
-      guard let self = self else { return }
+      guard let self else { return }
+      // If editor is visible and focused, don't forward keys to the main loop to avoid double handling
+      if self.editorVisible && self.editorWindow.isFocused {
+        return
+      }
       self.activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onKeyPressed(window: window, key: key, scancode: Int32(scancode), mods: mods)
@@ -239,24 +288,65 @@ public final class Engine {
     }
 
     window.cursorPositionHandler = { [weak self] window, x, y in
-      guard let self = self else { return }
+      guard let self else { return }
       guard window.isFocused else { return }
       GLScreenEffect.mousePosition = (Float(x), Float(y))
       self.activeLoop.onMouseMove(window: window, x: x, y: y)
     }
 
     window.scrollInputHandler = { [weak self] window, xOffset, yOffset in
-      guard let self = self else { return }
+      guard let self else { return }
       self.activeLoop.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
     }
 
     window.mouseButtonHandler = { [weak self] window, button, state, mods in
-      guard let self = self else { return }
+      guard let self else { return }
       self.activeLoop.onMouseButton(window: window, button: button, state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onMouseButtonPressed(window: window, button: button, mods: mods)
       } else if state == .released {
         self.activeLoop.onMouseButtonReleased(window: window, button: button, mods: mods)
+      }
+    }
+
+    // Add input handlers for editor window
+    setupEditorInputHandlers()
+  }
+
+  private func setupEditorInputHandlers() {
+    editorWindow.keyInputHandler = { [weak self] window, key, scancode, state, mods in
+      guard let self else { return }
+
+      // Handle backslash to toggle editor
+      if key == .backslash && state == .pressed {
+        UISound.select()
+        self.toggleEditor()
+        return
+      }
+
+      // Handle other keys for editor panel (on key press only to avoid double handling on release)
+      if self.editorVisible && state == .pressed {
+        _ = self.editorPanel.handleKey(key)
+      }
+    }
+
+    editorWindow.mouseButtonHandler = { [weak self] window, button, state, mods in
+      guard let self else { return }
+
+      if self.editorVisible && button == .left {
+        if state == .pressed {
+          self.editorPanel.onMouseButtonPressed(window: window, button: button, mods: mods)
+        } else if state == .released {
+          self.editorPanel.onMouseButtonReleased(window: window, button: button, mods: mods)
+        }
+      }
+    }
+
+    editorWindow.cursorPositionHandler = { [weak self] window, x, y in
+      guard let self else { return }
+
+      if self.editorVisible {
+        self.editorPanel.onMouseMove(window: window, x: x, y: y)
       }
     }
   }
@@ -294,11 +384,8 @@ public final class Engine {
           window.title = ""
         }
       } else {
-        #if EDITOR
-          UISound.select()
-          config.editorEnabled.toggle()
-          editorHostingView?.isHidden = !config.editorEnabled
-        #endif
+        UISound.select()
+        toggleEditor()
       }
 
     default:
@@ -323,10 +410,8 @@ public final class Engine {
     // TODO: move this elsewhere; setting default clear color when changing loop
     //graphicsContext.renderer.setClearColor(Color(0.2, 0.1, 0.1, 1.0))
 
-    #if EDITOR
-      // Notify the editor that the loop has changed
-      NotificationCenter.default.post(name: .loopChanged, object: nil)
-    #endif
+    // Update editor panel for new loop
+    updateEditorForCurrentLoop()
   }
 
   private func cycleInputSources() {
@@ -336,17 +421,43 @@ public final class Engine {
     InputSource.player1 = allSources[nextIndex]
   }
 
-  #if os(macOS)
-    private func updateWindowTitle() {
-      let tex = GLStats.textureCount
-      let bufs = GLStats.bufferCount
-      let memMB = Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
-      window.title = String(
-        format: "GL textures: %d | GL buffers: %d | Memory: %.1f MB",
-        tex, bufs, memMB
-      )
+  private func toggleEditor() {
+    editorVisible.toggle()
+
+    #if canImport(AppKit)
+      editorWindow.nsWindow?.animationBehavior = .none
+    #endif
+
+    if editorVisible {
+      editorWindow.show()
+      updateEditorForCurrentLoop()
+    } else {
+      editorWindow.hide()
+      // Return focus to main window when hiding editor
+      window.focus(force: true)
     }
-  #endif
+  }
+
+  private func updateEditorForCurrentLoop() {
+    guard editorVisible, let activeLoop else { return }
+    editorWindow.title = String(describing: type(of: activeLoop))
+
+    if let editingLoop = activeLoop as? Editing {
+      editorPanel.updateForObject(editingLoop)
+    } else {
+      editorPanel.showNoEditorMessage()
+    }
+  }
+
+  private func updateWindowTitle() {
+    let tex = GLStats.textureCount
+    let bufs = GLStats.bufferCount
+    let memMB = Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
+    window.title = String(
+      format: "GL textures: %d | GL buffers: %d | Memory: %.1f MB",
+      tex, bufs, memMB
+    )
+  }
 
   private func runMainLoop() {
     while !window.shouldClose {
@@ -371,6 +482,11 @@ public final class Engine {
 
       renderer.endFrame()
 
+      // Render editor window if visible (after main window is done)
+      if editorVisible && !editorWindow.shouldClose {
+        renderEditorWindow()
+      }
+
       if showStats && GLFWSession.currentTime - lastTitleUpdateTime > 1.0 {
         lastTitleUpdateTime = GLFWSession.currentTime
         updateWindowTitle()
@@ -382,9 +498,12 @@ public final class Engine {
       }
 
       if requestScreenshot {
-        saveScreenshot(
-          width: Int32(renderer.viewportSize.width), height: Int32(renderer.viewportSize.height), path: cli.screenshot)
         requestScreenshot = false
+        saveScreenshot(
+          width: Int32(renderer.viewportSize.width),
+          height: Int32(renderer.viewportSize.height),
+          path: cli.screenshot
+        )
       }
 
       if let t = scheduleExitAt, GLFWSession.currentTime >= t {
@@ -394,5 +513,46 @@ public final class Engine {
       window.swapBuffers()
       GLFWSession.pollInputEvents()
     }
+  }
+
+  private func renderEditorWindow() {
+    // Store current context
+    let previousContext = GLFWContext.current
+
+    // Switch to editor window context
+    editorWindow.context.makeCurrent()
+
+    // Update viewport size for editor window
+    let editorSize = Size(Float(editorWindow.size.width), Float(editorWindow.size.height))
+    editorRenderer.beginFrame(windowSize: editorSize)
+
+    // Render editor panel with flipped coordinate system
+    GraphicsContext.withContext(editorGraphicsContext) {
+      // Set up UI rendering state for editor window
+      editorRenderer.withUIContext {
+        // Create ambient background effect lazily now that a context is current
+        if self.editorAmbientBackground == nil {
+          self.editorAmbientBackground = GLScreenEffect("Effects/AmbientBackground")
+        }
+        // Draw ambient background behind the UI
+        self.editorAmbientBackground?.draw { shader in
+          shader.setVec3("uTintDark", value: (0.035, 0.045, 0.055))
+          shader.setVec3("uTintLight", value: (0.085, 0.10, 0.11))
+          shader.setFloat("uMottle", value: 0.35)
+          shader.setFloat("uGrain", value: 0.08)
+          shader.setFloat("uVignette", value: 0.35)
+          shader.setFloat("uDust", value: 0.06)
+        }
+        // Update editor panel with current window size
+        editorPanel.updateWindowSize(editorSize)
+        editorPanel.draw()
+      }
+    }
+
+    editorRenderer.endFrame()
+    editorWindow.swapBuffers()
+
+    // Restore previous context
+    previousContext.makeCurrent()
   }
 }
