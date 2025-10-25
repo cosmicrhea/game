@@ -38,7 +38,7 @@ final class FadeDemo: RenderLoop {
     let instructionText = "SPACE: Toggle fade | ESC: Reset"
     instructionText.draw(
       at: Point(20, Float(Engine.viewportSize.height) - 20),
-      style: TextStyle(fontName: "Determination", fontSize: 24, color: .white),
+      style: .itemName,
       anchor: .topLeft
     )
 
@@ -46,7 +46,7 @@ final class FadeDemo: RenderLoop {
     let statusText = "Fade Opacity: \(String(format: "%.2f", screenFade.opacity))"
     statusText.draw(
       at: Point(20, Float(Engine.viewportSize.height) - 60),
-      style: TextStyle(fontName: "Determination", fontSize: 20, color: .white),
+      style: .itemDescription,
       anchor: .topLeft
     )
   }

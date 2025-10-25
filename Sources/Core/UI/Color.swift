@@ -41,6 +41,31 @@ public struct Color: Sendable, Equatable {
   }
 }
 
+
+// MARK: - Accent Color (dynamic, app-wide)
+
+// File-scoped storage for the dynamic accent color. Defaults to rose.
+nonisolated(unsafe) private var _globalAccentColor: Color = .rose900
+
+extension Color {
+  /// Global UI accent color used by controls like Switch and Slider fills.
+  /// This can be changed at runtime to theme the UI.
+  @MainActor public static var accent: Color {
+    get { _globalAccentColor }
+    set {
+      _globalAccentColor = newValue
+      // Persist to config as RGBA string
+      let r = String(format: "%.4f", newValue.red)
+      let g = String(format: "%.4f", newValue.green)
+      let b = String(format: "%.4f", newValue.blue)
+      let a = String(format: "%.4f", newValue.alpha)
+      Config.current.accentRGBA = "\(r),\(g),\(b),\(a)"
+    }
+  }
+}
+
+// MARK: - Built-in Color Palette
+
 extension Color {
   public static let white = Color(1, 1, 1, 1)
   public static let black = Color(0, 0, 0, 1)
@@ -60,6 +85,9 @@ extension Color {
   public static let purple = Color(0.6588, 0.3333, 0.9686, 1)
   public static let emerald = Color(0.0627, 0.7255, 0.5059, 1)
   public static let rose = Color(0.9569, 0.2471, 0.3686, 1)
+  public static let rose700 = Color(0.7569, 0.1471, 0.2686, 1)
+  public static let rose800 = Color(0.5569, 0.0471, 0.1686, 1)
+  public static let rose900 = Color(0.3569, 0.0471, 0.0686, 1)
 
   public static let gray100 = Color(0.9529, 0.9569, 0.9647, 1)
   public static let gray200 = Color(0.8059, 0.8333, 0.8804, 1)

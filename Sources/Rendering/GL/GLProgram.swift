@@ -8,18 +8,18 @@ enum GLProgramError: Error {
 }
 
 /// A shader program that loads, compiles, and links OpenGL shaders
-struct GLProgram {
+public struct GLProgram {
   let programID: GLuint
 
   /// Initialize shader program from shader base name
   /// Looks for vertex shader as "name.vert" and fragment shader as "name.frag"
-  init(_ name: String) throws {
+  public init(_ name: String) throws {
     try self.init(name, name)
   }
 
   /// Initialize shader program from separate vertex and fragment base names
   /// Looks for vertex shader as "vertexName.vert" and fragment shader as "fragmentName.frag"
-  init(_ vertexName: String, _ fragmentName: String) throws {
+  public init(_ vertexName: String, _ fragmentName: String) throws {
     programID = glCreateProgram()
 
     do {

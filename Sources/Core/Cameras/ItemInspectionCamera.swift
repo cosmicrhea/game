@@ -84,9 +84,9 @@ class ItemInspectionCamera {
     self.modelYaw = modelYaw
     self.modelPitch = modelPitch
     self.mouseSensitivity = defaultSensitivity
-    self.initialTarget = target
 
     self.resetTargetYaw = modelYaw
+    self.initialTarget = target
 
     // Calculate camera position based on distance
     self.position = target + vec3(0.0, 0.0, distance)
@@ -371,11 +371,9 @@ class ItemInspectionCamera {
       position.x, position.y, position.z, modelYaw, modelPitch, distance, panOffset.x, panOffset.y, panOffset.z
     )
 
-    let determinationStyle = TextStyle(fontName: "Determination", fontSize: 32, color: .white)
-
     debugText.draw(
       at: Point(24, Float(Engine.viewportSize.height) - 24),
-      style: determinationStyle,
+      style: .itemDescription,
       anchor: .topLeft
     )
   }

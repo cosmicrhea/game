@@ -5,6 +5,8 @@
 /// - Supports keyboard input with A/D or Left/Right when `isFocused == true`
 @MainActor
 public final class Slider: OptionsControl, AltClickable {
+  public enum Style { case tall, pill, inspector }
+
   // MARK: - Public API
 
   /// The frame where the slider is drawn.
@@ -44,15 +46,18 @@ public final class Slider: OptionsControl, AltClickable {
 
   // MARK: - Styling
 
+  /// Visual style of the slider. `.tall` matches the original look; `.pill` is a HUD pill.
+  public var style: Style = .tall
+
   public var cornerRadius: Float = 4
   public var trackHeight: Float = 6
   public var trackInset: Float = 12  // Horizontal inset for track inside frame
   public var thumbSize: Size = Size(9, 28)
-  public var tickHeight: Float = 10
+  public var tickHeight: Float = 14
   public var tickWidth: Float = 2
 
   public var trackColor = Color.gray700
-  public var trackFillColor = Color.gray500
+  public var trackFillColor: Color? = nil
   public var tickColor = Color.gray500.withAlphaComponent(0.8)
   public var thumbColor = Color.gray300
   public var thumbFocusedColor = Color.gray300
@@ -70,6 +75,10 @@ public final class Slider: OptionsControl, AltClickable {
 
   private var isDragging: Bool = false
   private let initialValue: Float
+  private var mouseDownPoint: Point = .zero
+  private var draggedBeyondClickThreshold: Bool = false
+  private var inlineEditor: TextField? = nil
+  private var dragStartValue: Float = 0
 
   // MARK: - Init
 
@@ -94,14 +103,17 @@ public final class Slider: OptionsControl, AltClickable {
   // MARK: - Drawing
 
   public func draw() {
+    // Metrics for current style
+    let m = metricsForCurrentStyle()
+
     // Track rect (horizontally inset, vertically centered within frame)
-    let trackWidth = max(0, frame.size.width - trackInset * 2)
-    let trackX = frame.origin.x + trackInset
-    let trackY = frame.midY - trackHeight * 0.5
-    let trackRect = Rect(x: trackX, y: trackY, width: trackWidth, height: trackHeight)
+    let trackWidth = max(0, frame.size.width - m.trackInset * 2)
+    let trackX = frame.origin.x + m.trackInset
+    let trackY = frame.midY - m.trackHeight * 0.5
+    let trackRect = Rect(x: trackX, y: trackY, width: trackWidth, height: m.trackHeight)
 
     // Draw base track
-    RoundedRect(trackRect, cornerRadius: cornerRadius).draw(color: trackColor)
+    RoundedRect(trackRect, cornerRadius: m.trackCornerRadius).draw(color: trackColor)
 
     // Draw tick marks
     if tickCount > 0 && !isContinuous {
@@ -133,21 +145,24 @@ public final class Slider: OptionsControl, AltClickable {
     let fillW = trackRect.size.width * (rightRatio - leftRatio)
     if fillW > 0.0001 {
       let fillRect = Rect(x: fillX, y: trackRect.origin.y, width: fillW, height: trackRect.size.height)
-      RoundedRect(fillRect, cornerRadius: cornerRadius).draw(color: trackFillColor)
+      let fillColor = trackFillColor ?? Color.accent
+      RoundedRect(fillRect, cornerRadius: m.trackCornerRadius).draw(color: fillColor)
     }
 
-    // Thumb
-    let thumbCenterX = trackRect.origin.x + trackRect.size.width * valueRatio
-    let thumbRect = Rect(
-      x: thumbCenterX - thumbSize.width * 0.5,
-      y: frame.midY - thumbSize.height * 0.5,
-      width: thumbSize.width,
-      height: thumbSize.height
-    )
+    // Thumb (skip for inspector style)
+    if style != .inspector {
+      let thumbCenterX = trackRect.origin.x + trackRect.size.width * valueRatio
+      let thumbRect = Rect(
+        x: thumbCenterX - m.thumbSize.width * 0.5,
+        y: frame.midY - m.thumbSize.height * 0.5,
+        width: m.thumbSize.width,
+        height: m.thumbSize.height
+      )
 
-    let thumbFill = isFocused ? thumbFocusedColor : thumbColor
-    RoundedRect(thumbRect, cornerRadius: 6).draw(color: thumbFill)
-    RoundedRect(thumbRect, cornerRadius: 6).stroke(color: thumbOutlineColor, lineWidth: 2)
+      let thumbFill = isFocused ? thumbFocusedColor : thumbColor
+      RoundedRect(thumbRect, cornerRadius: m.thumbCornerRadius).draw(color: thumbFill)
+      RoundedRect(thumbRect, cornerRadius: m.thumbCornerRadius).stroke(color: thumbOutlineColor, lineWidth: 2)
+    }
 
     // Draw value label on the right if enabled
     if showsValueLabel {
@@ -155,6 +170,15 @@ public final class Slider: OptionsControl, AltClickable {
       let textOrigin = Point(frame.maxX + 52, frame.midY)
       text.draw(at: textOrigin, style: valueLabelStyle.withMonospacedDigits(true), anchor: .right)
     }
+
+    // Inspector: draw centered value text inside the control
+    if style == .inspector && inlineEditor == nil {
+      let text = (valueFormatter ?? { String(format: "%.2f", $0) })(value)
+      text.draw(at: Point(frame.midX, frame.midY), style: valueLabelStyle.withMonospacedDigits(true), anchor: .center)
+    }
+
+    // Draw inline editor on top if active
+    inlineEditor?.draw()
   }
 
   // MARK: - Input Handling
@@ -162,6 +186,13 @@ public final class Slider: OptionsControl, AltClickable {
   /// Handle a key press. Returns true if consumed.
   @discardableResult
   public func handleKey(_ key: Keyboard.Key) -> Bool {
+    if let editor = inlineEditor {
+      if key == .escape {
+        inlineEditor = nil
+        return true
+      }
+      return editor.handleKey(key)
+    }
     guard isFocused else { return false }
     switch key {
     case .a, .left:
@@ -180,6 +211,12 @@ public final class Slider: OptionsControl, AltClickable {
   /// Call when the left mouse button is pressed. Returns true if the slider starts a drag or changes value.
   @discardableResult
   public func handleMouseDown(at position: Point) -> Bool {
+    // If inline editor is active, forward to it
+    if let editor = inlineEditor, editor.frame.contains(position) {
+      editor.isFocused = true
+      return editor.handleMouseDown(at: position)
+    }
+
     let (trackRect, thumbRect) = layoutRects()
     // Expand hit area vertically to thumb height around the track center
     let expandedHit = Rect(
@@ -190,7 +227,13 @@ public final class Slider: OptionsControl, AltClickable {
     )
     if thumbRect.contains(position) || expandedHit.contains(position) {
       isDragging = true
-      value = valueForPoint(position, within: trackRect)
+      draggedBeyondClickThreshold = false
+      mouseDownPoint = position
+      if style == .inspector {
+        dragStartValue = value
+      } else {
+        value = valueForPoint(position, within: trackRect)
+      }
       return true
     }
     return false
@@ -198,13 +241,36 @@ public final class Slider: OptionsControl, AltClickable {
 
   /// Call on mouse move. If dragging, updates the value.
   public func handleMouseMove(at position: Point) {
+    if let editor = inlineEditor {
+      editor.handleMouseMove(at: position)
+      return
+    }
     guard isDragging else { return }
     let (trackRect, _) = layoutRects()
-    value = valueForPoint(position, within: trackRect)
+    let dx = position.x - mouseDownPoint.x
+    let dy = position.y - mouseDownPoint.y
+    if (dx * dx + dy * dy) > 4 { draggedBeyondClickThreshold = true }
+    if style == .inspector {
+      let width = max(1, trackRect.size.width)
+      let t = dx / width
+      let delta = t * (maximumValue - minimumValue)
+      value = Self.clamp(dragStartValue + delta, minimumValue, maximumValue)
+    } else {
+      value = valueForPoint(position, within: trackRect)
+    }
   }
 
   /// Call when the left mouse button is released.
-  public func handleMouseUp() { isDragging = false }
+  public func handleMouseUp() {
+    defer { isDragging = false }
+    if let editor = inlineEditor {
+      editor.handleMouseUp()
+      return
+    }
+    if style == .inspector && isDragging && !draggedBeyondClickThreshold {
+      beginInlineEdit()
+    }
+  }
 
   // MARK: - AltClickable
 
@@ -244,18 +310,19 @@ public final class Slider: OptionsControl, AltClickable {
   }
 
   private func layoutRects() -> (track: Rect, thumb: Rect) {
-    let trackWidth = max(0, frame.size.width - trackInset * 2)
-    let trackX = frame.origin.x + trackInset
-    let trackY = frame.midY - trackHeight * 0.5
-    let trackRect = Rect(x: trackX, y: trackY, width: trackWidth, height: trackHeight)
+    let m = metricsForCurrentStyle()
+    let trackWidth = max(0, frame.size.width - m.trackInset * 2)
+    let trackX = frame.origin.x + m.trackInset
+    let trackY = frame.midY - m.trackHeight * 0.5
+    let trackRect = Rect(x: trackX, y: trackY, width: trackWidth, height: m.trackHeight)
 
     let ratio = normalizedValue()
     let thumbCenterX = trackRect.origin.x + trackRect.size.width * ratio
     let thumbRect = Rect(
-      x: thumbCenterX - thumbSize.width * 0.5,
-      y: frame.midY - thumbSize.height * 0.5,
-      width: thumbSize.width,
-      height: thumbSize.height
+      x: thumbCenterX - m.thumbSize.width * 0.5,
+      y: frame.midY - m.thumbSize.height * 0.5,
+      width: m.thumbSize.width,
+      height: m.thumbSize.height
     )
     return (trackRect, thumbRect)
   }
@@ -263,4 +330,75 @@ public final class Slider: OptionsControl, AltClickable {
   private static func clamp(_ v: Float, _ a: Float, _ b: Float) -> Float {
     return max(min(v, b), a)
   }
+
+  private struct StyleMetrics {
+    let trackHeight: Float
+    let trackInset: Float
+    let trackCornerRadius: Float
+    let thumbSize: Size
+    let thumbCornerRadius: Float
+  }
+
+  private func metricsForCurrentStyle() -> StyleMetrics {
+    switch style {
+    case .tall:
+      return StyleMetrics(
+        trackHeight: trackHeight,
+        trackInset: trackInset,
+        trackCornerRadius: cornerRadius,
+        thumbSize: thumbSize,
+        thumbCornerRadius: 6
+      )
+    case .pill:
+      let pillTrackHeight: Float = 24
+      let pillThumbSize = Size(pillTrackHeight, pillTrackHeight)
+      return StyleMetrics(
+        trackHeight: pillTrackHeight,
+        trackInset: trackInset,
+        trackCornerRadius: pillTrackHeight * 0.5,
+        thumbSize: pillThumbSize,
+        thumbCornerRadius: pillThumbSize.width * 0.5
+      )
+    case .inspector:
+      let h: Float = 24
+      // No visible thumb; keep size minimal for hit testing expansion
+      let tSize = Size(0, 0)
+      return StyleMetrics(
+        trackHeight: h,
+        trackInset: trackInset,
+        trackCornerRadius: h * 0.5,
+        thumbSize: tSize,
+        thumbCornerRadius: 0
+      )
+    }
+  }
+
+  // MARK: - Inline editing (inspector)
+
+  private func beginInlineEdit() {
+    // Avoid stacking editors
+    if inlineEditor != nil { return }
+    let editor = TextField(frame: frame, text: (valueFormatter ?? { String(format: "%.2f", $0) })(value))
+    editor.bezeled = true
+    editor.textStyle = valueLabelStyle
+    editor.onCommit = { [weak self] in
+      guard let self else { return }
+      if let v = Float(editor.text) {
+        self.value = Self.clamp(v, self.minimumValue, self.maximumValue)
+      }
+      self.inlineEditor = nil
+    }
+    inlineEditor = editor
+    inlineEditor?.isFocused = true
+  }
+
+  // Public helpers for demos to route input when editing
+  public var isEditingInline: Bool { inlineEditor != nil }
+
+  @discardableResult
+  public func insertText(_ string: String) -> Bool {
+    guard let editor = inlineEditor else { return false }
+    return editor.insertText(string)
+  }
+
 }

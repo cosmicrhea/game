@@ -240,7 +240,8 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
           )
           """
       } else {
-        let range = prop.range ?? "0.0...1.0"
+        // If the property type is Bool, do not emit a numeric range so the panel can render a Switch
+        let range: String? = (trimmedType == "Bool") ? nil : (prop.range ?? "0.0...1.0")
         return """
           AnyEditableProperty(
             name: \"\(prop.name)\",
@@ -249,7 +250,7 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
               self.\(prop.name) = newValue as! \(prop.type)
             },
             displayName: \"\(prop.displayName)\",
-            validRange: \(range)
+            validRange: \(range ?? "nil")
           )
           """
       }

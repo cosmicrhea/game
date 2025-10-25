@@ -1,4 +1,5 @@
 import Assimp
+
 import class Foundation.Bundle
 
 /// A demo that renders a triangle and a key.
@@ -18,8 +19,6 @@ final class KeyAndTriangleDemo: RenderLoop {
   private let meshInstances: [MeshInstance]
 
   // UI resources
-  /// Text style using the Determination font.
-  private let determinationStyle = TextStyle(fontName: "Determination", fontSize: 32, color: .white)
   /// Callout UI component for displaying hints.
   private var callout = Callout("Make your way to Kastellet", icon: .chevron)
   /// Input prompts component for controller/keyboard icons.
@@ -137,7 +136,7 @@ final class KeyAndTriangleDemo: RenderLoop {
 
     debugText.draw(
       at: Point(24, Float(Engine.viewportSize.height) - 24),
-      style: determinationStyle,
+      style: .itemDescription,
       anchor: .topLeft
     )
   }

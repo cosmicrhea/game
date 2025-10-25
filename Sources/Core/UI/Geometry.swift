@@ -361,6 +361,19 @@ public enum RectEdge {
   case maxYEdge
 }
 
+/// 
+public struct RectCorner: OptionSet, Sendable {
+  public static let topLeft = Self(rawValue: 1 << 0)
+  public static let topRight = Self(rawValue: 1 << 1)
+  public static let bottomLeft = Self(rawValue: 1 << 2)
+  public static let bottomRight = Self(rawValue: 1 << 3)
+
+  public static let allCorners: Self = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+
+  public let rawValue: Int
+  public init(rawValue: Int) { self.rawValue = rawValue }
+}
+
 /// Axis enumeration for layout direction.
 public enum Axis {
   case horizontal

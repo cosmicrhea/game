@@ -4,6 +4,7 @@ public final class EditorPanel: OptionsPanel {
   private var editableProperties: [AnyEditableProperty] = []
   private var propertyGroups: [EditablePropertyGroup] = []
   private var sliders: [Slider] = []
+  private var switches: [Switch] = []
   private var currentObject: Editing?
   private var editorWindowSize: Size = Size(520, 720)
   private var noEditorMessage: String? = nil
@@ -64,13 +65,29 @@ public final class EditorPanel: OptionsPanel {
         continue
       }
 
-      let sliderWidth = r.size.width * 0.55
-      // Reserve space at the right edge for the slider's value label so it doesn't clip
-      let valueLabelReserve: Float = 32
-      let sliderX = r.origin.x + r.size.width - valueLabelReserve - sidePadding - sliderWidth
-      let sliderY = r.origin.y + (r.size.height - 36) * 0.5
-      let controlFrame = Rect(x: sliderX, y: sliderY, width: sliderWidth, height: 36)
-      rows[i].control.frame = controlFrame
+      let isSlider = rows[i].control is Slider
+      let isSwitch = rows[i].control is Switch
+
+      // Size by control type
+      let controlWidth: Float
+      let controlHeight: Float
+      let rightReserve: Float = isSlider ? 32 : 0  // leave space for slider value label
+      if isSlider {
+        controlWidth = r.size.width * 0.55
+        controlHeight = 36
+      } else if isSwitch {
+        controlWidth = 68
+        controlHeight = 28
+      } else {
+        controlWidth = r.size.width * 0.55
+        controlHeight = 36
+      }
+
+      // Slightly reduce right padding for switches to visually align with panel edge
+      let rightPadding = isSwitch ? max(0, sidePadding - 6) : sidePadding
+      let x = r.origin.x + r.size.width - rightReserve - rightPadding - controlWidth
+      let y = r.origin.y + (r.size.height - controlHeight) * 0.5
+      rows[i].control.frame = Rect(x: x, y: y, width: controlWidth, height: controlHeight)
     }
   }
 
@@ -117,6 +134,11 @@ public final class EditorPanel: OptionsPanel {
     labelStyle = TextStyle.itemDescription
   }
 
+  /// Advance animations and time-based UI for editor controls
+  public override func update(deltaTime: Float) {
+    for sw in switches { sw.update(deltaTime: deltaTime) }
+  }
+
   /// Decorative section header control that draws a title line
   private final class SectionHeader: OptionsControl {
     var frame: Rect = .zero
@@ -145,6 +167,7 @@ public final class EditorPanel: OptionsPanel {
 
   private func generateControls() {
     sliders.removeAll()
+    switches.removeAll()
     var rows: [Row] = []
 
     if !propertyGroups.isEmpty {
@@ -157,6 +180,9 @@ public final class EditorPanel: OptionsPanel {
           if let slider = createSliderForProperty(property) {
             sliders.append(slider)
             rows.append(Row(label: property.displayName, control: slider))
+          } else if let sw = createSwitchForProperty(property) {
+            switches.append(sw)
+            rows.append(Row(label: property.displayName, control: sw))
           }
         }
       }
@@ -166,6 +192,9 @@ public final class EditorPanel: OptionsPanel {
         if let slider = createSliderForProperty(property) {
           sliders.append(slider)
           rows.append(Row(label: property.displayName, control: slider))
+        } else if let sw = createSwitchForProperty(property) {
+          switches.append(sw)
+          rows.append(Row(label: property.displayName, control: sw))
         }
       }
     }
@@ -196,6 +225,15 @@ public final class EditorPanel: OptionsPanel {
     return slider
   }
 
+  private func createSwitchForProperty(_ property: AnyEditableProperty) -> Switch? {
+    guard property.validRange == nil, let boolValue = property.value as? Bool else { return nil }
+    let sw = Switch(frame: .zero, isOn: boolValue)
+    sw.onToggle = { newValue in
+      property.setValue(newValue)
+    }
+    return sw
+  }
+
   /// Update slider values when the underlying object properties change
   public func refreshValues() {
     guard let object = currentObject else { return }
@@ -209,12 +247,16 @@ public final class EditorPanel: OptionsPanel {
       currentProperties = editableProperties
     }
 
-    for (index, property) in currentProperties.enumerated() {
-      guard index < sliders.count,
-        let floatValue = property.value as? Float
-      else { continue }
-
-      sliders[index].value = floatValue
+    var sliderIndex = 0
+    var switchIndex = 0
+    for property in currentProperties {
+      if let floatValue = property.value as? Float, sliderIndex < sliders.count {
+        sliders[sliderIndex].value = floatValue
+        sliderIndex += 1
+      } else if let boolValue = property.value as? Bool, switchIndex < switches.count {
+        switches[switchIndex].isOn = boolValue
+        switchIndex += 1
+      }
     }
   }
 }

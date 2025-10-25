@@ -484,6 +484,8 @@ public final class Engine {
 
       // Render editor window if visible (after main window is done)
       if editorVisible && !editorWindow.shouldClose {
+        // Advance editor UI animations with the same deltaTime
+        editorPanel.update(deltaTime: deltaTime)
         renderEditorWindow()
       }
 

@@ -1,4 +1,4 @@
-enum Easing {
+public enum Easing {
   case linear
   case easeIn
   case easeOut
@@ -13,7 +13,7 @@ enum Easing {
   case easeOutCirc
   case easeInOutCirc
 
-  func apply(_ t: Float) -> Float {
+  public func apply(_ t: Float) -> Float {
     switch self {
     case .linear:
       return t

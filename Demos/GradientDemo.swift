@@ -60,22 +60,22 @@ public final class GradientDemo: RenderLoop {
     // Draw labels
     "Linear Gradients".draw(
       at: Point(50, 30),
-      style: TextStyle(fontName: "Determination", fontSize: 20, color: .white)
+      style: .itemName
     )
 
     "Radial Gradients".draw(
       at: Point(50, 180),
-      style: TextStyle(fontName: "Determination", fontSize: 20, color: .white)
+      style: .itemName
     )
 
     "Animated Gradient".draw(
       at: Point(50, 330),
-      style: TextStyle(fontName: "Determination", fontSize: 20, color: .white)
+      style: .itemName
     )
 
     "Alpha Fade".draw(
       at: Point(400, 330),
-      style: TextStyle(fontName: "Determination", fontSize: 20, color: .white)
+      style: .itemName
     )
   }
 }

@@ -109,6 +109,14 @@ public class OptionsPanel: Screen {
           return
         }
       }
+      // If the click lands anywhere inside the row rect and the control is a Switch,
+      // toggle it even if the click is on the label area.
+      if rowRects.indices.contains(i), rowRects[i].contains(p), let sw = row.control as? Switch {
+        focusedIndex = i
+        sw.isOn.toggle()
+        UISound.select()
+        return
+      }
       if row.control.handleMouseDown(at: p) {
         focusedIndex = i
         UISound.select()

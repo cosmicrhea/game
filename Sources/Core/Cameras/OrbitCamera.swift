@@ -267,11 +267,9 @@ class OrbitCamera {
       position.x, position.y, position.z, yaw, pitch, distance
     )
 
-    let determinationStyle = TextStyle(fontName: "Determination", fontSize: 32, color: .white)
-
     debugText.draw(
       at: Point(24, Float(Engine.viewportSize.height) - 24),
-      style: determinationStyle,
+      style: .itemDescription,
       anchor: .topLeft
     )
   }

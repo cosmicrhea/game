@@ -106,10 +106,10 @@ public final class GLFramebuffer {
     let h = rect.size.height
 
     let vertices: [Float] = [
-      x, y, 0.0, 1.0,  // bottom-left (flipped V)
-      x + w, y, 1.0, 1.0,  // bottom-right (flipped V)
-      x + w, y + h, 1.0, 0.0,  // top-right (flipped V)
-      x, y + h, 0.0, 0.0,  // top-left (flipped V)
+      x, y, 0.0, 1.0,
+      x + w, y, 1.0, 1.0,
+      x + w, y + h, 1.0, 0.0,
+      x, y + h, 0.0, 0.0,
     ]
 
     let indices: [UInt32] = [
@@ -153,4 +153,6 @@ public final class GLFramebuffer {
     glDeleteBuffers(1, &ebo)
     glDeleteVertexArrays(1, &vao)
   }
+
+  // masked draw helper removed
 }
