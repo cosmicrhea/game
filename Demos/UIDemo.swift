@@ -177,7 +177,7 @@
     let pickerSize: Float = 180
     let margin: Float = 20
     let screenW2 = Float(Engine.viewportSize.width)
-    let screenH2 = Float(Engine.viewportSize.height)
+    //let screenH2 = Float(Engine.viewportSize.height)
     colorPicker.frame = Rect(
       x: screenW2 - pickerSize - margin,
       y: margin,

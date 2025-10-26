@@ -25,7 +25,7 @@ final class InventoryView: RenderLoop {
   init() {
     slotGrid = SlotGrid(
       columns: 4,
-      rows: 2,
+      rows: 4,
       slotSize: 80.0,
       spacing: 3.0
     )
@@ -226,9 +226,9 @@ final class InventoryView: RenderLoop {
       (.knife, nil),
       (.glock17, 15),
       (.handgunAmmo, 69),
-      // (.sigp320, 0),
+       (.sigp320, 0),
       (.morphine, nil),
-      // (.glock18, 17),
+       (.glock18, 17),
       (.metroKey, nil),
       // (.utilityKey, nil),
 

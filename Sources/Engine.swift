@@ -56,7 +56,6 @@ public final class Engine {
   private var editorPanel: EditorPanel!
   private var editorRenderer: Renderer!
   private var editorGraphicsContext: GraphicsContext!
-  private var editorVisible: Bool = false
   // Editor background effect (created lazily after a GL context is current)
   private var editorAmbientBackground: GLScreenEffect? = nil
 
@@ -95,7 +94,7 @@ public final class Engine {
 
     // Respect config: keep editor visible on launch if enabled (ensure window is shown after all setup)
     if config.editorEnabled {
-      editorVisible = true
+      config.editorEnabled = true
       editorWindow.show()
       // Bring focus if desired
       editorWindow.focus(force: true)
@@ -127,11 +126,6 @@ public final class Engine {
       window.nsWindow?.toolbar = .init()
       window.nsWindow?.hideStandardWindowButtons()
     //window.nsWindow?.darkenStandardWindowButtons()
-    //      window.nsWindow?.setValue(NSTextField(), forKey: "_customTitleCell")
-    //    print(window.nsWindow?.value(forKey: "titlebarViewController"))
-    //    print((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view"))
-    //    print(((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view") as? NSObject)?.value(forKey: "_titleTextFieldView"))
-    //    print(((window.nsWindow?.value(forKey: "titlebarViewController") as? NSObject)?.value(forKey: "view") as? NSObject)?.value(forKey: "titleFont"))
     #endif
 
     window.position = .zero
@@ -147,7 +141,7 @@ public final class Engine {
     // are visible in both windows. Ensure it starts hidden to avoid flashing at launch.
     let previousVisibleHint = GLFWWindow.hints.visible
     GLFWWindow.hints.visible = false
-    editorWindow = try! GLFWWindow(width: 520, height: 720, title: "", sharedContext: window.context)
+    editorWindow = try! GLFWWindow(width: 400, height: 720, title: "", sharedContext: window.context)
     GLFWWindow.hints.visible = previousVisibleHint
 
     #if canImport(AppKit)
@@ -227,7 +221,7 @@ public final class Engine {
   private func setupLoops() {
     loops = [
       MapView(),
-      ItemView(item: Item.sigp320),
+      ItemView(item: .sigp320),
       ItemStorageView(),
       TitleScreenStack(),
       MainLoop(),
@@ -277,7 +271,7 @@ public final class Engine {
     window.keyInputHandler = { [weak self] window, key, scancode, state, mods in
       guard let self else { return }
       // If editor is visible and focused, don't forward keys to the main loop to avoid double handling
-      if self.editorVisible && self.editorWindow.isFocused {
+      if config.editorEnabled && self.editorWindow.isFocused {
         return
       }
       self.activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods)
@@ -325,7 +319,7 @@ public final class Engine {
       }
 
       // Handle other keys for editor panel (on key press only to avoid double handling on release)
-      if self.editorVisible && state == .pressed {
+      if config.editorEnabled && state == .pressed {
         _ = self.editorPanel.handleKey(key)
       }
     }
@@ -333,7 +327,7 @@ public final class Engine {
     editorWindow.mouseButtonHandler = { [weak self] window, button, state, mods in
       guard let self else { return }
 
-      if self.editorVisible && button == .left {
+      if config.editorEnabled && button == .left {
         if state == .pressed {
           self.editorPanel.onMouseButtonPressed(window: window, button: button, mods: mods)
         } else if state == .released {
@@ -345,7 +339,7 @@ public final class Engine {
     editorWindow.cursorPositionHandler = { [weak self] window, x, y in
       guard let self else { return }
 
-      if self.editorVisible {
+      if config.editorEnabled {
         self.editorPanel.onMouseMove(window: window, x: x, y: y)
       }
     }
@@ -422,13 +416,13 @@ public final class Engine {
   }
 
   private func toggleEditor() {
-    editorVisible.toggle()
+    config.editorEnabled.toggle()
 
     #if canImport(AppKit)
       editorWindow.nsWindow?.animationBehavior = .none
     #endif
 
-    if editorVisible {
+    if config.editorEnabled {
       editorWindow.show()
       updateEditorForCurrentLoop()
     } else {
@@ -439,7 +433,7 @@ public final class Engine {
   }
 
   private func updateEditorForCurrentLoop() {
-    guard editorVisible, let activeLoop else { return }
+    guard config.editorEnabled, let activeLoop else { return }
     editorWindow.title = String(describing: type(of: activeLoop))
 
     if let editingLoop = activeLoop as? Editing {
@@ -483,7 +477,7 @@ public final class Engine {
       renderer.endFrame()
 
       // Render editor window if visible (after main window is done)
-      if editorVisible && !editorWindow.shouldClose {
+      if config.editorEnabled && !editorWindow.shouldClose {
         // Advance editor UI animations with the same deltaTime
         editorPanel.update(deltaTime: deltaTime)
         renderEditorWindow()

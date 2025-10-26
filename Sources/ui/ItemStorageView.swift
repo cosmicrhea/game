@@ -344,6 +344,7 @@ final class ItemStorageView: RenderLoop {
       }
       if let targetIdx = playerIndex {
         // Same-grid move: delegate to grid logic
+        _ = targetIdx
         _ = playerGrid.handleMouseClick(
           at: Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY)))
         return
@@ -356,6 +357,7 @@ final class ItemStorageView: RenderLoop {
       }
       if let targetIdx = storageIndex {
         // Same-grid move: delegate to grid logic
+        _ = targetIdx
         _ = storageGrid.handleMouseClick(
           at: Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY)))
         return
@@ -375,6 +377,7 @@ final class ItemStorageView: RenderLoop {
     UISound.select()
 
     if keepMoving, let movedItem = sourceData?.item {
+      _ = movedItem
       // Continue moving with the item now at target
       if targetGrid === playerGrid {
         movingSource = (.player, targetIndex)
