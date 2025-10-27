@@ -157,6 +157,7 @@ jobs:
           rm -rf glass/.build
           rm -rf glass/.swiftpm
           rm -f glass/Package.resolved
+          swift package clean
 
       # - name: Cache SwiftPM
       #   uses: actions/cache@v4
@@ -173,8 +174,8 @@ jobs:
 
       - name: Build (debug)
         working-directory: glass
-        run: swift build -v --no-cache --enable-experimental-prebuilts
+        run: swift build -v --enable-experimental-prebuilts
 
       - name: Build (release)
         working-directory: glass
-        run: swift build -c release -v --no-cache --enable-experimental-prebuilts
+        run: swift build -c release -v --enable-experimental-prebuilts
