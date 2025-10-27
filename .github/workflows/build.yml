@@ -21,6 +21,7 @@ jobs:
           - os: Windows
             runner: windows-2022
     runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.os }}
     env:
       GAME_LOCAL_DEPS: "0"
     steps:

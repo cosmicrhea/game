@@ -220,20 +220,19 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      //      MapView(),
-      //      ItemView(item: .sigp320),
-      //      ItemStorageView(),
-      //      TitleScreenStack(),
-      MainLoop()
-      //      MainMenu(),
-      //      UIDemo(),
-      //      DocumentDemo(),
+      MapView(),
+      ItemView(item: .sigp320),
+      ItemStorageView(),
+      TitleScreenStack(),
+      MainLoop(),
+      MainMenu(),
+      UIDemo(),
+      DocumentDemo(),
       //ModelViewer(),
-      //      CreditsScreen(),
+      CreditsScreen(),
 
       // // InventoryView(),
       // GradientDemo(),
-
       //SVGDemo(),
       //SlotDemo(),
       //SlotGridDemo(),
