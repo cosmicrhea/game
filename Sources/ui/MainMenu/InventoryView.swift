@@ -55,7 +55,7 @@ final class InventoryView: RenderLoop {
         return Float(Engine.viewportSize.width) - totalSize.width - rightMargin
       }
     }()
-    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 80
+    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 64
     let gridPosition = Point(x, y)
     slotGrid.setPosition(gridPosition)
   }

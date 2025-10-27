@@ -11,8 +11,11 @@ uniform float near;
 uniform float far;
 
 void main() {
+    // Flip UV Y coordinate to fix upside-down texture
+    vec2 flippedUV = vec2(vUV.x, 1.0 - vUV.y);
+    
     // Sample depth from mist texture (negative value as in Godot)
-    float depth = -texture(mist_texture, vUV).x;
+    float depth = -texture(mist_texture, flippedUV).x;
     
     // Calculate clip space position
     // In Godot: PROJECTION_MATRIX * vec4(0, 0, depth * (far - near) - near, 1)
@@ -28,7 +31,7 @@ void main() {
     gl_FragDepth = clip_space.z;
     
     // Sample albedo color
-    vec3 albedo = texture(albedo_texture, vUV).rgb;
+    vec3 albedo = texture(albedo_texture, flippedUV).rgb;
     
     FragColor = vec4(albedo, 1.0);
 }

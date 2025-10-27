@@ -1,90 +1,171 @@
-# name: Build (macOS, Linux, Windows)
+name: Build (macOS, Linux, Windows)
 
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-# permissions:
-#   contents: read
+permissions:
+  contents: read
 
-# jobs:
-#   build:
-#     strategy:
-#       fail-fast: false
-#       matrix:
-#         include:
-#           - os: macOS
-#             runner: macos-15
-#           - os: Linux
-#             runner: ubuntu-22.04
-#           - os: Windows
-#             runner: windows-2022
-#     runs-on: ${{ matrix.runner }}
-#     env:
-#       DEPS_REPO: cosmicrhea-game/glass-deps
-#       GAME_LOCAL_DEPS: "0"
-#     steps:
-#       - name: Checkout glass
-#         uses: actions/checkout@v4
-#         with:
-#           path: glass
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macOS
+            runner: macos-15
+          - os: Linux
+            runner: ubuntu-22.04
+          - os: Windows
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    env:
+      GAME_LOCAL_DEPS: "0"
+    steps:
+      - name: Checkout glass
+        uses: actions/checkout@v4
+        with:
+          path: glass
 
-#       - name: Checkout glass-deps
-#         uses: actions/checkout@v4
-#         with:
-#           repository: ${{ env.DEPS_REPO }}
-#           path: glass-deps
-#           # If glass-deps is private, set a secret named DEPS_TOKEN and uncomment below:
-#           # token: ${{ secrets.DEPS_TOKEN }}
-#           persist-credentials: false
+      - name: Checkout assimp
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/assimp
+          path: glass-deps/assimp
+          persist-credentials: false
 
-#       - name: Set up Swift 6.1
-#         uses: swift-actions/setup-swift@v2
-#         with:
-#           swift-version: "6.1"
+      - name: Checkout gl
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/gl
+          path: glass-deps/gl
+          persist-credentials: false
 
-#       - name: Install Linux dependencies
-#         if: runner.os == 'Linux'
-#         run: |
-#           sudo apt-get update
-#           sudo apt-get install -y \
-#             build-essential \
-#             cmake \
-#             ninja-build \
-#             pkg-config \
-#             xorg-dev \
-#             libwayland-dev \
-#             libxrandr-dev \
-#             libxi-dev \
-#             libxcursor-dev \
-#             libxinerama-dev \
-#             libxkbcommon-dev \
-#             mesa-common-dev \
-#             libgl1-mesa-dev \
-#             libglu1-mesa-dev \
-#             libasound2-dev \
-#             libpulse-dev \
-#             libudev-dev \
-#             zlib1g-dev
+      - name: Checkout gl-math
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/gl-math
+          path: glass-deps/gl-math
+          persist-credentials: false
 
-#       - name: Cache SwiftPM
-#         uses: actions/cache@v4
-#         with:
-#           path: |
-#             ~/.swiftpm
-#             glass/.build
-#           key: ${{ runner.os }}-spm-${{ hashFiles('glass/Package.resolved') }}
-#           restore-keys: |
-#             ${{ runner.os }}-spm-
+      - name: Checkout glfw-swift
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/glfw-swift
+          path: glass-deps/glfw-swift
+          persist-credentials: false
 
-#       - name: Show Swift version
-#         run: swift --version
+      - name: Checkout jolt
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/jolt
+          path: glass-deps/jolt
+          persist-credentials: false
 
-#       - name: Build (debug)
-#         working-directory: glass
-#         run: swift build -v
+      - name: Checkout miniaudio
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/miniaudio
+          path: glass-deps/miniaudio
+          persist-credentials: false
 
-#       - name: Build (release)
-#         working-directory: glass
-#         run: swift build -c release -v
+      - name: Checkout nanosvg
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/nanosvg
+          path: glass-deps/nanosvg
+          persist-credentials: false
+
+      - name: Checkout stb-perlin
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/stb-perlin
+          path: glass-deps/stb-perlin
+          persist-credentials: false
+
+      - name: Checkout stb-rect-pack
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/stb-rect-pack
+          path: glass-deps/stb-rect-pack
+          persist-credentials: false
+
+      - name: Checkout stb-text-edit
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/stb-text-edit
+          path: glass-deps/stb-text-edit
+          persist-credentials: false
+
+      - name: Checkout stb-truetype
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/stb-truetype
+          path: glass-deps/stb-truetype
+          persist-credentials: false
+
+      - name: Checkout swift-image-formats
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/swift-image-formats
+          path: glass-deps/swift-image-formats
+          persist-credentials: false
+
+      - name: Checkout tinyexr
+        uses: actions/checkout@v4
+        with:
+          repository: cosmicrhea-game/tinyexr
+          path: glass-deps/tinyexr
+          persist-credentials: false
+
+      - name: Set up Swift 6.1
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.1"
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            xorg-dev \
+            libwayland-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxinerama-dev \
+            libxkbcommon-dev \
+            mesa-common-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libudev-dev \
+            zlib1g-dev
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.swiftpm
+            glass/.build
+          key: ${{ runner.os }}-spm-${{ hashFiles('glass/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        working-directory: glass
+        run: swift build -v
+
+      - name: Build (release)
+        working-directory: glass
+        run: swift build -c release -v

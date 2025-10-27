@@ -1,11 +1,17 @@
 #version 330 core
-layout(location = 0) in vec3 aPos;
+layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aTexCoord;
 
 out vec2 vUV;
 
+uniform float uAspectRatio;
+
 void main() {
-  gl_Position = vec4(aPos, 1.0);
-  // Flip UV vertically to match Godot's coordinate system
-  vUV = aTexCoord * vec2(1.0, -1.0);
+  // Apply aspect ratio correction to prevent stretching
+  vec2 correctedPos = aPos;
+  correctedPos.y /= uAspectRatio; // Try correcting Y instead of X
+
+  gl_Position = vec4(correctedPos, 0.0, 1.0);
+  // Pass UVs as-is, we'll flip in fragment shader
+  vUV = aTexCoord;
 }

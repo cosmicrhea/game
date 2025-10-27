@@ -1,6 +1,7 @@
 import Assimp
+
 /// The main game loop that handles rendering and input.
-final class MainLoop: RenderLoop {
+@Editor final class MainLoop: RenderLoop {
 
   // Gameplay state
   private var playerPosition: vec3 = vec3(0, 0, 0)
@@ -12,6 +13,15 @@ final class MainLoop: RenderLoop {
 
   // Simple pill mesh (we'll create this procedurally)
   private var pillMesh: MeshInstance?
+
+  // Prerendered environment renderer
+  private var prerenderedEnvironment: PrerenderedEnvironment?
+
+  @Editable var nearestNeighbor: Bool = true {
+    didSet {
+      prerenderedEnvironment?.nearestNeighborFiltering = nearestNeighbor
+    }
+  }
 
   // Room boundaries
   private let roomSize: Float = 10.0
@@ -29,6 +39,13 @@ final class MainLoop: RenderLoop {
 
     // Create a simple pill mesh (capsule)
     createPillMesh()
+
+    // Initialize prerendered environment
+    do {
+      prerenderedEnvironment = try PrerenderedEnvironment()
+    } catch {
+      print("Failed to initialize PrerenderedEnvironment: \(error)")
+    }
   }
 
   private func createPillMesh() {
@@ -89,40 +106,39 @@ final class MainLoop: RenderLoop {
 
   func draw() {
     // Clear screen
-    glClearColor(0.1, 0.1, 0.1, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    //    glClearColor(0.1, 0.1, 0.1, 1.0)
+    //    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-    // Set up 3D rendering
-    let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
-    let projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
-    let view = camera.getViewMatrix()
-
-    // Draw player pill
-    if let pill = pillMesh {
-      let modelMatrix = GLMath.translate(mat4(1), playerPosition)
-      pill.draw(
-        projection: projection,
-        view: view,
-        modelMatrix: modelMatrix,
-        cameraPosition: camera.position,
-        lightDirection: vec3(0, -1, 0),
-        lightColor: vec3(1, 1, 1),
-        lightIntensity: 1.0,
-        fillLightDirection: vec3(-0.3, -0.5, -0.2),
-        fillLightColor: vec3(0.8, 0.9, 1.0),
-        fillLightIntensity: 0.4,
-        diffuseOnly: false
-      )
-//    } else {
-//      // TODO: Draw procedural pill mesh directly
-//      print("No pill mesh loaded - procedural mesh not yet implemented")
+    // Render prerendered environment first (as background)
+    if let env = prerenderedEnvironment {
+      env.render()
     }
 
-    // Draw room floor (simple quad)
-    drawRoom()
-
-    // Draw box obstacle
-    drawBox()
+    //    // Set up 3D rendering
+    //    let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
+    //    let projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
+    //    let view = camera.getViewMatrix()
+    //
+    //    // Draw player pill
+    //    if let pill = pillMesh {
+    //      let modelMatrix = GLMath.translate(mat4(1), playerPosition)
+    //      pill.draw(
+    //        projection: projection,
+    //        view: view,
+    //        modelMatrix: modelMatrix,
+    //        cameraPosition: camera.position,
+    //        lightDirection: vec3(0, -1, 0),
+    //        lightColor: vec3(1, 1, 1),
+    //        lightIntensity: 1.0,
+    //        fillLightDirection: vec3(-0.3, -0.5, -0.2),
+    //        fillLightColor: vec3(0.8, 0.9, 1.0),
+    //        fillLightIntensity: 0.4,
+    //        diffuseOnly: false
+    //      )
+    //      //    } else {
+    //      //      // TODO: Draw procedural pill mesh directly
+    //      //      print("No pill mesh loaded - procedural mesh not yet implemented")
+    //    }
   }
 
   private func drawRoom() {

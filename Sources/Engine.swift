@@ -9,7 +9,7 @@ import unistd
 ///// The width of the game window in pixels.
 //public let WIDTH = 1280 // 1800
 ///// The height of the game window in pixels.
-//public let HEIGHT = 720 // 1126
+//public let HEIGHT = 800 // 1126
 
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
@@ -36,7 +36,7 @@ public final class Engine {
   public static func main() { shared.run() }
 
   // TODO: learn about Swift concurrency and how to use it correctly
-  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 720)
+  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 800)
   public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
   private var config: Config { .current }
@@ -117,7 +117,7 @@ public final class Engine {
   }
 
   private func setupWindow() {
-    window = try! GLFWWindow(width: 1280, height: 720, title: "")
+    window = try! GLFWWindow(width: 1280, height: 800, title: "")
 
     #if canImport(AppKit)
       NSWindowSwizzling.run()
@@ -141,7 +141,7 @@ public final class Engine {
     // are visible in both windows. Ensure it starts hidden to avoid flashing at launch.
     let previousVisibleHint = GLFWWindow.hints.visible
     GLFWWindow.hints.visible = false
-    editorWindow = try! GLFWWindow(width: 400, height: 720, title: "", sharedContext: window.context)
+    editorWindow = try! GLFWWindow(width: 400, height: 800, title: "", sharedContext: window.context)
     GLFWWindow.hints.visible = previousVisibleHint
 
     #if canImport(AppKit)
@@ -220,30 +220,30 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      MapView(),
-      ItemView(item: .sigp320),
-      ItemStorageView(),
-      TitleScreenStack(),
-      MainLoop(),
-      MainMenu(),
-      UIDemo(),
-      DocumentDemo(),
-      ModelViewer(),
-      CreditsScreen(),
+      //      MapView(),
+      //      ItemView(item: .sigp320),
+      //      ItemStorageView(),
+      //      TitleScreenStack(),
+      MainLoop()
+      //      MainMenu(),
+      //      UIDemo(),
+      //      DocumentDemo(),
+      //ModelViewer(),
+      //      CreditsScreen(),
 
       // // InventoryView(),
       // GradientDemo(),
 
-      SVGDemo(),
-      SlotDemo(),
-      SlotGridDemo(),
+      //SVGDemo(),
+      //SlotDemo(),
+      //SlotGridDemo(),
       // LibraryView(),
-      CalloutDemo(),
-      PromptListDemo(),
-      FontsDemo(),
-      PathDemo(),
-      TextEffectsDemo(),
-      FadeDemo(),
+      //CalloutDemo(),
+      //PromptListDemo(),
+      //FontsDemo(),
+      //PathDemo(),
+      //TextEffectsDemo(),
+      //FadeDemo(),
     ]
 
     // Handle CLI demo selection
