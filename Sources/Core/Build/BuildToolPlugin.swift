@@ -9,7 +9,7 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
 
     // Create a shell script that will work better with Xcode
     let scriptContent = """
-      #!/bin/zsh
+      #!/bin/sh
       set -e
 
       # Get git commit count
@@ -47,7 +47,7 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
     return [
       .buildCommand(
         displayName: "Generate Version Information",
-        executable: URL(fileURLWithPath: "/bin/zsh"),
+        executable: URL(fileURLWithPath: "/bin/sh"),
         arguments: [scriptFile.path],
         outputFiles: [outputFile]
       )
