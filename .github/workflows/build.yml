@@ -172,8 +172,8 @@ jobs:
 
       - name: Build (debug)
         working-directory: glass
-        run: swift build -v
+        run: swift build -v --no-cache --enable-experimental-prebuilts
 
       - name: Build (release)
         working-directory: glass
-        run: swift build -c release -v
+        run: swift build -c release -v --no-cache --enable-experimental-prebuilts
