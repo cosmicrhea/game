@@ -156,6 +156,7 @@ jobs:
           rm -rf ~/.swiftpm
           rm -rf glass/.build
           rm -rf glass/.swiftpm
+          rm -f glass/Package.resolved
 
       # - name: Cache SwiftPM
       #   uses: actions/cache@v4
