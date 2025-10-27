@@ -151,15 +151,21 @@ jobs:
             libudev-dev \
             zlib1g-dev
 
-      - name: Cache SwiftPM
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.swiftpm
-            glass/.build
-          key: ${{ runner.os }}-spm-${{ hashFiles('glass/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
+      - name: Clear SwiftPM cache
+        run: |
+          rm -rf ~/.swiftpm
+          rm -rf glass/.build
+          rm -rf glass/.swiftpm
+
+      # - name: Cache SwiftPM
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ~/.swiftpm
+      #       glass/.build
+      #     key: ${{ runner.os }}-spm-${{ hashFiles('glass/Package.resolved') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-spm-
 
       - name: Show Swift version
         run: swift --version
