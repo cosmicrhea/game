@@ -1,6 +1,15 @@
 {
-  "originHash" : "d95db7a3da048725864c52d5f7d3f5d70fb975c853590fa5392c0b604d9404d2",
+  "originHash" : "98ad6dd5c14a613af021d75724d4c268dc59f26d77aa570de037e3e987b09827",
   "pins" : [
+    {
+      "identity" : "glfw",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/cosmicrhea-game/glfw",
+      "state" : {
+        "branch" : "main",
+        "revision" : "736d1709525a41732d3e56b65e9ed4ccd83f4f94"
+      }
+    },
     {
       "identity" : "jpeg",
       "kind" : "remoteSourceControl",
@@ -67,7 +76,7 @@
     {
       "identity" : "swift-markdown",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-markdown.git",
+      "location" : "https://github.com/swiftlang/swift-markdown",
       "state" : {
         "branch" : "main",
         "revision" : "0186e808140db5eb5ba9b052e86fbe15b88f7975"
