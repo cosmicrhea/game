@@ -443,5 +443,3 @@ public class DebugVisualization {
     GraphicsContext.current?.renderer.drawStroke(crossPath, color: color, lineWidth: 1)
   }
 }
-
-

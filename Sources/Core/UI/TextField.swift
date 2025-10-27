@@ -83,7 +83,7 @@ public final class TextField: OptionsControl {
 
     // Draw left icon if present and shift text origin accordingly
     if let icon = leftIcon {
-      let desiredH = leftIconSize ?? 20//(textStyle.fontSize * 0.9)
+      let desiredH = leftIconSize ?? 20  //(textStyle.fontSize * 0.9)
       let aspect = icon.naturalSize.width / max(1, icon.naturalSize.height)
       let iconW = desiredH * aspect
       let iconX = frame.origin.x + contentInsets.left
