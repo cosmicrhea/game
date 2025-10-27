@@ -26,8 +26,8 @@ let package = Package(
 
   dependencies: [
     .package("assimp", branch: "master"),
-    .package("gl"),
-    .package("gl-math"),
+    .package("gl", branch: "master"),
+    .package("gl-math", branch: "master"),
     .package("glfw-swift"),
     .package("jolt"),
     .package("miniaudio"),
