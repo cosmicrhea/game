@@ -25,19 +25,19 @@ let package = Package(
   ],
 
   dependencies: [
-    .package("assimp"),
+    .package("assimp", branch: "master"),
     .package("gl"),
     .package("gl-math"),
     .package("glfw-swift"),
     .package("jolt"),
     .package("miniaudio"),
-    .package("nanosvg"),
+    .package("nanosvg", branch: "master"),
     .package("stb-perlin"),
     .package("stb-rect-pack"),
     .package("stb-text-edit"),
     .package("stb-truetype"),
     .package("swift-image-formats"),
-    .package("tinyexr"),
+    .package("tinyexr", branch: "release"),
 
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
