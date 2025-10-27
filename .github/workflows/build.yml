@@ -131,11 +131,25 @@ jobs:
       - name: Set up Swift 6.1 (Windows)
         if: runner.os == 'Windows'
         run: |
-          # Install Visual Studio 2022 Community with required components
-          winget install --id Microsoft.VisualStudio.2022.Community --exact --force --custom "--add Microsoft.VisualStudio.Component.Windows11SDK.22000 --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.VC.Tools.ARM64"
+          # Download and install Swift 6.1 for Windows manually
+          $swiftUrl = "https://download.swift.org/swift-6.1-release/windows10/swift-6.1-RELEASE/swift-6.1-RELEASE-windows10.exe"
+          $swiftInstaller = "$env:TEMP\swift-installer.exe"
+          Write-Host "Downloading Swift from $swiftUrl"
+          Invoke-WebRequest -Uri $swiftUrl -OutFile $swiftInstaller
 
-          # Install Swift toolchain via WinGet
-          winget install --id Swift.Toolchain -e
+          # Install Swift silently
+          Write-Host "Installing Swift..."
+          Start-Process -FilePath $swiftInstaller -ArgumentList "/S" -Wait
+
+          # Add Swift to PATH
+          $swiftPath = "C:\Program Files\Swift\bin"
+          if (Test-Path $swiftPath) {
+            $env:PATH = "$swiftPath;$env:PATH"
+            echo "$swiftPath" >> $env:GITHUB_PATH
+            Write-Host "Added Swift to PATH: $swiftPath"
+          } else {
+            Write-Host "Swift installation path not found: $swiftPath"
+          }
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
