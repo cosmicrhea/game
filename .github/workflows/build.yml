@@ -122,7 +122,7 @@ jobs:
       #     persist-credentials: false
 
       - name: Set up Swift 6.1
-        uses: swift-actions/setup-swift@v2
+        uses: mman/setup-swift@fix-gpg-import
         with:
           swift-version: "6.1"
 
