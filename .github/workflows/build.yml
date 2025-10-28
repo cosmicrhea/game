@@ -251,29 +251,68 @@ jobs:
       #     restore-keys: |
       #       ${{ runner.os }}-spm-
 
-      - name: Show Swift version
+      - name: Show Swift version (macOS & Linux)
+        if: runner.os != 'Windows'
+        run: swift --version
+
+      - name: Show Swift version (Windows)
+        if: runner.os == 'Windows'
         run: |
-          if (runner.os == 'Windows') {
-            Write-Host "Checking Swift installation on Windows..."
-            $swiftPaths = @(
-              "$env:LOCALAPPDATA\Programs\Swift\bin",
-              "C:\Program Files\Swift\bin"
-            )
-            foreach ($swiftPath in $swiftPaths) {
-              if (Test-Path $swiftPath) {
-                Write-Host "Found Swift at: $swiftPath"
-                $env:PATH = "$swiftPath;$env:PATH"
-                break
-              }
+          Write-Host "Checking Swift installation on Windows..."
+          $swiftPaths = @(
+            "$env:LOCALAPPDATA\Programs\Swift\bin",
+            "C:\Program Files\Swift\bin"
+          )
+          foreach ($swiftPath in $swiftPaths) {
+            if (Test-Path $swiftPath) {
+              Write-Host "Found Swift at: $swiftPath"
+              $env:PATH = "$swiftPath;$env:PATH"
+              break
             }
-            Write-Host "Current PATH: $env:PATH"
           }
+          Write-Host "Current PATH: $env:PATH"
           swift --version
 
-      - name: Build (debug)
+      - name: Build (debug) - macOS & Linux
+        if: runner.os != 'Windows'
         working-directory: glass
         run: swift build -v --enable-experimental-prebuilts
 
-      - name: Build (release)
+      - name: Build (debug) - Windows
+        if: runner.os == 'Windows'
+        working-directory: glass
+        run: |
+          # Ensure Swift is in PATH for Windows
+          $swiftPaths = @(
+            "$env:LOCALAPPDATA\Programs\Swift\bin",
+            "C:\Program Files\Swift\bin"
+          )
+          foreach ($swiftPath in $swiftPaths) {
+            if (Test-Path $swiftPath) {
+              $env:PATH = "$swiftPath;$env:PATH"
+              break
+            }
+          }
+          swift build -v --enable-experimental-prebuilts
+
+      - name: Build (release) - macOS & Linux
+        if: runner.os != 'Windows'
         working-directory: glass
         run: swift build -c release -v --enable-experimental-prebuilts
+
+      - name: Build (release) - Windows
+        if: runner.os == 'Windows'
+        working-directory: glass
+        run: |
+          # Ensure Swift is in PATH for Windows
+          $swiftPaths = @(
+            "$env:LOCALAPPDATA\Programs\Swift\bin",
+            "C:\Program Files\Swift\bin"
+          )
+          foreach ($swiftPath in $swiftPaths) {
+            if (Test-Path $swiftPath) {
+              $env:PATH = "$swiftPath;$env:PATH"
+              break
+            }
+          }
+          swift build -c release -v --enable-experimental-prebuilts
