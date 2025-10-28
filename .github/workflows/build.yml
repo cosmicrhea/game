@@ -124,7 +124,7 @@ jobs:
 
       - name: Set up Swift 6.2 (macOS & Linux)
         if: runner.os != 'Windows'
-        uses: mman/setup-swift@fix-gpg-import
+        uses: mman/setup-swift
         with:
           swift-version: "6.2"
 
