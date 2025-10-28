@@ -57,13 +57,10 @@ jobs:
 
           # Try to install Swift via winget first
           Write-Host "Attempting to install Swift via winget..."
-          try {
-            $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
-            Write-Host "Winget install result: $wingetResult"
-            Write-Host "Winget install exit code: $LASTEXITCODE"
-          } catch {
-            Write-Host "Winget install failed with error: $_"
-          }
+          Write-Host "Running: winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements"
+          $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements 2>&1
+          Write-Host "Winget install result: $wingetResult"
+          Write-Host "Winget install exit code: $LASTEXITCODE"
 
           # Check both possible installation paths
           $swiftPaths = @(
@@ -71,26 +68,32 @@ jobs:
             "C:\Program Files\Swift\bin"
           )
 
+          $swiftFound = $false
           foreach ($swiftPath in $swiftPaths) {
             if (Test-Path $swiftPath) {
               $env:PATH = "$swiftPath;$env:PATH"
               echo "$swiftPath" >> $env:GITHUB_PATH
               Write-Host "Swift installed via winget successfully at: $swiftPath"
-              exit 0
+              $swiftFound = $true
+              break
             }
           }
 
-          Write-Host "Swift not found in expected paths after winget installation"
+          if ($swiftFound) {
+            Write-Host "Swift found via winget, skipping manual installation"
+          } else {
+            Write-Host "Swift not found in expected paths after winget installation"
+            
+            # Debug: Check what winget packages are installed
+            Write-Host "Checking installed winget packages..."
+            winget list | Select-String -Pattern "swift" -CaseSensitive:$false
 
-          # Debug: Check what winget packages are installed
-          Write-Host "Checking installed winget packages..."
-          winget list | Select-String -Pattern "swift" -CaseSensitive:$false
+            # Debug: Search for Swift packages
+            Write-Host "Searching for Swift packages in winget..."
+            winget search swift
 
-          # Debug: Search for Swift packages
-          Write-Host "Searching for Swift packages in winget..."
-          winget search swift
-
-          Write-Host "Trying manual installation..."
+            Write-Host "Trying manual installation..."
+          }
 
           # Fallback: Download and install Swift 6.2 for Windows manually
           $swiftUrl = "https://download.swift.org/swift-6.2-release/windows10/swift-6.2-RELEASE/swift-6.2-RELEASE-windows10.exe"
@@ -228,7 +231,7 @@ jobs:
       - name: Build (debug) - macOS & Linux
         if: runner.os != 'Windows'
         working-directory: glass
-        run: swift build -v --enable-experimental-prebuilts
+        run: swift build --quiet --enable-experimental-prebuilts
 
       - name: Build (debug) - Windows
         if: runner.os == 'Windows'
@@ -245,12 +248,12 @@ jobs:
               break
             }
           }
-          swift build -v --enable-experimental-prebuilts
+          swift build --quiet --enable-experimental-prebuilts
 
       - name: Build (release) - macOS & Linux
         if: runner.os != 'Windows'
         working-directory: glass
-        run: swift build -c release -v --enable-experimental-prebuilts
+        run: swift build -c release --quiet --enable-experimental-prebuilts
 
       - name: Create macOS App Bundle
         if: runner.os == 'macOS'
@@ -282,4 +285,4 @@ jobs:
               break
             }
           }
-          swift build -c release -v --enable-experimental-prebuilts
+          swift build -c release --quiet --enable-experimental-prebuilts
