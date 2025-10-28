@@ -124,7 +124,7 @@ jobs:
 
       - name: Set up Swift 6.2 (macOS & Linux)
         if: runner.os != 'Windows'
-        uses: mman/setup-swift
+        uses: mman/setup-swift@main
         with:
           swift-version: "6.2"
 
@@ -240,7 +240,6 @@ jobs:
           Remove-Item -Recurse -Force "glass\.build" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "glass\.swiftpm" -ErrorAction SilentlyContinue
           Remove-Item -Force "glass\Package.resolved" -ErrorAction SilentlyContinue
-          cd glass; swift package clean
 
       # - name: Cache SwiftPM
       #   uses: actions/cache@v4
