@@ -6,8 +6,7 @@ import PackageDescription
 import class Foundation.ProcessInfo
 
 let env = ProcessInfo.processInfo.environment
-let useLocal = (env["GAME_LOCAL_DEPS"] ?? "0") == "1"
-//let useLocal = true
+let useLocal = env["USER"] == "fa"
 
 let package = Package(
   name: "Game",

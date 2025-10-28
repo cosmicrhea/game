@@ -123,8 +123,8 @@ jobs:
       #     path: glass-deps/tinyexr
       #     persist-credentials: false
 
-      - name: Set up Swift 6.2 (macOS & Linux)
-        if: runner.os != 'Windows'
+      - name: Set up Swift 6.2 (Linux)
+        if: runner.os == 'Linux'
         uses: mman/setup-swift@main
         with:
           swift-version: "6.2"
@@ -145,29 +145,28 @@ jobs:
             $wingetVersion = winget --version
             Write-Host "winget version after install: $wingetVersion"
           }
-            
-            # Try to install Swift via winget first
-            Write-Host "Attempting to install Swift via winget..."
-            $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
-            Write-Host "Winget install result: $wingetResult"
-            
-            # Check both possible installation paths
-            $swiftPaths = @(
-              "$env:LOCALAPPDATA\Programs\Swift\bin",
-              "C:\Program Files\Swift\bin"
-            )
-            
-            foreach ($swiftPath in $swiftPaths) {
-              if (Test-Path $swiftPath) {
-                $env:PATH = "$swiftPath;$env:PATH"
-                echo "$swiftPath" >> $env:GITHUB_PATH
-                Write-Host "Swift installed via winget successfully at: $swiftPath"
-                exit 0
-              }
+
+          # Try to install Swift via winget first
+          Write-Host "Attempting to install Swift via winget..."
+          $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
+          Write-Host "Winget install result: $wingetResult"
+
+          # Check both possible installation paths
+          $swiftPaths = @(
+            "$env:LOCALAPPDATA\Programs\Swift\bin",
+            "C:\Program Files\Swift\bin"
+          )
+
+          foreach ($swiftPath in $swiftPaths) {
+            if (Test-Path $swiftPath) {
+              $env:PATH = "$swiftPath;$env:PATH"
+              echo "$swiftPath" >> $env:GITHUB_PATH
+              Write-Host "Swift installed via winget successfully at: $swiftPath"
+              exit 0
             }
-          } catch {
-            Write-Host "winget not available or failed, falling back to manual installation"
           }
+
+          Write-Host "Swift not found in expected paths after winget installation, trying manual installation"
 
           # Fallback: Download and install Swift 6.2 for Windows manually
           $swiftUrl = "https://download.swift.org/swift-6.2-release/windows10/swift-6.2-RELEASE/swift-6.2-RELEASE-windows10.exe"
@@ -328,6 +327,21 @@ jobs:
         if: runner.os != 'Windows'
         working-directory: glass
         run: swift build -c release -v --enable-experimental-prebuilts
+
+      - name: Create macOS App Bundle
+        if: runner.os == 'macOS'
+        working-directory: glass
+        run: |
+          swift .scripts/make-app-bundle.swift
+          ls -la *.app
+
+      - name: Upload macOS App Bundle
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: glass-app-macos
+          path: glass/*.app
+          retention-days: 30
 
       - name: Build (release) - Windows
         if: runner.os == 'Windows'

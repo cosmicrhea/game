@@ -20,7 +20,16 @@ final class PrerenderedEnvironment {
   private let far: Float = 100.0
 
   // Texture filtering toggle
-  public var nearestNeighborFiltering: Bool = true
+  @Editable public var nearestNeighborFiltering: Bool = true
+
+  // Camera selection for editor
+  @Editable public var selectedCamera: String = "1" {
+    didSet {
+      if selectedCamera != oldValue {
+        try? switchToCamera(selectedCamera)
+      }
+    }
+  }
 
   // Frame animation
   private var currentFrame: Int = 0
@@ -31,11 +40,11 @@ final class PrerenderedEnvironment {
 
   // Scene configuration
   private let scenePath: String
-  private let cameraName: String
+  private var availableCameras: [String] = []
+  private var currentCameraIndex: Int = 0
 
   init(scenePath: String = "Scenes/Renders/radar_office", cameraName: String = "1") throws {
     self.scenePath = scenePath
-    self.cameraName = cameraName
 
     // Load the PrerenderedEnvironment shader
     do {
@@ -46,9 +55,26 @@ final class PrerenderedEnvironment {
       throw error
     }
 
-    // Discover and load all frames
+    // Discover all available cameras
+    try discoverAvailableCameras()
+
+    // Set initial camera
+    if let initialCameraIndex = availableCameras.firstIndex(of: cameraName) {
+      currentCameraIndex = initialCameraIndex
+      selectedCamera = cameraName
+    } else if !availableCameras.isEmpty {
+      currentCameraIndex = 0
+      selectedCamera = availableCameras[0]
+      logger.warning("⚠️ Camera '\(cameraName)' not found, using first available camera: '\(availableCameras[0])'")
+    } else {
+      throw NSError(
+        domain: "PrerenderedEnvironment", code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "No cameras found in scene '\(scenePath)'"])
+    }
+
+    // Discover and load all frames for the current camera
     try discoverAndLoadFrames()
-    logger.trace("✅ Loaded \(totalFrames) frames for camera '\(cameraName)'")
+    logger.trace("✅ Loaded \(totalFrames) frames for camera '\(currentCameraName)'")
 
     // Create fullscreen quad
     setupFullscreenQuad()
@@ -65,7 +91,47 @@ final class PrerenderedEnvironment {
     cleanup()
   }
 
-  /// Discover and load all frames for the specified camera
+  /// Discover all available cameras in the scene
+  private func discoverAvailableCameras() throws {
+    let fileManager = FileManager.default
+    guard let resourcePath = #bundle.resourcePath else {
+      throw NSError(
+        domain: "PrerenderedEnvironment", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find resource path"]
+      )
+    }
+
+    let sceneDirectory = "\(resourcePath)/\(scenePath)"
+    let contents = try fileManager.contentsOfDirectory(atPath: sceneDirectory)
+
+    // Find all unique camera names by looking at frame files
+    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", etc.)
+    var cameraNames: Set<String> = []
+
+    for filename in contents {
+      // Must not start with 'm_' (mist files)
+      guard !filename.hasPrefix("m_") else { continue }
+
+      // Must end with ".png"
+      guard filename.hasSuffix(".png") else { continue }
+
+      // Extract camera name by finding the last underscore before .png
+      if let lastUnderscoreIndex = filename.lastIndex(of: "_") {
+        let cameraName = String(
+          filename[filename.index(after: lastUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -4)])
+        cameraNames.insert(cameraName)
+      }
+    }
+
+    availableCameras = Array(cameraNames).sorted()
+    logger.info("📷 Found cameras: \(availableCameras)")
+  }
+
+  /// Get the current camera name
+  private var currentCameraName: String {
+    return availableCameras[currentCameraIndex]
+  }
+
+  /// Discover and load all frames for the current camera
   private func discoverAndLoadFrames() throws {
     // Find all frame files matching the pattern "frameNumber_cameraName.png"
     let fileManager = FileManager.default
@@ -85,23 +151,25 @@ final class PrerenderedEnvironment {
       // Must not start with 'm_' (mist files)
       guard !filename.hasPrefix("m_") else { return false }
 
-      // Must end with "_\(cameraName).png"
-      guard filename.hasSuffix("_\(cameraName).png") else { return false }
+      // Must end with "_\(currentCameraName).png"
+      guard filename.hasSuffix("_\(currentCameraName).png") else { return false }
 
-      // Extract the part before "_\(cameraName).png" to check if it's just a number
-      let suffix = "_\(cameraName).png"
+      // Extract the part before "_\(currentCameraName).png" to check if it's just a number
+      let suffix = "_\(currentCameraName).png"
       let prefix = String(filename.dropLast(suffix.count))
 
       // Check if the prefix is just a number (no additional text)
       return prefix.allSatisfy { $0.isNumber }
-    }.sorted()
+    }.sorted(using: .localizedStandard)
 
-    logger.trace("🎬 Found \(albedoFrames.count) frames for camera '\(cameraName)': \(albedoFrames)")
+    logger.info("🎬 Found \(albedoFrames.count) frames for camera '\(currentCameraName)': \(albedoFrames)")
 
     guard !albedoFrames.isEmpty else {
       throw NSError(
         domain: "PrerenderedEnvironment", code: 2,
-        userInfo: [NSLocalizedDescriptionKey: "No frames found for camera '\(cameraName)' in scene '\(scenePath)'"])
+        userInfo: [
+          NSLocalizedDescriptionKey: "No frames found for camera '\(currentCameraName)' in scene '\(scenePath)'"
+        ])
     }
 
     totalFrames = albedoFrames.count
@@ -191,6 +259,80 @@ final class PrerenderedEnvironment {
   public func toggleFiltering() {
     nearestNeighborFiltering.toggle()
     updateTextureFiltering()
+  }
+
+  /// Switch to a specific camera by name
+  public func switchToCamera(_ cameraName: String) throws {
+    guard let cameraIndex = availableCameras.firstIndex(of: cameraName) else {
+      throw NSError(
+        domain: "PrerenderedEnvironment", code: 4,
+        userInfo: [
+          NSLocalizedDescriptionKey: "Camera '\(cameraName)' not found. Available cameras: \(availableCameras)"
+        ])
+    }
+
+    switchToCamera(at: cameraIndex)
+  }
+
+  /// Switch to camera at specific index
+  public func switchToCamera(at index: Int) {
+    guard index >= 0 && index < availableCameras.count else {
+      logger.error("❌ Invalid camera index \(index). Available cameras: \(availableCameras)")
+      return
+    }
+
+    currentCameraIndex = index
+    selectedCamera = currentCameraName  // Update the editable property
+    logger.info("📷 Switched to camera '\(currentCameraName)' (index \(index))")
+
+    // Reload frames for the new camera
+    do {
+      try discoverAndLoadFrames()
+
+      // Reset animation state for the new camera
+      currentFrame = 0
+      lastFrameTime = GLFWSession.currentTime
+
+      logger.trace("✅ Reloaded frames for camera '\(currentCameraName)' and reset animation")
+    } catch {
+      logger.error("❌ Failed to reload frames for camera '\(currentCameraName)': \(error)")
+    }
+  }
+
+  /// Cycle to next camera
+  public func cycleToNextCamera() {
+    let nextIndex = (currentCameraIndex + 1) % availableCameras.count
+    switchToCamera(at: nextIndex)
+  }
+
+  /// Cycle to previous camera
+  public func cycleToPreviousCamera() {
+    let prevIndex = (currentCameraIndex - 1 + availableCameras.count) % availableCameras.count
+    switchToCamera(at: prevIndex)
+  }
+
+  /// Switch to camera 0 (special debug camera) if it exists
+  public func switchToDebugCamera() {
+    if let debugIndex = availableCameras.firstIndex(of: "0") {
+      switchToCamera(at: debugIndex)
+    } else {
+      logger.warning("⚠️ Debug camera '0' not found. Available cameras: \(availableCameras)")
+    }
+  }
+
+  /// Get available cameras for debugging/UI
+  public func getAvailableCameras() -> [String] {
+    return availableCameras
+  }
+
+  /// Get current camera name for debugging/UI
+  public func getCurrentCameraName() -> String {
+    return currentCameraName
+  }
+
+  /// Get current camera index for debugging/UI
+  public func getCurrentCameraIndex() -> Int {
+    return currentCameraIndex
   }
 
   /// Update frame animation at 30 FPS

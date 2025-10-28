@@ -23,6 +23,23 @@ import Assimp
     }
   }
 
+  @Editable var selectedCamera: String = "1" {
+    didSet {
+      if selectedCamera != oldValue {
+        try? prerenderedEnvironment?.switchToCamera(selectedCamera)
+      }
+    }
+  }
+
+  /// Options for selectedCamera picker - automatically discovered by editor
+  @EditableOptions var selectedCameraOptions: [String] {
+    return prerenderedEnvironment?.getAvailableCameras() ?? ["1"]
+  }
+
+  // Main menu system
+  private var mainMenu: MainMenu?
+  private var showingMainMenu: Bool = false
+
   // Room boundaries
   private let roomSize: Float = 10.0
   private let boxSize: Float = 2.0
@@ -43,9 +60,14 @@ import Assimp
     // Initialize prerendered environment
     do {
       prerenderedEnvironment = try PrerenderedEnvironment()
+      // Sync the selectedCamera property with the actual current camera
+      selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? "1"
     } catch {
       print("Failed to initialize PrerenderedEnvironment: \(error)")
     }
+
+    // Initialize main menu
+    mainMenu = MainMenu()
   }
 
   private func createPillMesh() {
@@ -61,14 +83,110 @@ import Assimp
   }
 
   func update(window: Window, deltaTime: Float) {
-    // Handle WASD movement
-    handleMovement(window.keyboard, deltaTime)
+    if showingMainMenu {
+      // Update main menu
+      mainMenu?.update(window: window, deltaTime: deltaTime)
+    } else {
+      // Handle WASD movement
+      handleMovement(window.keyboard, deltaTime)
 
-    // Update camera to follow player
-    camera.follow(playerPosition)
+      // Update camera to follow player
+      camera.follow(playerPosition)
 
-    // Update prerendered environment animation
-    prerenderedEnvironment?.update()
+      // Update prerendered environment animation
+      prerenderedEnvironment?.update()
+    }
+  }
+
+  func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    if showingMainMenu {
+      // Handle escape to close main menu
+      if key == .escape {
+        UISound.select()
+        hideMainMenu()
+        return
+      }
+
+      // Forward other input to main menu
+      mainMenu?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+    } else {
+      // Handle gameplay keys
+      switch key {
+      case .tab, .i:
+        UISound.select()
+        showMainMenu(tab: .inventory)
+
+      case .m:
+        UISound.select()
+        showMainMenu(tab: .map)
+
+      case .escape:
+        // Could be used for other gameplay features
+        break
+
+      case .semicolon:
+        UISound.select()
+        prerenderedEnvironment?.cycleToNextCamera()
+        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
+
+      case .apostrophe:
+        UISound.select()
+        prerenderedEnvironment?.cycleToPreviousCamera()
+        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
+
+      case .graveAccent:
+        UISound.select()
+        prerenderedEnvironment?.switchToDebugCamera()
+        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
+
+      default:
+        break
+      }
+    }
+  }
+
+  func onMouseMove(window: Window, x: Double, y: Double) {
+    if showingMainMenu {
+      mainMenu?.onMouseMove(window: window, x: x, y: y)
+    }
+  }
+
+  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+    if showingMainMenu {
+      mainMenu?.onMouseButton(window: window, button: button, state: state, mods: mods)
+    }
+  }
+
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    if showingMainMenu {
+      mainMenu?.onMouseButtonPressed(window: window, button: button, mods: mods)
+    }
+  }
+
+  func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    if showingMainMenu {
+      mainMenu?.onMouseButtonReleased(window: window, button: button, mods: mods)
+    }
+  }
+
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
+    if showingMainMenu {
+      mainMenu?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+    }
+  }
+
+  private func showMainMenu(tab: MainMenuTabs.Tab) {
+    showingMainMenu = true
+    mainMenu?.setActiveTab(tab)
+  }
+
+  private func hideMainMenu() {
+    showingMainMenu = false
+  }
+
+  /// Get available cameras for editor integration
+  public func getAvailableCameras() -> [String] {
+    return prerenderedEnvironment?.getAvailableCameras() ?? ["1"]
   }
 
   private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
@@ -108,40 +226,41 @@ import Assimp
   }
 
   func draw() {
-    // Clear screen
-    //    glClearColor(0.1, 0.1, 0.1, 1.0)
-    //    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    if showingMainMenu {
+      // Draw main menu
+      mainMenu?.draw()
+    } else {
+      // Render prerendered environment first (as background)
+      if let env = prerenderedEnvironment {
+        env.render()
+      }
 
-    // Render prerendered environment first (as background)
-    if let env = prerenderedEnvironment {
-      env.render()
+      //    // Set up 3D rendering
+      //    let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
+      //    let projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
+      //    let view = camera.getViewMatrix()
+      //
+      //    // Draw player pill
+      //    if let pill = pillMesh {
+      //      let modelMatrix = GLMath.translate(mat4(1), playerPosition)
+      //      pill.draw(
+      //        projection: projection,
+      //        view: view,
+      //        modelMatrix: modelMatrix,
+      //        cameraPosition: camera.position,
+      //        lightDirection: vec3(0, -1, 0),
+      //        lightColor: vec3(1, 1, 1),
+      //        lightIntensity: 1.0,
+      //        fillLightDirection: vec3(-0.3, -0.5, -0.2),
+      //        fillLightColor: vec3(0.8, 0.9, 1.0),
+      //        fillLightIntensity: 0.4,
+      //        diffuseOnly: false
+      //      )
+      //      //    } else {
+      //      //      // TODO: Draw procedural pill mesh directly
+      //      //      print("No pill mesh loaded - procedural mesh not yet implemented")
+      //    }
     }
-
-    //    // Set up 3D rendering
-    //    let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
-    //    let projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
-    //    let view = camera.getViewMatrix()
-    //
-    //    // Draw player pill
-    //    if let pill = pillMesh {
-    //      let modelMatrix = GLMath.translate(mat4(1), playerPosition)
-    //      pill.draw(
-    //        projection: projection,
-    //        view: view,
-    //        modelMatrix: modelMatrix,
-    //        cameraPosition: camera.position,
-    //        lightDirection: vec3(0, -1, 0),
-    //        lightColor: vec3(1, 1, 1),
-    //        lightIntensity: 1.0,
-    //        fillLightDirection: vec3(-0.3, -0.5, -0.2),
-    //        fillLightColor: vec3(0.8, 0.9, 1.0),
-    //        fillLightIntensity: 0.4,
-    //        diffuseOnly: false
-    //      )
-    //      //    } else {
-    //      //      // TODO: Draw procedural pill mesh directly
-    //      //      print("No pill mesh loaded - procedural mesh not yet implemented")
-    //    }
   }
 
   private func drawRoom() {

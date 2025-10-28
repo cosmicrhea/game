@@ -381,6 +381,7 @@ public final class Engine {
         toggleEditor()
       }
 
+
     default:
       break
     }
@@ -406,6 +407,7 @@ public final class Engine {
     // Update editor panel for new loop
     updateEditorForCurrentLoop()
   }
+
 
   private func cycleInputSources() {
     let allSources = InputSource.allCases

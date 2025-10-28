@@ -4,6 +4,7 @@ import SwiftSyntaxMacros
 @main
 struct EditorMacrosPlugin: CompilerPlugin {
   let providingMacros: [Macro.Type] = [
-    EditorMacro.self
+    EditorMacro.self,
+    EditableOptionsMacro.self,
   ]
 }

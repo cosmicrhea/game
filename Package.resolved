@@ -1,33 +1,6 @@
 {
-  "originHash" : "98ad6dd5c14a613af021d75724d4c268dc59f26d77aa570de037e3e987b09827",
+  "originHash" : "83f86ce68c8f34eb0b73e774a97b7c505e4a5ccef3f6341b45b2500b5c5c49dd",
   "pins" : [
-    {
-      "identity" : "assimp",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/assimp.git",
-      "state" : {
-        "branch" : "master",
-        "revision" : "2a60e52b3303ca1f129ea3b4c069a0d74661b2b2"
-      }
-    },
-    {
-      "identity" : "gl",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/gl.git",
-      "state" : {
-        "branch" : "master",
-        "revision" : "258dd622a96a81584e2db265984441a2f6d1bfe6"
-      }
-    },
-    {
-      "identity" : "gl-math",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/gl-math.git",
-      "state" : {
-        "branch" : "master",
-        "revision" : "6292f70b42f91ee9b730522a63cf2bc05aacbc27"
-      }
-    },
     {
       "identity" : "glfw",
       "kind" : "remoteSourceControl",
@@ -35,24 +8,6 @@
       "state" : {
         "branch" : "main",
         "revision" : "736d1709525a41732d3e56b65e9ed4ccd83f4f94"
-      }
-    },
-    {
-      "identity" : "glfw-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/glfw-swift.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "b27d0da74b86c98b6a5819e46291a6fcb902b469"
-      }
-    },
-    {
-      "identity" : "jolt",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/jolt.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "b55385ff8fabf641101cb42ea1348e12f5af5b1a"
       }
     },
     {
@@ -83,60 +38,6 @@
       }
     },
     {
-      "identity" : "miniaudio",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/miniaudio.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "1b05085277a27eb020e0019f753c4493e7b42930"
-      }
-    },
-    {
-      "identity" : "nanosvg",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/nanosvg.git",
-      "state" : {
-        "branch" : "master",
-        "revision" : "73184d9aebc4ce98524e870f4fa78a169c7b634e"
-      }
-    },
-    {
-      "identity" : "stb-perlin",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/stb-perlin.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "1f6c011d42485947ec11b0d8b3741b6aa5896ab3"
-      }
-    },
-    {
-      "identity" : "stb-rect-pack",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/stb-rect-pack.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "92f159f6886686e4a9ec42b5cb173a21ccfbed10"
-      }
-    },
-    {
-      "identity" : "stb-text-edit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/stb-text-edit.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "b2edb90b4b843c46fc728f72d95a6385f26aba51"
-      }
-    },
-    {
-      "identity" : "stb-truetype",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/stb-truetype.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "2f26aa0716ae25bc8bd4566969ce0df8a5969923"
-      }
-    },
-    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser",
@@ -164,15 +65,6 @@
       }
     },
     {
-      "identity" : "swift-image-formats",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/swift-image-formats.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "9061a3db7eaa04b0cb1a3f4b2b9a6f2f8e119162"
-      }
-    },
-    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
@@ -197,15 +89,6 @@
       "state" : {
         "revision" : "64889f0c732f210a935a0ad7cda38f77f876262d",
         "version" : "509.1.1"
-      }
-    },
-    {
-      "identity" : "tinyexr",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cosmicrhea-game/tinyexr.git",
-      "state" : {
-        "branch" : "release",
-        "revision" : "4f449a16885b79ab0cd4d98eb3d2ce09c9de6c7d"
       }
     },
     {

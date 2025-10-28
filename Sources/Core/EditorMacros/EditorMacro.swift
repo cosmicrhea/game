@@ -395,3 +395,15 @@ private struct EditablePropertyInfo {
   let displayName: String
   let range: String?
 }
+
+public struct EditableOptionsMacro: AccessorMacro {
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingAccessorsOf declaration: some DeclSyntaxProtocol,
+    in context: some MacroExpansionContext
+  ) throws -> [AccessorDeclSyntax] {
+    // This macro doesn't actually generate accessors - it's just a marker
+    // The EditorPanel will use reflection to find properties with this attribute
+    return []
+  }
+}

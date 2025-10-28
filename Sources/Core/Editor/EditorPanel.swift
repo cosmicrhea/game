@@ -5,6 +5,7 @@ public final class EditorPanel: OptionsPanel {
   private var propertyGroups: [EditablePropertyGroup] = []
   private var sliders: [Slider] = []
   private var switches: [Switch] = []
+  private var pickers: [Picker] = []
   private var currentObject: Editing?
   private var editorWindowSize: Size = Size(520, 720)
   private var noEditorMessage: String? = nil
@@ -67,6 +68,7 @@ public final class EditorPanel: OptionsPanel {
 
       let isSlider = rows[i].control is Slider
       let isSwitch = rows[i].control is Switch
+      let isPicker = rows[i].control is Picker
 
       // Size by control type
       let controlWidth: Float
@@ -78,6 +80,9 @@ public final class EditorPanel: OptionsPanel {
       } else if isSwitch {
         controlWidth = 68
         controlHeight = 28
+      } else if isPicker {
+        controlWidth = r.size.width * 0.55
+        controlHeight = 36
       } else {
         controlWidth = r.size.width * 0.55
         controlHeight = 36
@@ -168,6 +173,7 @@ public final class EditorPanel: OptionsPanel {
   private func generateControls() {
     sliders.removeAll()
     switches.removeAll()
+    pickers.removeAll()
     var rows: [Row] = []
 
     if !propertyGroups.isEmpty {
@@ -183,6 +189,9 @@ public final class EditorPanel: OptionsPanel {
           } else if let sw = createSwitchForProperty(property) {
             switches.append(sw)
             rows.append(Row(label: property.displayName, control: sw))
+          } else if let picker = createPickerForProperty(property) {
+            pickers.append(picker)
+            rows.append(Row(label: property.displayName, control: picker))
           }
         }
       }
@@ -195,6 +204,9 @@ public final class EditorPanel: OptionsPanel {
         } else if let sw = createSwitchForProperty(property) {
           switches.append(sw)
           rows.append(Row(label: property.displayName, control: sw))
+        } else if let picker = createPickerForProperty(property) {
+          pickers.append(picker)
+          rows.append(Row(label: property.displayName, control: picker))
         }
       }
     }
@@ -234,6 +246,57 @@ public final class EditorPanel: OptionsPanel {
     return sw
   }
 
+  private func createPickerForProperty(_ property: AnyEditableProperty) -> Picker? {
+    // Check if this is a String property
+    guard let stringValue = property.value as? String else { return nil }
+
+    // Try to get dynamic options from the current object
+    var availableOptions: [String] = [stringValue]  // Default to current value
+
+    // Look for @EditableOptions properties using reflection
+    if let object = currentObject {
+      let optionsPropertyName = "\(property.name)Options"
+      let mirror = Mirror(reflecting: object)
+
+      print("🔍 Looking for @EditableOptions property: \(optionsPropertyName)")
+      print("🔍 Available properties: \(mirror.children.map { $0.label ?? "nil" })")
+
+      // Look for @EditableOptions properties
+      if let optionsProperty = mirror.children.first(where: { $0.label == optionsPropertyName }) {
+        // Check if this is an @EditableOptions property by looking at its type
+        if let optionsValue = optionsProperty.value as? [String] {
+          print("✅ Found @EditableOptions: \(optionsValue)")
+          availableOptions = optionsValue
+        } else {
+          print("❌ Property \(optionsPropertyName) exists but is not [String]")
+        }
+      } else {
+        print("❌ No @EditableOptions property found for \(optionsPropertyName)")
+      }
+    }
+
+    // Fallback to static options from @Editable if available
+    if availableOptions.count == 1 && availableOptions[0] == stringValue,
+      let staticOptions = property.pickerOptions, !staticOptions.isEmpty
+    {
+      availableOptions = staticOptions
+    }
+
+    // Ensure current value is in the options
+    if !availableOptions.contains(stringValue) {
+      availableOptions.insert(stringValue, at: 0)
+    }
+
+    let picker = Picker(
+      frame: .zero, options: availableOptions, selectedIndex: availableOptions.firstIndex(of: stringValue) ?? 0)
+    picker.onSelectionChanged = { newIndex in
+      if newIndex < picker.options.count {
+        property.setValue(picker.options[newIndex])
+      }
+    }
+    return picker
+  }
+
   /// Update slider values when the underlying object properties change
   public func refreshValues() {
     guard let object = currentObject else { return }
@@ -249,6 +312,7 @@ public final class EditorPanel: OptionsPanel {
 
     var sliderIndex = 0
     var switchIndex = 0
+    var pickerIndex = 0
     for property in currentProperties {
       if let floatValue = property.value as? Float, sliderIndex < sliders.count {
         sliders[sliderIndex].value = floatValue
@@ -256,6 +320,12 @@ public final class EditorPanel: OptionsPanel {
       } else if let boolValue = property.value as? Bool, switchIndex < switches.count {
         switches[switchIndex].isOn = boolValue
         switchIndex += 1
+      } else if let stringValue = property.value as? String, pickerIndex < pickers.count {
+        // Update picker selection if the current value matches one of the options
+        if let optionIndex = pickers[pickerIndex].options.firstIndex(of: stringValue) {
+          pickers[pickerIndex].selectedIndex = optionIndex
+        }
+        pickerIndex += 1
       }
     }
   }

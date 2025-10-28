@@ -33,6 +33,10 @@
     }
   }
 
+  func setActiveTab(_ tab: MainMenuTabs.Tab) {
+    tabs.setActiveTab(tab)
+  }
+
   func update(window: Window, deltaTime: Float) {
     tabs.marginX = marginX
     tabs.update(deltaTime: deltaTime)
@@ -145,6 +149,11 @@ final class MainMenuTabs {
 
   var activeTab: Tab {
     return currentTab
+  }
+
+  func setActiveTab(_ tab: Tab) {
+    currentTab = tab
+    onTabChanged?(currentTab)
   }
 
   func update(deltaTime: Float) {
