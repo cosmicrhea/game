@@ -24,6 +24,7 @@ jobs:
     name: ${{ matrix.os }}
     env:
       GAME_LOCAL_DEPS: "0"
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
       - name: Checkout glass
         uses: actions/checkout@v4
@@ -131,15 +132,24 @@ jobs:
       - name: Set up Swift 6.2 (Windows)
         if: runner.os == 'Windows'
         run: |
-          # Check if winget is available
+          # Install winget if not available
           Write-Host "Checking for winget..."
           try {
             $wingetVersion = winget --version
             Write-Host "winget found: $wingetVersion"
+          } catch {
+            Write-Host "winget not found, installing it..."
+            # Use the winget-install script
+            Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/asheroto/winget-install/master/winget-install.ps1') } -Silent"
+            Write-Host "winget installed, checking version..."
+            $wingetVersion = winget --version
+            Write-Host "winget version after install: $wingetVersion"
+          }
             
             # Try to install Swift via winget first
             Write-Host "Attempting to install Swift via winget..."
-            winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
+            $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
+            Write-Host "Winget install result: $wingetResult"
             
             # Check both possible installation paths
             $swiftPaths = @(
@@ -167,7 +177,11 @@ jobs:
 
           # Install Swift silently
           Write-Host "Installing Swift..."
-          Start-Process -FilePath $swiftInstaller -ArgumentList "/S" -Wait
+          $installProcess = Start-Process -FilePath $swiftInstaller -ArgumentList "/S" -Wait -PassThru
+          Write-Host "Swift installer exit code: $($installProcess.ExitCode)"
+
+          # Wait a moment for installation to complete
+          Start-Sleep -Seconds 5
 
           # Check both possible installation paths after manual installation
           $swiftPaths = @(
@@ -190,8 +204,23 @@ jobs:
             Write-Host "Swift installation path not found in any expected location"
             Write-Host "Checked paths: $($swiftPaths -join ', ')"
             # List all Swift-related directories for debugging
-            Get-ChildItem -Path "$env:LOCALAPPDATA\Programs" -Name "*swift*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found: $_" }
-            Get-ChildItem -Path "C:\Program Files" -Name "*swift*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found: $_" }
+            Write-Host "Searching for Swift installations..."
+            Get-ChildItem -Path "$env:LOCALAPPDATA\Programs" -Name "*swift*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found in LocalAppData: $_" }
+            Get-ChildItem -Path "C:\Program Files" -Name "*swift*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found in Program Files: $_" }
+            Get-ChildItem -Path "C:\Program Files (x86)" -Name "*swift*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found in Program Files (x86): $_" }
+            
+            # Check if winget actually installed anything
+            Write-Host "Checking winget installed packages..."
+            winget list --name "Swift" 2>$null | ForEach-Object { Write-Host "Winget Swift packages: $_" }
+            
+            # Try to find Swift anywhere on the system
+            Write-Host "Searching entire C: drive for swift.exe..."
+            $swiftExe = Get-ChildItem -Path "C:\" -Name "swift.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5
+            if ($swiftExe) {
+              Write-Host "Found swift.exe at: $($swiftExe -join ', ')"
+            } else {
+              Write-Host "No swift.exe found anywhere on C: drive"
+            }
           }
 
       - name: Install macOS dependencies
