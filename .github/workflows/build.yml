@@ -131,7 +131,27 @@ jobs:
       - name: Set up Swift 6.1 (Windows)
         if: runner.os == 'Windows'
         run: |
-          # Download and install Swift 6.1 for Windows manually
+          # Check if winget is available
+          Write-Host "Checking for winget..."
+          try {
+            $wingetVersion = winget --version
+            Write-Host "winget found: $wingetVersion"
+            
+            # Try to install Swift via winget first
+            Write-Host "Attempting to install Swift via winget..."
+            winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
+            $swiftPath = "C:\Program Files\Swift\bin"
+            if (Test-Path $swiftPath) {
+              $env:PATH = "$swiftPath;$env:PATH"
+              echo "$swiftPath" >> $env:GITHUB_PATH
+              Write-Host "Swift installed via winget successfully"
+              exit 0
+            }
+          } catch {
+            Write-Host "winget not available or failed, falling back to manual installation"
+          }
+
+          # Fallback: Download and install Swift 6.1 for Windows manually
           $swiftUrl = "https://download.swift.org/swift-6.1-release/windows10/swift-6.1-RELEASE/swift-6.1-RELEASE-windows10.exe"
           $swiftInstaller = "$env:TEMP\swift-installer.exe"
           Write-Host "Downloading Swift from $swiftUrl"
@@ -150,6 +170,11 @@ jobs:
           } else {
             Write-Host "Swift installation path not found: $swiftPath"
           }
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install assimp
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -173,15 +198,26 @@ jobs:
             libasound2-dev \
             libpulse-dev \
             libudev-dev \
-            zlib1g-dev
+            zlib1g-dev \
+            libassimp-dev
 
-      - name: Clear SwiftPM cache
+      - name: Clear SwiftPM cache (macOS & Linux)
+        if: runner.os != 'Windows'
         run: |
           rm -rf ~/.swiftpm
           rm -rf glass/.build
           rm -rf glass/.swiftpm
           rm -f glass/Package.resolved
           cd glass && swift package clean
+
+      - name: Clear SwiftPM cache (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.swiftpm" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "glass\.build" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "glass\.swiftpm" -ErrorAction SilentlyContinue
+          Remove-Item -Force "glass\Package.resolved" -ErrorAction SilentlyContinue
+          cd glass; swift package clean
 
       # - name: Cache SwiftPM
       #   uses: actions/cache@v4

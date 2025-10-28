@@ -7,8 +7,8 @@ final class PrerenderedEnvironment {
   private let shader: GLProgram
 
   // Images (which handle GL texture management)
-  private let albedoImage: Image
-  private let mistImage: Image
+  private var albedoImages: [Image] = []
+  private var mistImages: [Image] = []
 
   // Fullscreen quad rendering
   private var vao: GLuint = 0
@@ -22,7 +22,21 @@ final class PrerenderedEnvironment {
   // Texture filtering toggle
   public var nearestNeighborFiltering: Bool = true
 
-  init() throws {
+  // Frame animation
+  private var currentFrame: Int = 0
+  private var totalFrames: Int = 0
+  private var lastFrameTime: Double = 0
+  private let targetFPS: Double = 60.0
+  private let frameDuration: Double = 1.0 / 60.0
+
+  // Scene configuration
+  private let scenePath: String
+  private let cameraName: String
+
+  init(scenePath: String = "Scenes/Renders/radar_office", cameraName: String = "1") throws {
+    self.scenePath = scenePath
+    self.cameraName = cameraName
+
     // Load the PrerenderedEnvironment shader
     do {
       shader = try GLProgram("Common/PrerenderedEnvironment")
@@ -32,16 +46,9 @@ final class PrerenderedEnvironment {
       throw error
     }
 
-    // Load images using your Image class
-    albedoImage = Image("Scenes/Renders/radar_office/1_1.png")
-    mistImage = Image("Scenes/Renders/radar_office/m_1_1.png")
-    logger.trace("✅ Images loaded successfully")
-    logger.trace("🖼️ Albedo image: \(albedoImage.naturalSize), texture ID: \(albedoImage.textureID)")
-    logger.trace("🌫️ Mist image: \(mistImage.naturalSize), texture ID: \(mistImage.textureID)")
-
-    // Calculate aspect ratio correction
-    let imageAspect = albedoImage.naturalSize.width / albedoImage.naturalSize.height
-    logger.trace("📐 Image aspect ratio: \(imageAspect)")
+    // Discover and load all frames
+    try discoverAndLoadFrames()
+    logger.trace("✅ Loaded \(totalFrames) frames for camera '\(cameraName)'")
 
     // Create fullscreen quad
     setupFullscreenQuad()
@@ -49,10 +56,75 @@ final class PrerenderedEnvironment {
 
     // Set initial texture filtering
     updateTextureFiltering()
+
+    // Initialize timing
+    lastFrameTime = GLFWSession.currentTime
   }
 
   deinit {
     cleanup()
+  }
+
+  /// Discover and load all frames for the specified camera
+  private func discoverAndLoadFrames() throws {
+    // Find all frame files matching the pattern "frameNumber_cameraName.png"
+    let fileManager = FileManager.default
+    guard let resourcePath = #bundle.resourcePath else {
+      throw NSError(
+        domain: "PrerenderedEnvironment", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find resource path"]
+      )
+    }
+
+    let sceneDirectory = "\(resourcePath)/\(scenePath)"
+    let contents = try fileManager.contentsOfDirectory(atPath: sceneDirectory)
+
+    // Filter for albedo frames (not mist frames which start with 'm_')
+    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", etc.)
+    // We want files that match exactly: [number]_[cameraName].png
+    let albedoFrames = contents.filter { filename in
+      // Must not start with 'm_' (mist files)
+      guard !filename.hasPrefix("m_") else { return false }
+
+      // Must end with "_\(cameraName).png"
+      guard filename.hasSuffix("_\(cameraName).png") else { return false }
+
+      // Extract the part before "_\(cameraName).png" to check if it's just a number
+      let suffix = "_\(cameraName).png"
+      let prefix = String(filename.dropLast(suffix.count))
+
+      // Check if the prefix is just a number (no additional text)
+      return prefix.allSatisfy { $0.isNumber }
+    }.sorted()
+
+    logger.trace("🎬 Found \(albedoFrames.count) frames for camera '\(cameraName)': \(albedoFrames)")
+
+    guard !albedoFrames.isEmpty else {
+      throw NSError(
+        domain: "PrerenderedEnvironment", code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "No frames found for camera '\(cameraName)' in scene '\(scenePath)'"])
+    }
+
+    totalFrames = albedoFrames.count
+    logger.trace("🎬 Found \(totalFrames) frames: \(albedoFrames)")
+
+    // Load all frames
+    albedoImages.reserveCapacity(totalFrames)
+    mistImages.reserveCapacity(totalFrames)
+
+    for frameFilename in albedoFrames {
+      // Load albedo frame
+      let albedoPath = "\(scenePath)/\(frameFilename)"
+      let albedoImage = Image(albedoPath)
+      albedoImages.append(albedoImage)
+
+      // Load corresponding mist frame
+      let mistFilename = "m_\(frameFilename)"
+      let mistPath = "\(scenePath)/\(mistFilename)"
+      let mistImage = Image(mistPath)
+      mistImages.append(mistImage)
+
+      logger.trace("📸 Loaded frame: \(frameFilename) -> albedo: \(albedoImage.textureID), mist: \(mistImage.textureID)")
+    }
   }
 
   private func setupFullscreenQuad() {
@@ -96,18 +168,23 @@ final class PrerenderedEnvironment {
   private func updateTextureFiltering() {
     let filterMode = nearestNeighborFiltering ? GL_NEAREST : GL_LINEAR
 
-    // Update albedo texture filtering
-    glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+    // Update all albedo texture filtering
+    for albedoImage in albedoImages {
+      glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+    }
 
-    // Update mist texture filtering
-    glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+    // Update all mist texture filtering
+    for mistImage in mistImages {
+      glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+    }
 
     glBindTexture(GL_TEXTURE_2D, 0)
-    logger.trace("🔧 Updated texture filtering to: \(nearestNeighborFiltering ? "NEAREST" : "LINEAR")")
+    logger.trace(
+      "🔧 Updated texture filtering to: \(nearestNeighborFiltering ? "NEAREST" : "LINEAR") for \(totalFrames) frames")
   }
 
   /// Toggle between nearest neighbor and linear filtering
@@ -116,13 +193,34 @@ final class PrerenderedEnvironment {
     updateTextureFiltering()
   }
 
+  /// Update frame animation at 30 FPS
+  public func update() {
+    let currentTime = GLFWSession.currentTime
+    let deltaTime = currentTime - lastFrameTime
+
+    if deltaTime >= frameDuration {
+      currentFrame = (currentFrame + 1) % totalFrames
+      lastFrameTime = currentTime
+      logger.trace("🎬 Advanced to frame \(currentFrame)/\(totalFrames)")
+    }
+  }
+
   func render() {
-    logger.trace("🎬 Rendering PrerenderedEnvironment...")
+    guard totalFrames > 0 else {
+      logger.error("❌ No frames loaded, cannot render")
+      return
+    }
+
+    logger.trace("🎬 Rendering PrerenderedEnvironment frame \(currentFrame)/\(totalFrames)...")
     shader.use()
+
+    // Get current frame images
+    let currentAlbedoImage = albedoImages[currentFrame]
+    let currentMistImage = mistImages[currentFrame]
 
     // Calculate viewport aspect ratio
     let viewportAspect = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
-    let imageAspect = albedoImage.naturalSize.width / albedoImage.naturalSize.height
+    let imageAspect = currentAlbedoImage.naturalSize.width / currentAlbedoImage.naturalSize.height
     let aspectCorrection = viewportAspect / imageAspect  // Try inverted
 
     // Set uniforms
@@ -131,21 +229,21 @@ final class PrerenderedEnvironment {
     shader.setFloat("uAspectRatio", value: aspectCorrection)
     logger.trace("📐 Set uniforms: near=\(near), far=\(far), aspectCorrection=\(aspectCorrection)")
 
-    // Bind textures using the Image's texture IDs
+    // Bind textures using the current frame's texture IDs
     glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
+    glBindTexture(GL_TEXTURE_2D, GLuint(currentAlbedoImage.textureID))
     shader.setInt("albedo_texture", value: 0)
-    logger.trace("🖼️ Bound albedo texture: ID \(albedoImage.textureID)")
+    logger.trace("🖼️ Bound albedo texture: ID \(currentAlbedoImage.textureID)")
 
     glActiveTexture(GL_TEXTURE1)
-    glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
+    glBindTexture(GL_TEXTURE_2D, GLuint(currentMistImage.textureID))
     shader.setInt("mist_texture", value: 1)
-    logger.trace("🌫️ Bound mist texture: ID \(mistImage.textureID)")
+    logger.trace("🌫️ Bound mist texture: ID \(currentMistImage.textureID)")
 
     glActiveTexture(GL_TEXTURE2)
-    glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))  // Use mist as depth too
+    glBindTexture(GL_TEXTURE_2D, GLuint(currentMistImage.textureID))  // Use mist as depth too
     shader.setInt("depth_texture", value: 2)
-    logger.trace("📏 Bound depth texture: ID \(mistImage.textureID)")
+    logger.trace("📏 Bound depth texture: ID \(currentMistImage.textureID)")
 
     // Draw fullscreen quad
     glBindVertexArray(vao)

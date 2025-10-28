@@ -66,6 +66,9 @@ import Assimp
 
     // Update camera to follow player
     camera.follow(playerPosition)
+
+    // Update prerendered environment animation
+    prerenderedEnvironment?.update()
   }
 
   private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {

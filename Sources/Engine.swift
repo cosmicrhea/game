@@ -123,7 +123,7 @@ public final class Engine {
       NSWindowSwizzling.run()
       window.nsWindow?.styleMask.insert(.fullSizeContentView)
       window.nsWindow?.titlebarAppearsTransparent = true
-      window.nsWindow?.toolbar = .init()
+      //window.nsWindow?.toolbar = .init()
       window.nsWindow?.hideStandardWindowButtons()
     //window.nsWindow?.darkenStandardWindowButtons()
     #endif
