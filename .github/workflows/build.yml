@@ -188,6 +188,16 @@ jobs:
           rm -f glass/Package.resolved
           cd glass && swift package clean
 
+      - name: Free up disk space (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          df -h
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo rm -rf /tmp/*
+          df -h
+
       - name: Clear SwiftPM cache (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -228,6 +238,12 @@ jobs:
           Write-Host "Current PATH: $env:PATH"
           swift --version
 
+      - name: Check disk space before build
+        if: runner.os == 'Linux'
+        run: |
+          df -h
+          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
+
       - name: Build (debug) - macOS & Linux
         if: runner.os != 'Windows'
         working-directory: glass
@@ -249,6 +265,13 @@ jobs:
             }
           }
           swift build --quiet --enable-experimental-prebuilts
+
+      - name: Clean debug build artifacts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "Cleaning debug build to free space for release build..."
+          rm -rf glass/.build
+          df -h
 
       - name: Build (release) - macOS & Linux
         if: runner.os != 'Windows'
