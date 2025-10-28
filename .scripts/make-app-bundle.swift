@@ -94,6 +94,27 @@ if fileManager.fileExists(atPath: resourceBundle.path) {
     }
 }
 
+// create a top-level symlink for SwiftPM's naive Bundle.module lookup
+let topLevelExpectedBundleLocation = appBundle.appendingPathComponent(resourceBundleName)
+let actualBundleLocation = resourcesDirectory.appendingPathComponent(resourceBundleName)
+
+if fileManager.fileExists(atPath: actualBundleLocation.path) {
+    // if something already exists at the top level path, remove it (could be stale copy)
+    if fileManager.fileExists(atPath: topLevelExpectedBundleLocation.path) {
+        try? fileManager.removeItem(at: topLevelExpectedBundleLocation)
+    }
+
+    do {
+        try fileManager.createSymbolicLink(
+            at: topLevelExpectedBundleLocation,
+            withDestinationURL: URL(fileURLWithPath: "Contents/Resources/\(resourceBundleName)")
+        )
+        print("  🔗 created symlink: \(topLevelExpectedBundleLocation.lastPathComponent) → Contents/Resources/\(resourceBundleName)")
+    } catch {
+        print("  ⚠️ failed to create symlink for resources: \(error)")
+    }
+}
+
 // write Info.plist
 let plist = """
 <?xml version="1.0" encoding="UTF-8"?>
