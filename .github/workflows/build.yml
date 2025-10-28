@@ -57,8 +57,13 @@ jobs:
 
           # Try to install Swift via winget first
           Write-Host "Attempting to install Swift via winget..."
-          $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
-          Write-Host "Winget install result: $wingetResult"
+          try {
+            $wingetResult = winget install --id Swift.Toolchain -e --accept-package-agreements --accept-source-agreements
+            Write-Host "Winget install result: $wingetResult"
+            Write-Host "Winget install exit code: $LASTEXITCODE"
+          } catch {
+            Write-Host "Winget install failed with error: $_"
+          }
 
           # Check both possible installation paths
           $swiftPaths = @(
@@ -75,7 +80,17 @@ jobs:
             }
           }
 
-          Write-Host "Swift not found in expected paths after winget installation, trying manual installation"
+          Write-Host "Swift not found in expected paths after winget installation"
+
+          # Debug: Check what winget packages are installed
+          Write-Host "Checking installed winget packages..."
+          winget list | Select-String -Pattern "swift" -CaseSensitive:$false
+
+          # Debug: Search for Swift packages
+          Write-Host "Searching for Swift packages in winget..."
+          winget search swift
+
+          Write-Host "Trying manual installation..."
 
           # Fallback: Download and install Swift 6.2 for Windows manually
           $swiftUrl = "https://download.swift.org/swift-6.2-release/windows10/swift-6.2-RELEASE/swift-6.2-RELEASE-windows10.exe"
