@@ -140,7 +140,7 @@ jobs:
           } catch {
             Write-Host "winget not found, installing it..."
             # Use the winget-install script
-            Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/asheroto/winget-install/master/winget-install.ps1') } -Silent"
+            Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/asheroto/winget-install/master/winget-install.ps1') }"
             Write-Host "winget installed, checking version..."
             $wingetVersion = winget --version
             Write-Host "winget version after install: $wingetVersion"
