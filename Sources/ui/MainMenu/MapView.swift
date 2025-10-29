@@ -43,10 +43,11 @@ class MapView: RenderLoop {
       shader.setFloat("uGridThickness", value: gridThickness)
     }
 
-//    for meshInstance in meshInstances {
-//      // meshInstance
-//    }
+    //    for meshInstance in meshInstances {
+    //      // meshInstance
+    //    }
 
     promptList.draw()
   }
+
 }

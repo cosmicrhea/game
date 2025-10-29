@@ -2,9 +2,10 @@ import SwiftCompilerPlugin
 import SwiftSyntaxMacros
 
 @main
-struct EditorMacrosPlugin: CompilerPlugin {
+struct MacrosPlugin: CompilerPlugin {
   let providingMacros: [Macro.Type] = [
     EditorMacro.self,
     EditableOptionsMacro.self,
+    ConfigMacro.self,
   ]
 }

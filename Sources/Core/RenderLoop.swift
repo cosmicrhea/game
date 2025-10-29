@@ -18,6 +18,7 @@ protocol RenderLoop {
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier)
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier)
   func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier)
+  func onTextInput(window: Window, text: String)
   func update(deltaTime: Float)
   func update(window: Window, deltaTime: Float)
   func draw()
@@ -35,6 +36,7 @@ extension RenderLoop {
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {}
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {}
   func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {}
+  func onTextInput(window: Window, text: String) {}
   func update(deltaTime: Float) {}
   func update(window: Window, deltaTime: Float) {
     update(deltaTime: deltaTime)

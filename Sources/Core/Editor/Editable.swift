@@ -8,11 +8,11 @@ public enum EditorGrouping {
 @attached(member, names: named(getEditableProperties))
 @attached(extension, conformances: Editing)
 public macro Editor(_ grouping: EditorGrouping = .none) =
-  #externalMacro(module: "GlassEditorMacros", type: "EditorMacro")
+  #externalMacro(module: "GameMacros", type: "EditorMacro")
 
 /// Macro for generating computed properties that provide options for @Editable String properties
 @attached(accessor)
-public macro EditableOptions() = #externalMacro(module: "GlassEditorMacros", type: "EditableOptionsMacro")
+public macro EditableOptions() = #externalMacro(module: "GameMacros", type: "EditableOptionsMacro")
 
 /// A property wrapper that marks properties as editable in the debug editor.
 @propertyWrapper

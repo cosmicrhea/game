@@ -44,7 +44,7 @@ func saveScreenshot(width: Int32, height: Int32, path: String? = nil) {
       timestamp = timestamp.replacingOccurrences(of: " AM", with: "\u{202F}AM")
         .replacingOccurrences(of: " PM", with: "\u{202F}PM")
 
-      filePath = "/Users/FA/Pictures/Screenshots/Glass Screenshot \(timestamp).png"
+      filePath = "/Users/FA/Pictures/Screenshots/Game Screenshot \(timestamp).png"
     }
 
     try Data(pngBytes).write(to: URL(fileURLWithPath: filePath))

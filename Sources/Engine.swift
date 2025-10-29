@@ -289,6 +289,16 @@ public final class Engine {
       }
     }
 
+    // Route text input through activeLoop (consistent with other input handlers)
+    window.textInputHandler = { [weak self] window, text in
+      guard let self else { return }
+      // If editor is visible and focused, don't forward text input to the main loop
+      if config.editorEnabled && self.editorWindow.isFocused {
+        return
+      }
+      self.activeLoop.onTextInput(window: window, text: text)
+    }
+
     window.cursorPositionHandler = { [weak self] window, x, y in
       guard let self else { return }
       guard window.isFocused else { return }
@@ -329,6 +339,18 @@ public final class Engine {
       // Handle other keys for editor panel (on key press only to avoid double handling on release)
       if config.editorEnabled && state == .pressed {
         _ = self.editorPanel.handleKey(key)
+      }
+    }
+
+    // Route text input through editor panel (consistent with other input handlers)
+    editorWindow.textInputHandler = { [weak self] window, text in
+      guard let self else { return }
+      if config.editorEnabled {
+        // Editor panel can handle text input if needed, but for now we route directly to focused TextField
+        // This could be changed to self.editorPanel.onTextInput(...) if we add that method
+        if let focusedField = TextField.currentFocusedField {
+          _ = focusedField.insertText(text)
+        }
       }
     }
 
@@ -461,6 +483,47 @@ public final class Engine {
     )
   }
 
+  private func renderEditorWindow() {
+    // Store current context
+    let previousContext = GLFWContext.current
+
+    // Switch to editor window context
+    editorWindow.context.makeCurrent()
+
+    // Update viewport size for editor window
+    let editorSize = Size(Float(editorWindow.size.width), Float(editorWindow.size.height))
+    editorRenderer.beginFrame(windowSize: editorSize)
+
+    // Render editor panel with flipped coordinate system
+    GraphicsContext.withContext(editorGraphicsContext) {
+      // Set up UI rendering state for editor window
+      editorRenderer.withUIContext {
+        // Create ambient background effect lazily now that a context is current
+        if self.editorAmbientBackground == nil {
+          self.editorAmbientBackground = GLScreenEffect("Effects/AmbientBackground")
+        }
+        // Draw ambient background behind the UI
+        self.editorAmbientBackground?.draw { shader in
+          shader.setVec3("uTintDark", value: (0.035, 0.045, 0.055))
+          shader.setVec3("uTintLight", value: (0.085, 0.10, 0.11))
+          shader.setFloat("uMottle", value: 0.35)
+          shader.setFloat("uGrain", value: 0.08)
+          shader.setFloat("uVignette", value: 0.35)
+          shader.setFloat("uDust", value: 0.06)
+        }
+        // Update editor panel with current window size
+        editorPanel.updateWindowSize(editorSize)
+        editorPanel.draw()
+      }
+    }
+
+    editorRenderer.endFrame()
+    editorWindow.swapBuffers()
+
+    // Restore previous context
+    previousContext.makeCurrent()
+  }
+  
   private func runMainLoop() {
     while !window.shouldClose {
       let currentFrame = Float(GLFWSession.currentTime)
@@ -517,46 +580,5 @@ public final class Engine {
       window.swapBuffers()
       GLFWSession.pollInputEvents()
     }
-  }
-
-  private func renderEditorWindow() {
-    // Store current context
-    let previousContext = GLFWContext.current
-
-    // Switch to editor window context
-    editorWindow.context.makeCurrent()
-
-    // Update viewport size for editor window
-    let editorSize = Size(Float(editorWindow.size.width), Float(editorWindow.size.height))
-    editorRenderer.beginFrame(windowSize: editorSize)
-
-    // Render editor panel with flipped coordinate system
-    GraphicsContext.withContext(editorGraphicsContext) {
-      // Set up UI rendering state for editor window
-      editorRenderer.withUIContext {
-        // Create ambient background effect lazily now that a context is current
-        if self.editorAmbientBackground == nil {
-          self.editorAmbientBackground = GLScreenEffect("Effects/AmbientBackground")
-        }
-        // Draw ambient background behind the UI
-        self.editorAmbientBackground?.draw { shader in
-          shader.setVec3("uTintDark", value: (0.035, 0.045, 0.055))
-          shader.setVec3("uTintLight", value: (0.085, 0.10, 0.11))
-          shader.setFloat("uMottle", value: 0.35)
-          shader.setFloat("uGrain", value: 0.08)
-          shader.setFloat("uVignette", value: 0.35)
-          shader.setFloat("uDust", value: 0.06)
-        }
-        // Update editor panel with current window size
-        editorPanel.updateWindowSize(editorSize)
-        editorPanel.draw()
-      }
-    }
-
-    editorRenderer.endFrame()
-    editorWindow.swapBuffers()
-
-    // Restore previous context
-    previousContext.makeCurrent()
   }
 }

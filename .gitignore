@@ -6,4 +6,5 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 *.blend1
+/Version-2.*
 

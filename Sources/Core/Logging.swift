@@ -1,6 +1,6 @@
 import Logging
 
-let logger = Logger(label: "local.Glass")
+let logger = Logger(label: "local.Game")
 
 extension Logger {
   func error(_ cString: [GLchar]) {

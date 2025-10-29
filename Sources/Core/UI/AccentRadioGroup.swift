@@ -72,15 +72,7 @@ public final class AccentRadioGroup: OptionsControl {
   }
 
   private static func loadAccentFromConfig() -> Color? {
-    let s = Config.current.accentRGBA
-    let parts = s.split(separator: ",").map { String($0) }
-    guard parts.count == 4,
-      let r = Float(parts[0].trimmingCharacters(in: .whitespaces)),
-      let g = Float(parts[1].trimmingCharacters(in: .whitespaces)),
-      let b = Float(parts[2].trimmingCharacters(in: .whitespaces)),
-      let a = Float(parts[3].trimmingCharacters(in: .whitespaces))
-    else { return nil }
-    return Color(r, g, b, a)
+    return Config.current.accentColor
   }
 
   private func nearlyEqualColor(_ a: Color, _ b: Color, eps: Float = 0.001) -> Bool {

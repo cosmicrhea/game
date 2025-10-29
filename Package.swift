@@ -21,7 +21,7 @@ let package = Package(
   ],
 
   products: [
-    .executable(name: "Game", targets: ["Glass"])
+    .executable(name: "Game", targets: ["Game"])
   ],
 
   dependencies: [
@@ -54,10 +54,10 @@ let package = Package(
 
   targets: [
     .executableTarget(
-      name: "Glass",
+      name: "Game",
 
       dependencies: [
-        "GlassEditorMacros",
+        "GameMacros",
 
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "Collections", package: "swift-collections"),
@@ -91,7 +91,7 @@ let package = Package(
         // "Documentation",
         "Sources/Assets",
         "Sources/Core/Build",
-        "Sources/Core/EditorMacros",
+        "Sources/Core/Macros",
         "NOTES.md",
         "TODO.md",
         "README.md",
@@ -126,22 +126,22 @@ let package = Package(
       ],
 
       plugins: [
-        "GlassBuildTools"
+        "GameBuildTools"
       ]
     ),
 
     .macro(
-      name: "GlassEditorMacros",
+      name: "GameMacros",
       dependencies: [
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
         .product(name: "Collections", package: "swift-collections"),
       ],
-      path: "Sources/Core/EditorMacros",
+      path: "Sources/Core/Macros",
     ),
 
     .plugin(
-      name: "GlassBuildTools",
+      name: "GameBuildTools",
       capability: .buildTool(),
       path: "Sources/Core/Build"
     ),

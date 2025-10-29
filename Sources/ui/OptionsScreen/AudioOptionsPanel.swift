@@ -1,9 +1,9 @@
 import Miniaudio
 
 final class AudioOptionsPanel: OptionsPanel {
-  private let voiceVolumeSlider = Slider(minimumValue: 0, maximumValue: 100, value: 70, tickCount: 11)
-  private let musicVolumeSlider = Slider(minimumValue: 0, maximumValue: 100, value: 65, tickCount: 11)
-  private let sfxVolumeSlider = Slider(minimumValue: 0, maximumValue: 100, value: 75)
+  private let voiceVolumeSlider = Slider(value: Config.current.voiceVolume)
+  private let musicVolumeSlider = Slider(value: Config.current.musicVolume)
+  private let sfxVolumeSlider = Slider(value: Config.current.sfxVolume)
   private let uiVolumeSlider = Slider(value: Config.current.uiVolume)
 
   private let outputDevicePicker = Picker(
@@ -18,6 +18,18 @@ final class AudioOptionsPanel: OptionsPanel {
     super.init()
 
     //print(try! AudioDevice.outputDevices.map { ($0.id, $0.name, $0.isDefault) })
+
+    voiceVolumeSlider.onValueChanged = { value in
+      Config.current.voiceVolume = value
+    }
+
+    musicVolumeSlider.onValueChanged = { value in
+      Config.current.musicVolume = value
+    }
+
+    sfxVolumeSlider.onValueChanged = { value in
+      Config.current.sfxVolume = value
+    }
 
     uiVolumeSlider.onValueChanged = { value in
       Config.current.uiVolume = value

@@ -1,5 +1,5 @@
 /// A color value with red, green, blue, and alpha components.
-public struct Color: Sendable, Equatable {
+public struct Color: Sendable, Equatable, RawRepresentable {
   /// The red component (0.0 to 1.0).
   public var red: Float
   /// The green component (0.0 to 1.0).
@@ -41,6 +41,34 @@ public struct Color: Sendable, Equatable {
   }
 }
 
+// MARK: - RawRepresentable
+
+extension Color {
+  public typealias RawValue = String
+
+  /// The raw string representation: comma-separated RGBA floats, e.g., "0.3569,0.0471,0.0686,1.0"
+  public var rawValue: String {
+    let r = String(format: "%.4f", red)
+    let g = String(format: "%.4f", green)
+    let b = String(format: "%.4f", blue)
+    let a = String(format: "%.4f", alpha)
+    return "\(r),\(g),\(b),\(a)"
+  }
+
+  /// Creates a color from a comma-separated RGBA string.
+  /// - Parameter rawValue: A string in the format "r,g,b,a" where each component is a float.
+  public init?(rawValue: String) {
+    let parts = rawValue.split(separator: ",").map { String($0) }
+    guard parts.count == 4,
+      let r = Float(parts[0].trimmingCharacters(in: .whitespaces)),
+      let g = Float(parts[1].trimmingCharacters(in: .whitespaces)),
+      let b = Float(parts[2].trimmingCharacters(in: .whitespaces)),
+      let a = Float(parts[3].trimmingCharacters(in: .whitespaces))
+    else { return nil }
+    self.init(red: r, green: g, blue: b, alpha: a)
+  }
+}
+
 
 // MARK: - Accent Color (dynamic, app-wide)
 
@@ -54,12 +82,8 @@ extension Color {
     get { _globalAccentColor }
     set {
       _globalAccentColor = newValue
-      // Persist to config as RGBA string
-      let r = String(format: "%.4f", newValue.red)
-      let g = String(format: "%.4f", newValue.green)
-      let b = String(format: "%.4f", newValue.blue)
-      let a = String(format: "%.4f", newValue.alpha)
-      Config.current.accentRGBA = "\(r),\(g),\(b),\(a)"
+      // Persist to config
+      Config.current.accentColor = newValue
     }
   }
 }

@@ -7,7 +7,15 @@ public final class TextField: OptionsControl {
   // MARK: - Public API
 
   public var frame: Rect
-  public var isFocused: Bool = false
+  public var isFocused: Bool = false {
+    didSet {
+      if isFocused {
+        TextField.focusedField = self
+      } else if TextField.focusedField === self {
+        TextField.focusedField = nil
+      }
+    }
+  }
 
   /// The field's text content (backed by `TextEditor`).
   public var text: String {
@@ -53,6 +61,15 @@ public final class TextField: OptionsControl {
   private var lastClickLocation: Point = .zero
   private var clickCount: Int = 0
   private let caret = TextInsertionIndicator()
+
+  // Scrolling offset for when text is clipped
+  private var scrollOffsetX: Float = 0
+
+  // Global reference to focused field for text input routing
+  private static weak var focusedField: TextField?
+
+  /// Get the currently focused TextField (if any).
+  public static var currentFocusedField: TextField? { focusedField }
 
   // MARK: - Init
 
@@ -117,11 +134,14 @@ public final class TextField: OptionsControl {
       height: frame.size.height - contentInsets.top - contentInsets.bottom)
     ctx.clip(to: clipRect)
 
+    // Apply scroll offset
+    let effectiveTextOriginX = textOriginX - scrollOffsetX
+
     // Selection (behind text) using proportional widths
     if !scalars.isEmpty {
       var adjustedBaselineY = baselineY
       if editor.isSingleLine { adjustedBaselineY += textStyle.fontSize * 0.6 - 3 }
-      let frags = editor.lineFragments(originX: textOriginX, originY: adjustedBaselineY)
+      let frags = editor.lineFragments(originX: effectiveTextOriginX, originY: adjustedBaselineY)
       let sel = editor.selection.range
       let selEnd = sel.location + sel.length
       if sel.length > 0 {
@@ -132,7 +152,7 @@ public final class TextField: OptionsControl {
           let segStart = max(sel.location, lineStart)
           let segEnd = min(selEnd, lineEnd)
           if segEnd > segStart {
-            let x0 = textOriginX + sumAdv(advances, from: lineStart, to: segStart)
+            let x0 = effectiveTextOriginX + sumAdv(advances, from: lineStart, to: segStart)
             let w = sumAdv(advances, from: segStart, to: segEnd)
             let selColor = isFocused ? selectionColor : selectionUnfocusedColor
             Rect(x: x0, y: frag.rect.y, width: w, height: frag.rect.height).fill(with: selColor)
@@ -143,24 +163,24 @@ public final class TextField: OptionsControl {
 
     // Text content or placeholder
     if editor.text.isEmpty, let placeholder {
-      placeholder.draw(at: Point(textOriginX, baselineY), style: placeholderStyle, anchor: .baselineLeft)
+      placeholder.draw(at: Point(effectiveTextOriginX, baselineY), style: placeholderStyle, anchor: .baselineLeft)
     } else {
-      editor.text.draw(at: Point(textOriginX, baselineY), style: textStyle, anchor: .baselineLeft)
+      editor.text.draw(at: Point(effectiveTextOriginX, baselineY), style: textStyle, anchor: .baselineLeft)
     }
 
     // Caret (on top)
     if isFocused {
       // Compute caret X using proportional advances, Y/height from line fragment
-      var caretX = textOriginX
+      var caretX = effectiveTextOriginX
       var caretY: Float = baselineY
       var caretH: Float = textStyle.fontSize
       var adjustedBaselineY = baselineY
       if editor.isSingleLine { adjustedBaselineY += textStyle.fontSize * 0.6 }
-      let frags = editor.lineFragments(originX: textOriginX, originY: adjustedBaselineY)
+      let frags = editor.lineFragments(originX: effectiveTextOriginX, originY: adjustedBaselineY)
       let ip = editor.insertionPoint
       for frag in frags {
         if ip >= frag.start && ip <= frag.start + frag.length {
-          caretX = textOriginX + sumAdv(advances, from: frag.start, to: ip)
+          caretX = effectiveTextOriginX + sumAdv(advances, from: frag.start, to: ip)
           caretY = frag.rect.y
           caretH = frag.rect.height
           break
@@ -184,31 +204,95 @@ public final class TextField: OptionsControl {
   @discardableResult
   public func handleKey(_ key: Keyboard.Key, mods: Keyboard.Modifier) -> Bool {
     guard isFocused else { return false }
+
+    // Handle copy/cut/paste with platform-appropriate modifiers
+    #if os(macOS)
+      let commandModifier = Keyboard.Modifier.command
+    #else
+      let commandModifier = Keyboard.Modifier.control
+    #endif
+
+    if mods.contains(commandModifier) {
+      switch key {
+      case .c:
+        // Copy
+        let sel = editor.selection.range
+        if sel.length > 0 {
+          let startIdx = editor.text.startIndex
+          let selStart = editor.text.index(startIdx, offsetBy: sel.location)
+          let selEnd = editor.text.index(selStart, offsetBy: sel.length)
+          let selectedText = String(editor.text[selStart..<selEnd])
+          GLFWSession.clipboard = selectedText
+        }
+        return true
+      case .x:
+        // Cut
+        let sel = editor.selection.range
+        if sel.length > 0 {
+          let startIdx = editor.text.startIndex
+          let selStart = editor.text.index(startIdx, offsetBy: sel.location)
+          let selEnd = editor.text.index(selStart, offsetBy: sel.length)
+          let selectedText = String(editor.text[selStart..<selEnd])
+          GLFWSession.clipboard = selectedText
+          editor.key(.delete)
+          updateScrollOffset()
+        }
+        return true
+      case .v:
+        // Paste
+        if let clipboardText = GLFWSession.clipboard {
+          // If there's a selection, delete it first
+          let sel = editor.selection.range
+          if sel.length > 0 {
+            editor.key(.delete)
+          }
+          _ = editor.paste(clipboardText)
+          updateScrollOffset()
+        }
+        return true
+      case .a:
+        // Select all
+        editor.selectAll()
+        updateScrollOffset()
+        return true
+      default:
+        break
+      }
+    }
+
     let shift = mods.contains(.shift)
     switch key {
     case .left:
       editor.key(.left(shift: shift))
+      updateScrollOffset()
       return true
     case .right:
       editor.key(.right(shift: shift))
+      updateScrollOffset()
       return true
     case .up:
       editor.key(.up(shift: shift))
+      updateScrollOffset()
       return true
     case .down:
       editor.key(.down(shift: shift))
+      updateScrollOffset()
       return true
     case .home:
       editor.key(.lineStart(shift: shift))
+      updateScrollOffset()
       return true
     case .end:
       editor.key(.lineEnd(shift: shift))
+      updateScrollOffset()
       return true
     case .backspace:
       editor.key(.backspace)
+      updateScrollOffset()
       return true
     case .delete:
       editor.key(.delete)
+      updateScrollOffset()
       return true
     case .escape:
       // Cancel editing: simply unfocus
@@ -230,7 +314,13 @@ public final class TextField: OptionsControl {
   @discardableResult
   public func insertText(_ string: String) -> Bool {
     guard isFocused else { return false }
+    // If there's a selection, delete it first
+    let sel = editor.selection.range
+    if sel.length > 0 {
+      editor.key(.delete)
+    }
     editor.insert(string)
+    updateScrollOffset()
     return true
   }
 
@@ -256,7 +346,9 @@ public final class TextField: OptionsControl {
     let baselineY: Float =
       editor.isSingleLine
       ? (frame.midY - textStyle.fontSize * 0.2) : (frame.origin.y + contentInsets.top + textStyle.fontSize * 0.85)
-    let localX = position.x - textOriginX
+    // Account for scroll offset when calculating local coordinates
+    let effectiveTextOriginX = textOriginX - scrollOffsetX
+    let localX = position.x - effectiveTextOriginX
     let localY = position.y - baselineY
     editor.click(x: localX, y: localY)
 
@@ -264,8 +356,8 @@ public final class TextField: OptionsControl {
       // Select word under caret
       let ip = editor.insertionPoint
       let (wStart, wEnd) = wordRange(containing: ip)
-      let startX = localXForIndex(wStart, originX: textOriginX, originY: baselineY) - textOriginX
-      let endX = localXForIndex(wEnd, originX: textOriginX, originY: baselineY) - textOriginX
+      let startX = localXForIndex(wStart, originX: effectiveTextOriginX, originY: baselineY) - effectiveTextOriginX
+      let endX = localXForIndex(wEnd, originX: effectiveTextOriginX, originY: baselineY) - effectiveTextOriginX
       editor.click(x: startX, y: localY)
       editor.drag(x: endX, y: localY)
       isDragging = false
@@ -273,7 +365,7 @@ public final class TextField: OptionsControl {
       // Select all text
       let len = editor.text.unicodeScalars.count
       editor.click(x: 0, y: localY)
-      let endX = localXForIndex(len, originX: textOriginX, originY: baselineY) - textOriginX
+      let endX = localXForIndex(len, originX: effectiveTextOriginX, originY: baselineY) - effectiveTextOriginX
       editor.drag(x: endX, y: localY)
       isDragging = false
       clickCount = 0
@@ -285,11 +377,19 @@ public final class TextField: OptionsControl {
 
   public func handleMouseMove(at position: Point) {
     guard isDragging else { return }
-    let textOriginX = frame.origin.x + contentInsets.left
+    var textOriginX = frame.origin.x + contentInsets.left
+    if let icon = leftIcon {
+      let desiredH = leftIconSize ?? (textStyle.fontSize * 0.9)
+      let aspect = icon.naturalSize.width / max(1, icon.naturalSize.height)
+      let iconW = desiredH * aspect
+      textOriginX += iconW + leftIconPadding
+    }
     let baselineY: Float =
       editor.isSingleLine
       ? (frame.midY - textStyle.fontSize * 0.2) : (frame.origin.y + contentInsets.top + textStyle.fontSize * 0.85)
-    editor.drag(x: position.x - textOriginX, y: position.y - baselineY)
+    // Account for scroll offset when calculating local coordinates
+    let effectiveTextOriginX = textOriginX - scrollOffsetX
+    editor.drag(x: position.x - effectiveTextOriginX, y: position.y - baselineY)
   }
 
   public func handleMouseUp() { isDragging = false }
@@ -337,5 +437,70 @@ public final class TextField: OptionsControl {
     while start > 0 && isWord(scalars[start - 1]) { start -= 1 }
     while end < scalars.count && isWord(scalars[end]) { end += 1 }
     return (start, end)
+  }
+
+  /// Update scroll offset to keep caret visible when text is clipped
+  private func updateScrollOffset() {
+    guard isFocused else { return }
+
+    var textOriginX = frame.origin.x + contentInsets.left
+    if let icon = leftIcon {
+      let desiredH = leftIconSize ?? 20
+      let aspect = icon.naturalSize.width / max(1, icon.naturalSize.height)
+      let iconW = desiredH * aspect
+      textOriginX += iconW + leftIconPadding
+    }
+
+    let availableWidth =
+      frame.size.width - contentInsets.left - contentInsets.right
+      - (textOriginX - (frame.origin.x + contentInsets.left))
+
+    // Calculate total text width
+    var advances: [Float] = []
+    let scalars = Array(editor.text.unicodeScalars)
+    if let font = Font(fontName: textStyle.fontName, pixelHeight: textStyle.fontSize), !scalars.isEmpty {
+      advances.reserveCapacity(scalars.count)
+      for i in 0..<scalars.count {
+        let codepoint = Int32(scalars[i].value)
+        let next: Int32? = (i + 1 < scalars.count) ? Int32(scalars[i + 1].value) : nil
+        advances.append(font.getAdvance(for: codepoint, next: next, scale: 1.0))
+      }
+    }
+
+    let totalTextWidth = sumAdv(advances, from: 0, to: scalars.count)
+
+    // If text fits, no scrolling needed
+    if totalTextWidth <= availableWidth {
+      scrollOffsetX = 0
+      return
+    }
+
+    // Find caret position
+    let baselineY: Float =
+      editor.isSingleLine
+      ? (frame.midY - textStyle.fontSize * 0.2)
+      : (frame.origin.y + contentInsets.top + textStyle.fontSize * 0.85)
+    var adjustedBaselineY = baselineY
+    if editor.isSingleLine { adjustedBaselineY += textStyle.fontSize * 0.6 }
+
+    let ip = editor.insertionPoint
+    let caretX = textOriginX + sumAdv(advances, from: 0, to: ip)
+
+    // Calculate visible range
+    let visibleLeft = textOriginX - scrollOffsetX
+    let visibleRight = visibleLeft + availableWidth
+
+    // Adjust scroll to keep caret visible
+    if caretX < visibleLeft {
+      // Caret is to the left of visible area - scroll left
+      scrollOffsetX = textOriginX - caretX + 8  // Add small padding
+    } else if caretX > visibleRight {
+      // Caret is to the right of visible area - scroll right
+      scrollOffsetX = textOriginX - caretX + availableWidth - 8  // Add small padding
+    }
+
+    // Clamp scroll offset
+    let maxScroll = max(0, totalTextWidth - availableWidth)
+    scrollOffsetX = max(0, min(scrollOffsetX, maxScroll))
   }
 }

@@ -4,9 +4,7 @@
   private let indicator = ProgressIndicator()
   private let tfBasic = TextField(frame: Rect(x: 20, y: 90, width: 360, height: 36), text: "Hello")
   private let tfPlaceholder = TextField(frame: Rect(x: 20, y: 140, width: 360, height: 36), text: "")
-  private let tfMultiline = TextField(
-    frame: Rect(x: 20, y: 190, width: 480, height: 90), text: "This is a\nmultiline\nfield.", singleLine: false)
-  private let tfNoBorder = TextField(frame: Rect(x: 20, y: 300, width: 360, height: 36), text: "No bezel")
+  private let tfNoBorder = TextField(frame: Rect(x: 20, y: 190, width: 360, height: 36), text: "No bezel")
 
   // Sliders
   private let slStandard: Slider = {
@@ -122,11 +120,6 @@
     tfPlaceholder.leftIconTint = .gray400
     tfPlaceholder.draw()
 
-    "Multiline".draw(
-      at: Point(tfMultiline.frame.origin.x, tfMultiline.frame.maxY + 6), style: labelStyle,
-      anchor: .bottomLeft)
-    tfMultiline.draw()
-
     tfNoBorder.bezeled = false
     "No bezel".draw(
       at: Point(tfNoBorder.frame.origin.x, tfNoBorder.frame.maxY + 6), style: labelStyle,
@@ -202,48 +195,14 @@
   // MARK: - Input
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    // Cmd+A: Select all for focused field
-    if mods.contains(.command) && key == .a {
-      for field in [tfBasic, tfPlaceholder, tfMultiline, tfNoBorder] where field.isFocused {
-        // Simulate select-all by clicking at start then dragging to end
-        let originX = field.frame.origin.x + field.contentInsets.left
-        let baselineY: Float =
-          field.text.isEmpty
-          ? field.frame.midY : (field.frame.origin.y + field.contentInsets.top + field.textStyle.fontSize)
-        let endIndex = field.text.unicodeScalars.count
-        _ = field.handleMouseDown(at: Point(originX, baselineY))
-        let endX = originX + (Float(endIndex) * 8)
-        field.handleMouseMove(at: Point(endX, baselineY))
-        field.handleMouseUp()
-        return
-      }
-    }
-
     // Forward navigation/editing keys to the focused field
+    // Text input is now handled via GLFW's textInputHandler, so we don't need mapKeyToCharacter anymore
     if tfBasic.isFocused {
-      if tfBasic.handleKey(key) { return }
-      if let s = mapKeyToCharacter(key, mods: mods) {
-        _ = tfBasic.insertText(s)
-        return
-      }
+      if tfBasic.handleKey(key, mods: mods) { return }
     } else if tfPlaceholder.isFocused {
-      if tfPlaceholder.handleKey(key) { return }
-      if let s = mapKeyToCharacter(key, mods: mods) {
-        _ = tfPlaceholder.insertText(s)
-        return
-      }
-    } else if tfMultiline.isFocused {
-      if tfMultiline.handleKey(key) { return }
-      if let s = mapKeyToCharacter(key, mods: mods) {
-        _ = tfMultiline.insertText(s)
-        return
-      }
+      if tfPlaceholder.handleKey(key, mods: mods) { return }
     } else if tfNoBorder.isFocused {
-      if tfNoBorder.handleKey(key) { return }
-      if let s = mapKeyToCharacter(key, mods: mods) {
-        _ = tfNoBorder.insertText(s)
-        return
-      }
+      if tfNoBorder.handleKey(key, mods: mods) { return }
     } else if slStandard.isFocused {
       if slStandard.handleKey(key) { return }
     } else if slTicks.isFocused {
@@ -263,7 +222,7 @@
     guard button == .left else { return }
     let p = mousePoint(window)
     // Manage focus and dispatch mouse down to whichever is hit
-    for field in [tfBasic, tfPlaceholder, tfMultiline, tfNoBorder] {
+    for field in [tfBasic, tfPlaceholder, tfNoBorder] {
       field.isFocused = false
     }
     for slider in [slStandard, slTicks, slPill, slInspector] {
@@ -273,7 +232,7 @@
     colorPicker.isFocused = false
     colorWell.isFocused = false
     accentSelector.isFocused = false
-    for field in [tfNoBorder, tfMultiline, tfPlaceholder, tfBasic] {  // top-most first if overlapping
+    for field in [tfNoBorder, tfPlaceholder, tfBasic] {  // top-most first if overlapping
       if field.frame.contains(p) {
         field.isFocused = true
         _ = field.handleMouseDown(at: p)
@@ -315,7 +274,7 @@
 
   func onMouseMove(window: Window, x: Double, y: Double) {
     let p = mousePoint(window)
-    for field in [tfBasic, tfPlaceholder, tfMultiline, tfNoBorder] { field.handleMouseMove(at: p) }
+    for field in [tfBasic, tfPlaceholder, tfNoBorder] { field.handleMouseMove(at: p) }
     for slider in [slStandard, slTicks, slPill, slInspector] { slider.handleMouseMove(at: p) }
     swMain.handleMouseMove(at: p)
     scrollView.handleMouseMove(at: p)
@@ -326,7 +285,7 @@
 
   func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     guard button == .left else { return }
-    for field in [tfBasic, tfPlaceholder, tfMultiline, tfNoBorder] { field.handleMouseUp() }
+    for field in [tfBasic, tfPlaceholder, tfNoBorder] { field.handleMouseUp() }
     for slider in [slStandard, slTicks, slPill, slInspector] { slider.handleMouseUp() }
     swMain.handleMouseUp()
     scrollView.handleMouseUp()
@@ -340,60 +299,16 @@
     scrollView.handleScroll(xOffset: xOffset, yOffset: yOffset, mouse: p)
   }
 
+  func onTextInput(window: Window, text: String) {
+    // Route text input to the currently focused TextField
+    if let focusedField = TextField.currentFocusedField {
+      _ = focusedField.insertText(text)
+    }
+  }
+
   // MARK: - Helpers
 
   private func mousePoint(_ window: Window) -> Point {
     Point(Float(window.mouse.position.x), Float(Engine.viewportSize.height) - Float(window.mouse.position.y))
-  }
-
-  private func mapKeyToCharacter(_ key: Keyboard.Key, mods: Keyboard.Modifier) -> String? {
-    let shifted = mods.contains(.shift)
-    switch key {
-    case .space: return " "
-    case .apostrophe: return shifted ? "\"" : "'"
-    case .comma: return shifted ? "<" : ","
-    case .period: return shifted ? ">" : "."
-    case .slash: return shifted ? "?" : "/"
-    case .minus: return shifted ? "_" : "-"
-    case .equal: return shifted ? "+" : "="
-    case .semicolon: return shifted ? ":" : ";"
-    case .num0: return shifted ? ")" : "0"
-    case .num1: return shifted ? "!" : "1"
-    case .num2: return shifted ? "@" : "2"
-    case .num3: return shifted ? "#" : "3"
-    case .num4: return shifted ? "$" : "4"
-    case .num5: return shifted ? "%" : "5"
-    case .num6: return shifted ? "^" : "6"
-    case .num7: return shifted ? "&" : "7"
-    case .num8: return shifted ? "*" : "8"
-    case .num9: return shifted ? "(" : "9"
-    case .a: return shifted ? "A" : "a"
-    case .b: return shifted ? "B" : "b"
-    case .c: return shifted ? "C" : "c"
-    case .d: return shifted ? "D" : "d"
-    case .e: return shifted ? "E" : "e"
-    case .f: return shifted ? "F" : "f"
-    case .g: return shifted ? "G" : "g"
-    case .h: return shifted ? "H" : "h"
-    case .i: return shifted ? "I" : "i"
-    case .j: return shifted ? "J" : "j"
-    case .k: return shifted ? "K" : "k"
-    case .l: return shifted ? "L" : "l"
-    case .m: return shifted ? "M" : "m"
-    case .n: return shifted ? "N" : "n"
-    case .o: return shifted ? "O" : "o"
-    case .p: return shifted ? "P" : "p"
-    case .q: return shifted ? "Q" : "q"
-    case .r: return shifted ? "R" : "r"
-    case .s: return shifted ? "S" : "s"
-    case .t: return shifted ? "T" : "t"
-    case .u: return shifted ? "U" : "u"
-    case .v: return shifted ? "V" : "v"
-    case .w: return shifted ? "W" : "w"
-    case .x: return shifted ? "X" : "x"
-    case .y: return shifted ? "Y" : "y"
-    case .z: return shifted ? "Z" : "z"
-    default: return nil
-    }
   }
 }

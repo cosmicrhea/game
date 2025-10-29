@@ -1,5 +1,3 @@
-import struct Foundation.Date
-
 @MainActor
 public final class ScrollView {
   // MARK: - Public API
@@ -46,15 +44,17 @@ public final class ScrollView {
   private var isDragging: Bool = false
   private var lastMouse: Point = .zero
   private var velocity: Point = .zero
-  private var lastUpdateTime: Double = Date().timeIntervalSinceReferenceDate
+  private var lastUpdateTime: Double = GLFWSession.currentTime
   private var isHovered: Bool = false
 
   // Deceleration tuned to feel close to macOS
   // velocity is in px/sec; decay per second
   public var decelerationRate: Float = 8.0  // higher = faster slow down
 
-  // Rubber-banding factor when dragging beyond edges (0..1, lower = stretchier)
-  public var rubberBandFactor: Float = 0.25
+  // Rubber-banding: resistance curve based on overscroll distance
+  // The further you overscroll, the more resistance (native-like behavior)
+  public var rubberBandResistance: Float = 0.55  // Controls how quickly resistance increases (0.0 = linear, higher = more aggressive)
+  public var rubberBandMaxResistance: Float = 0.12  // Minimum movement factor at maximum overscroll
 
   // Spring-back strength towards bounds when released beyond edges
   public var springStrength: Float = 140.0
@@ -62,6 +62,11 @@ public final class ScrollView {
 
   // Scroll wheel/trackpad scale (GLFW yOffset units to pixels)
   public var wheelPixelsPerUnit: Float = 16.0
+
+  // Raw scroll tracking for better physics
+  private var rawScrollVelocity: Point = .zero  // Raw GLFW units per second
+  private var lastScrollTime: Double = 0
+  private var lastScrollDelta: Point = .zero
 
   // Scrollbar fade
   private var scrollbarAlpha: Float = 0
@@ -150,7 +155,7 @@ public final class ScrollView {
 
     // Estimate instantaneous velocity from drag (px/sec)
     // Using simple last frame delta; smoothed by later deceleration
-    let dt = max(1.0 / 240.0, Float(Date().timeIntervalSinceReferenceDate - lastUpdateTime))
+    let dt = max(1.0 / 240.0, Float(GLFWSession.currentTime - lastUpdateTime))
     velocity = Point(applied.x / dt, applied.y / dt)
     revealScrollbar()
   }
@@ -158,16 +163,40 @@ public final class ScrollView {
   public func handleMouseUp() { isDragging = false }
 
   /// Handle wheel/trackpad scroll input (GLFW units).
+  /// Receives raw scroll deltas from GLFW - these are used directly for physics calculations
+  /// to achieve native-feeling rubberbanding behavior.
   public func handleScroll(xOffset: Double, yOffset: Double, mouse: Point? = nil) {
     // Route only if inside frame (when a point is provided)
     if let p = mouse, !frame.contains(p) { return }
 
+    let now = GLFWSession.currentTime
+    let rawDelta = Point(
+      Float(xOffset),
+      Float(yOffset)
+    )
+
+    // Track raw scroll velocity for momentum calculations
+    if lastScrollTime > 0 {
+      let dt = Float(max(1.0 / 1000.0, now - lastScrollTime))  // Prevent division by zero
+      // Exponential smoothing of raw scroll velocity
+      let instantVelocity = Point(rawDelta.x / dt, rawDelta.y / dt)
+      let smoothing: Float = 0.3  // How quickly to adapt to new velocity
+      rawScrollVelocity.x = rawScrollVelocity.x * (1.0 - smoothing) + instantVelocity.x * smoothing
+      rawScrollVelocity.y = rawScrollVelocity.y * (1.0 - smoothing) + instantVelocity.y * smoothing
+    }
+    lastScrollTime = now
+    lastScrollDelta = rawDelta
+
+    // Convert raw scroll to pixel delta
+    // Note: rawDelta.x is already negative from GLFW on macOS, so we flip it
     let dx = allowsHorizontalScroll ? -Float(xOffset) * wheelPixelsPerUnit : 0
     // Flip Y so natural scrolling matches macOS: positive yOffset scrolls content down
     let dy = allowsVerticalScroll ? Float(yOffset) * wheelPixelsPerUnit : 0
 
     var applied = Point(dx, dy)
-    applied = dampedDeltaForEdges(delta: applied)
+
+    // Apply rubber-banding with resistance curve based on overscroll distance
+    applied = applyRubberBanding(delta: applied, rawDelta: rawDelta)
 
     contentOffset.x =
       allowsHorizontalScroll
@@ -176,9 +205,13 @@ public final class ScrollView {
       allowsVerticalScroll
       ? clamp(contentOffset.y + applied.y, -overscrollMarginY(), maxOffsetY + overscrollMarginY()) : contentOffset.y
 
-    // Add momentum
-    velocity.x += applied.x * 12
-    velocity.y += applied.y * 12
+    // Add momentum based on raw scroll velocity (feels more natural)
+    // Convert raw velocity to pixel velocity
+    let momentumX = -rawScrollVelocity.x * wheelPixelsPerUnit * 0.15
+    let momentumY = rawScrollVelocity.y * wheelPixelsPerUnit * 0.15
+    velocity.x += momentumX
+    velocity.y += momentumY
+
     revealScrollbar()
   }
 
@@ -194,19 +227,105 @@ public final class ScrollView {
   private func overscrollMarginX() -> Float { frame.size.width * 0.22 }
   private func overscrollMarginY() -> Float { frame.size.height * 0.22 }
 
-  private func dampedDeltaForEdges(delta: Point) -> Point {
+  /// Apply rubber-banding resistance based on overscroll distance.
+  /// Uses a resistance curve (exponential) that increases resistance the further you overscroll,
+  /// matching native scroll view behavior more closely than a simple multiplier.
+  private func applyRubberBanding(delta: Point, rawDelta: Point) -> Point {
+    // Note: rawDelta is available for future velocity-dependent rubberbanding if needed
+    let _ = rawDelta
     var out = delta
 
     if allowsHorizontalScroll {
-      if contentOffset.x <= 0 && delta.x < 0 { out.x *= rubberBandFactor }
-      if contentOffset.x >= maxOffsetX && delta.x > 0 { out.x *= rubberBandFactor }
+      let overscrollX: Float
+      if contentOffset.x < 0 {
+        // Overscrolled past top edge (negative offset)
+        overscrollX = abs(contentOffset.x)
+      } else if contentOffset.x > maxOffsetX {
+        // Overscrolled past bottom edge
+        overscrollX = contentOffset.x - maxOffsetX
+      } else {
+        overscrollX = 0
+      }
+
+      if overscrollX > 0 {
+        let margin = overscrollMarginX()
+        let normalizedOverscroll = min(overscrollX / margin, 1.0)  // 0.0 at edge, 1.0 at max overscroll
+        // Resistance curve: starts at 1.0 (full movement) and decreases exponentially
+        // At max overscroll, resistance reaches rubberBandMaxResistance
+        let resistance = 1.0 - (1.0 - rubberBandMaxResistance) * pow(normalizedOverscroll, rubberBandResistance)
+        out.x *= resistance
+      }
     } else {
       out.x = 0
     }
 
     if allowsVerticalScroll {
-      if contentOffset.y <= 0 && delta.y < 0 { out.y *= rubberBandFactor }
-      if contentOffset.y >= maxOffsetY && delta.y > 0 { out.y *= rubberBandFactor }
+      let overscrollY: Float
+      if contentOffset.y < 0 {
+        // Overscrolled past top edge (negative offset)
+        overscrollY = abs(contentOffset.y)
+      } else if contentOffset.y > maxOffsetY {
+        // Overscrolled past bottom edge
+        overscrollY = contentOffset.y - maxOffsetY
+      } else {
+        overscrollY = 0
+      }
+
+      if overscrollY > 0 {
+        let margin = overscrollMarginY()
+        let normalizedOverscroll = min(overscrollY / margin, 1.0)  // 0.0 at edge, 1.0 at max overscroll
+        // Resistance curve: starts at 1.0 (full movement) and decreases exponentially
+        // At max overscroll, resistance reaches rubberBandMaxResistance
+        let resistance = 1.0 - (1.0 - rubberBandMaxResistance) * pow(normalizedOverscroll, rubberBandResistance)
+        out.y *= resistance
+      }
+    } else {
+      out.y = 0
+    }
+
+    return out
+  }
+
+  /// Legacy method for mouse drag rubber-banding (still uses simpler physics)
+  private func dampedDeltaForEdges(delta: Point) -> Point {
+    var out = delta
+
+    if allowsHorizontalScroll {
+      let overscrollX: Float
+      if contentOffset.x < 0 {
+        overscrollX = abs(contentOffset.x)
+      } else if contentOffset.x > maxOffsetX {
+        overscrollX = contentOffset.x - maxOffsetX
+      } else {
+        overscrollX = 0
+      }
+
+      if overscrollX > 0 {
+        let margin = overscrollMarginX()
+        let normalizedOverscroll = min(overscrollX / margin, 1.0)
+        let resistance = 1.0 - (1.0 - rubberBandMaxResistance) * pow(normalizedOverscroll, rubberBandResistance)
+        out.x *= resistance
+      }
+    } else {
+      out.x = 0
+    }
+
+    if allowsVerticalScroll {
+      let overscrollY: Float
+      if contentOffset.y < 0 {
+        overscrollY = abs(contentOffset.y)
+      } else if contentOffset.y > maxOffsetY {
+        overscrollY = contentOffset.y - maxOffsetY
+      } else {
+        overscrollY = 0
+      }
+
+      if overscrollY > 0 {
+        let margin = overscrollMarginY()
+        let normalizedOverscroll = min(overscrollY / margin, 1.0)
+        let resistance = 1.0 - (1.0 - rubberBandMaxResistance) * pow(normalizedOverscroll, rubberBandResistance)
+        out.y *= resistance
+      }
     } else {
       out.y = 0
     }
@@ -215,11 +334,18 @@ public final class ScrollView {
   }
 
   private func applyInertia(deltaTime: Float) {
-    let now = Date().timeIntervalSinceReferenceDate
+    let now = GLFWSession.currentTime
     let _ = now - lastUpdateTime
     lastUpdateTime = now
 
     guard !isDragging else { return }
+
+    // Decay raw scroll velocity when not actively scrolling
+    if lastScrollTime > 0 && (now - lastScrollTime) > 0.1 {
+      // If no scroll input for 100ms, start decaying raw velocity
+      rawScrollVelocity.x *= exp(-decelerationRate * Float(now - lastScrollTime))
+      rawScrollVelocity.y *= exp(-decelerationRate * Float(now - lastScrollTime))
+    }
 
     // Apply velocity
     if allowsHorizontalScroll {

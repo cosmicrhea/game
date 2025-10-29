@@ -33,11 +33,24 @@ final class ConfigStore {
   }
 
   func get<T>(_ key: String, default defaultValue: T) -> T {
+    // Handle RawRepresentable types with String rawValue (e.g., Color)
+    if let storedValue = store[key] as? String {
+      if let colorValue = Color(rawValue: storedValue) as? T {
+        return colorValue
+      }
+    }
     return store[key] as? T ?? defaultValue
   }
 
   func set<T>(_ key: String, value: T) {
-    store[key] = value
+    // Handle RawRepresentable types (e.g., Color) by storing their rawValue
+    if let rawRepresentable = value as? any RawRepresentable,
+      let rawValue = rawRepresentable.rawValue as? String
+    {
+      store[key] = rawValue
+    } else {
+      store[key] = value
+    }
     save()
   }
 }
@@ -60,3 +73,10 @@ struct ConfigValue<T> {
     set { store.set(key, value: newValue) }
   }
 }
+
+/// Macro that simplifies ConfigValue usage by automatically inferring the key from the property name.
+/// Usage: `@ConfigValue var editorEnabled = false` or `@ConfigValue("customKey") var property = defaultValue`
+/// If no key is provided, uses the property name as the key.
+@attached(accessor)
+@attached(peer)
+public macro ConfigValue(_ key: String = "") = #externalMacro(module: "GameMacros", type: "ConfigMacro")

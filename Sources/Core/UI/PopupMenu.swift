@@ -41,7 +41,7 @@ public class PopupMenu {
 
   private var menuItems: [MenuItem] = []
   private let itemHeight: Float = 40.0
-  private let padding: Float = 9.0
+  private let padding: Float = 13.0
   private let minWidth: Float = 144.0
 
   // MARK: - Colors
@@ -118,12 +118,29 @@ public class PopupMenu {
 
     // Only update selection if mouse is inside the menu bounds
     if isMouseInsideMenu(at: mousePosition) {
-      let relativeY = position.y - mousePosition.y  // Flipped: position.y - mousePosition.y
-      let newIndex = Int(relativeY / itemHeight)
+      // Find which item rect contains the mouse position
+      let menuWidth = max(minWidth, calculateMenuWidth())
+      let menuLeft = position.x
+      let menuRight = position.x + menuWidth
 
-      if newIndex >= 0 && newIndex < menuItems.count {
-        selectedIndex = newIndex
+      // Check if mouse is within horizontal bounds
+      if mousePosition.x >= menuLeft && mousePosition.x <= menuRight {
+        // Check each item's rect (OpenGL Y is flipped - itemY is the top edge)
+        for (index, _) in menuItems.enumerated() {
+          let itemTop = position.y - Float(index + 1) * itemHeight  // itemY is the top
+          let itemBottom = position.y - Float(index) * itemHeight  // itemY + itemHeight is the bottom
+
+          // Mouse is within this item's vertical bounds (remember: lower Y = higher on screen)
+          // In OpenGL flipped Y, higher Y values are lower on screen, so itemTop <= itemBottom
+          if mousePosition.y >= itemTop && mousePosition.y <= itemBottom {
+            selectedIndex = index
+            return
+          }
+        }
       }
+
+      // Mouse is inside menu but not over any item
+      selectedIndex = -1
     } else {
       // Clear selection when mouse leaves the menu
       selectedIndex = -1
@@ -149,16 +166,31 @@ public class PopupMenu {
   public func handleClick(at mousePosition: Point) -> Bool {
     guard isVisible else { return false }
 
-    let relativeY = position.y - mousePosition.y  // Flipped: position.y - mousePosition.y
-    let clickedIndex = Int(relativeY / itemHeight)
+    // First check if click is within menu bounds
+    guard isMouseInsideMenu(at: mousePosition) else { return false }
 
-    if clickedIndex >= 0 && clickedIndex < menuItems.count {
-      let item = menuItems[clickedIndex]
-      if item.isEnabled {
-        item.action()
-        UISound.select()
-        hide()
-        return true
+    let menuWidth = max(minWidth, calculateMenuWidth())
+    let menuLeft = position.x
+    let menuRight = position.x + menuWidth
+
+    // Check if click is within horizontal bounds
+    guard mousePosition.x >= menuLeft && mousePosition.x <= menuRight else { return false }
+
+    // Find which item rect contains the click position (OpenGL Y is flipped - itemY is the top edge)
+    for (index, item) in menuItems.enumerated() {
+      let itemTop = position.y - Float(index + 1) * itemHeight  // itemY is the top
+      let itemBottom = position.y - Float(index) * itemHeight  // itemY + itemHeight is the bottom
+
+      // Click is within this item's vertical bounds (remember: lower Y = higher on screen)
+      // In OpenGL flipped Y, higher Y values are lower on screen, so itemTop <= itemBottom
+      if mousePosition.y >= itemTop && mousePosition.y <= itemBottom {
+        if item.isEnabled {
+          item.action()
+          UISound.select()
+          hide()
+          return true
+        }
+        return false  // Item is disabled, don't count as handled
       }
     }
 
@@ -273,11 +305,12 @@ public class PopupMenu {
 
       // Draw icon if present
       let iconSize: Float = 20.0
-      let iconPadding: Float = 8.0
+      let iconMarginLeft: Float = padding
+      let iconMarginRight: Float = 10
       if let icon = item.icon {
         let iconY = itemY + (itemHeight - iconSize) * 0.5  // Center vertically
         let iconRect = Rect(
-          x: position.x + iconPadding,
+          x: position.x + iconMarginLeft,
           y: iconY,
           width: iconSize,
           height: iconSize
@@ -311,7 +344,7 @@ public class PopupMenu {
       )
 
       // Adjust text position based on whether there's an icon
-      let textX = item.icon != nil ? position.x + iconPadding + iconSize + 8 : position.x + padding
+      let textX = item.icon != nil ? position.x + iconMarginLeft + iconSize + iconMarginRight : position.x + padding
       item.label.draw(
         at: Point(textX, textY),
         style: fadedTextStyle,
