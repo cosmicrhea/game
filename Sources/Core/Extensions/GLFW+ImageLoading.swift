@@ -7,7 +7,7 @@ extension GLFW.Image {
   init(_ path: String) {
     // Try to locate the resource inside the SPM bundle
     let fileManager = FileManager.default
-    let resourceURL = Bundle.module.resourceURL
+    let resourceURL = Bundle.game.resourceURL
 
     var fileURL: URL? = nil
     if let baseURL = resourceURL {

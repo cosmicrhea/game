@@ -9,6 +9,7 @@ final class Config {
   @ConfigValue("wireframeMode") var wireframeMode = false
 
   // Settings
+  @ConfigValue("audio.uiVolume") var uiVolume: Float = 1.0
   @ConfigValue("volume") var volume: Double = 0.8
   @ConfigValue("resolution") var resolution: String = "1280x720"
   /// Persisted UI accent color as comma-separated RGBA floats

@@ -242,7 +242,7 @@ public struct GLProgram {
     glDeleteProgram(programID)
   }
 
-  /// Resolve shader name to file path using Bundle.module
+  /// Resolve shader name to file path using Bundle.game
   private func resolveShaderPath(name: String, type: String) throws -> String {
     let fileExtension: String
     switch type {
@@ -256,7 +256,7 @@ public struct GLProgram {
     }
 
     // Look for shader in the module bundle
-    guard let shaderPath = Bundle.module.path(forResource: name, ofType: fileExtension) else {
+    guard let shaderPath = Bundle.game.path(forResource: name, ofType: fileExtension) else {
       logger.error(
         "SHADER::FILE_NOT_FOUND: Could not find \(type) shader '\(name).\(fileExtension)' in bundle"
       )

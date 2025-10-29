@@ -2,6 +2,7 @@
   private let objectiveCallout = Callout("Make your way to Kastellet", icon: .chevron)
 
   @Editable(range: 100...300) var marginX: Float = 244
+  @Editable var health: Float = 1.0 { didSet { inventoryView.healthDisplay.health = health } }
 
   // Tab views
   private let mapView = MapView()

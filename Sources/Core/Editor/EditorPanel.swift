@@ -222,7 +222,12 @@ public final class EditorPanel: OptionsPanel {
     }
 
     // Use smooth sliders in the editor for continuous control
-    let slider = Slider(smooth: .zero, min: Float(range.lowerBound), max: Float(range.upperBound), value: floatValue)
+    let slider = Slider(
+      minimumValue: Float(range.lowerBound),
+      maximumValue: Float(range.upperBound),
+      value: floatValue,
+      continuous: true
+    )
 
     // Show value label with two decimals
     slider.showsValueLabel = true
@@ -258,20 +263,20 @@ public final class EditorPanel: OptionsPanel {
       let optionsPropertyName = "\(property.name)Options"
       let mirror = Mirror(reflecting: object)
 
-      print("🔍 Looking for @EditableOptions property: \(optionsPropertyName)")
-      print("🔍 Available properties: \(mirror.children.map { $0.label ?? "nil" })")
+      //print("🔍 Looking for @EditableOptions property: \(optionsPropertyName)")
+      //print("🔍 Available properties: \(mirror.children.map { $0.label ?? "nil" })")
 
       // Look for @EditableOptions properties
       if let optionsProperty = mirror.children.first(where: { $0.label == optionsPropertyName }) {
         // Check if this is an @EditableOptions property by looking at its type
         if let optionsValue = optionsProperty.value as? [String] {
-          print("✅ Found @EditableOptions: \(optionsValue)")
+          //print("✅ Found @EditableOptions: \(optionsValue)")
           availableOptions = optionsValue
         } else {
-          print("❌ Property \(optionsPropertyName) exists but is not [String]")
+          //print("❌ Property \(optionsPropertyName) exists but is not [String]")
         }
       } else {
-        print("❌ No @EditableOptions property found for \(optionsPropertyName)")
+        //print("❌ No @EditableOptions property found for \(optionsPropertyName)")
       }
     }
 

@@ -12,7 +12,7 @@
   private var currentStrokeIndex: Int = 0  // Start at nil (original)
 
   init() {
-    guard let bundleURL = Bundle.module.url(forResource: "UI/Icons/test", withExtension: nil) else { return }
+    guard let bundleURL = Bundle.game.url(forResource: "UI/Icons/test", withExtension: nil) else { return }
 
     let fileManager = FileManager.default
     do {

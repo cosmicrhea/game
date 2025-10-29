@@ -9,7 +9,6 @@ uniform vec2 uResolution;   // viewport size in pixels
 
 uniform float health; // 1.0 (full) → 0.0 (dead)
 uniform float iTime;  // time in seconds (provided by engine)
-// Use iTime provided by engine
 uniform vec3 iResolution; // (w, h, 1)
 uniform vec2 uRectSize;   // provided by host (same as resolution)
 uniform vec2 uRectCenter; // center position in pixels

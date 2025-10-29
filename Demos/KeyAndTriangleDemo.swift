@@ -32,8 +32,8 @@ final class KeyAndTriangleDemo: RenderLoop {
   private let program = try! GLProgram("Common/basic 2")
 
   init() {
-    //let scenePath = Bundle.module.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
-    //    let scenePath = Bundle.module.path(forResource: "Items/old_key", ofType: "glb")!
+    //let scenePath = Bundle.game.path(forResource: "Scenes/cabin_interior", ofType: "glb")!
+    //    let scenePath = Bundle.game.path(forResource: "Items/old_key", ofType: "glb")!
     //    let scene = try! Assimp.Scene(file: scenePath, flags: [.triangulate, .validateDataStructure, .calcTangentSpace])
     //    print("\(scene.rootNode)")
     //

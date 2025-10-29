@@ -24,7 +24,7 @@ extension Image {
   ///   - pixelScale: Scale factor for the image (default: 1.0)
   /// - Returns: An Image object loaded from the EXR file, or a fallback image on failure
   public static func loadEXR(_ path: String, pixelScale: Float = 1.0) -> Image {
-    guard let url = Bundle.module.url(forResource: path, withExtension: nil) else {
+    guard let url = Bundle.game.url(forResource: path, withExtension: nil) else {
       logger.error("Image.loadEXR: Could not find EXR file at \(path)")
       return Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
     }
@@ -194,7 +194,7 @@ extension Image {
   ///   - pixelScale: Scale factor for the image (default: 1.0)
   /// - Returns: An Image object loaded from the specified layer, or a fallback image on failure
   public static func loadEXR(_ path: String, layer layerName: String, pixelScale: Float = 1.0) -> Image {
-    guard let url = Bundle.module.url(forResource: path, withExtension: nil) else {
+    guard let url = Bundle.game.url(forResource: path, withExtension: nil) else {
       logger.error("Image.loadEXR: Could not find EXR file at \(path)")
       return Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
     }
@@ -275,7 +275,7 @@ extension Image {
   /// - Parameter path: Path to the EXR file
   /// - Returns: Array of layer names, or empty array on failure
   public static func getEXRLayers(_ path: String) -> [String] {
-    guard let url = Bundle.module.url(forResource: path, withExtension: nil) else {
+    guard let url = Bundle.game.url(forResource: path, withExtension: nil) else {
       logger.error("Image.getEXRLayers: Could not find EXR file at \(path)")
       return []
     }

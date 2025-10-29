@@ -7,8 +7,8 @@ extension ImageAtlas {
   /// - Parameter tpxmlPath: Path to the TexturePacker XML file relative to the bundle resources.
   /// - Returns: An initialized `ImageAtlas`, or `nil` if loading fails.
   public convenience init?(tpxmlPath: String) {
-    guard let baseURL = Bundle.module.resourceURL else {
-      logger.error("ImageAtlas: Bundle.module.resourceURL is nil")
+    guard let baseURL = Bundle.game.resourceURL else {
+      logger.error("ImageAtlas: Bundle.game.resourceURL is nil")
       return nil
     }
     let xmlURL = baseURL.appendingPathComponent(tpxmlPath)

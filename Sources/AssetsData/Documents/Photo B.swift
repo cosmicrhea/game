@@ -6,7 +6,7 @@ extension Document {
 
     pages: [
       """
-      Soldiers have barricated Nørreport Station.
+      Soldiers have barricaded Nørreport Station.
       """,
       "",
       """

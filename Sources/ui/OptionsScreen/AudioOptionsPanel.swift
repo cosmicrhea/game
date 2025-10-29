@@ -1,12 +1,12 @@
 import Miniaudio
 
 final class AudioOptionsPanel: OptionsPanel {
-  private let voice = Slider(minimumValue: 0, maximumValue: 100, value: 70, tickCount: 11)
-  private let music = Slider(minimumValue: 0, maximumValue: 100, value: 65, tickCount: 11)
-  private let sfx = Slider(minimumValue: 0, maximumValue: 100, value: 75, tickCount: 11)
-  private let ui = Slider(minimumValue: 0, maximumValue: 100, value: 80, tickCount: 11)
+  private let voiceVolumeSlider = Slider(minimumValue: 0, maximumValue: 100, value: 70, tickCount: 11)
+  private let musicVolumeSlider = Slider(minimumValue: 0, maximumValue: 100, value: 65, tickCount: 11)
+  private let sfxVolumeSlider = Slider(minimumValue: 0, maximumValue: 100, value: 75)
+  private let uiVolumeSlider = Slider(value: Config.current.uiVolume)
 
-  private let outputPicker = Picker(
+  private let outputDevicePicker = Picker(
     options: [
       "System Default",
       "MacBook Pro Speakers",
@@ -17,16 +17,19 @@ final class AudioOptionsPanel: OptionsPanel {
   override init() {
     super.init()
 
-    print(try! AudioDevice.outputDevices.map { ($0.id, $0.name, $0.isDefault) })
+    //print(try! AudioDevice.outputDevices.map { ($0.id, $0.name, $0.isDefault) })
 
-    ui.onValueChanged = { UISound.volume = $0 / 100 }
+    uiVolumeSlider.onValueChanged = { value in
+      Config.current.uiVolume = value
+      UISound.volume = value
+    }
 
     setRows([
-      Row(label: "Voice Volume", control: voice),
-      Row(label: "Ambiance & Music Volume", control: music),
-      Row(label: "Sound Effects Volume", control: sfx),
-      Row(label: "UI Volume", control: ui),
-      Row(label: "Output Device", control: outputPicker),
+      Row(label: "Voice Volume", control: voiceVolumeSlider),
+      Row(label: "Ambiance & Music Volume", control: musicVolumeSlider),
+      Row(label: "Sound Effects Volume", control: sfxVolumeSlider),
+      Row(label: "UI Volume", control: uiVolumeSlider),
+      Row(label: "Output Device", control: outputDevicePicker),
     ])
   }
 }

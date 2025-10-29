@@ -29,6 +29,10 @@ struct CLIOptions: ParsableArguments {
   #endif
 }
 
+extension Bundle {
+  static let game = Bundle(path: main.resourcePath! + "/Contents/Resources") ?? #bundle
+}
+
 @main
 @MainActor
 public final class Engine {
@@ -78,6 +82,11 @@ public final class Engine {
     #else
       print("|ω･)ﾉ♡☆")
     #endif
+
+    print("Bundle.game: \(Bundle.game)")
+    print("Bundle.main: \(Bundle.main)")
+    print("Bundle.module: \(Bundle.module)")
+    print("#bundle: \(#bundle)")
 
     LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 
@@ -381,7 +390,6 @@ public final class Engine {
         toggleEditor()
       }
 
-
     default:
       break
     }
@@ -407,7 +415,6 @@ public final class Engine {
     // Update editor panel for new loop
     updateEditorForCurrentLoop()
   }
-
 
   private func cycleInputSources() {
     let allSources = InputSource.allCases

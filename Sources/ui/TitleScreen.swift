@@ -8,7 +8,7 @@ extension String {
     locale: Locale = .current, comment: StaticString? = nil
   ) {
     self.init(
-      localized: key, defaultValue: defaultValue, table: table, bundle: #bundle, locale: locale, comment: comment)
+      localized: key, defaultValue: defaultValue, table: table, bundle: .game, locale: locale, comment: comment)
   }
 }
 
@@ -136,7 +136,9 @@ final class TitleScreenStack: RenderLoop {
     // Draw vignette effect - smoothly animated
     if animatedVignetteStrength > 0.0 {
       // Apply vignette effect using the shader
-      vignetteEffect.draw(["amount": animatedVignetteStrength])
+      vignetteEffect.draw { program in
+        program.setFloat("amount", value: animatedVignetteStrength)
+      }
     }
 
     // Draw the navigation stack (which includes the menu)

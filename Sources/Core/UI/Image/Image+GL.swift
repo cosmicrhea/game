@@ -8,7 +8,7 @@ extension Image {
     var height = 1
     var bytes: [UInt8] = [255, 255, 255, 255]
 
-    if let baseURL = Bundle.module.resourceURL {
+    if let baseURL = Bundle.game.resourceURL {
       let url = baseURL.appendingPathComponent(path)
       if let data = try? Data(contentsOf: url) {
         let ext = url.pathExtension.lowercased()

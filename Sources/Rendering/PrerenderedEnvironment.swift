@@ -94,7 +94,8 @@ final class PrerenderedEnvironment {
   /// Discover all available cameras in the scene
   private func discoverAvailableCameras() throws {
     let fileManager = FileManager.default
-    guard let resourcePath = #bundle.resourcePath else {
+
+    guard let resourcePath = Bundle.game.resourcePath else {
       throw NSError(
         domain: "PrerenderedEnvironment", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find resource path"]
       )
@@ -135,7 +136,7 @@ final class PrerenderedEnvironment {
   private func discoverAndLoadFrames() throws {
     // Find all frame files matching the pattern "frameNumber_cameraName.png"
     let fileManager = FileManager.default
-    guard let resourcePath = #bundle.resourcePath else {
+    guard let resourcePath = Bundle.game.resourcePath else {
       throw NSError(
         domain: "PrerenderedEnvironment", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find resource path"]
       )

@@ -261,7 +261,7 @@ class MeshInstance: @unchecked Sendable {
     let scene = try await withCheckedThrowingContinuation { continuation in
       Task {
         do {
-          let scenePath = Bundle.module.path(forResource: path, ofType: "glb")!
+          let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
           let scene = try Assimp.Scene(
             file: scenePath, flags: [.triangulate, /*.validateDataStructure, */ .flipUVs, .calcTangentSpace]
           ) {

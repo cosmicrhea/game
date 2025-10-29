@@ -8,7 +8,7 @@ extension Image {
   ///   - targetSize: Optional target size for the image (default: uses SVG's natural size)
   ///   - strokeWidth: Optional stroke width override (default: nil, uses original)
   public init(svgPath: String, pixelScale: Float = 1.0, targetSize: Size? = nil, strokeWidth: Float? = nil) {
-    guard let url = Bundle.module.url(forResource: svgPath, withExtension: nil) else {
+    guard let url = Bundle.game.url(forResource: svgPath, withExtension: nil) else {
       logger.error("Image.init(svgPath:): Could not find SVG file at \(svgPath)")
       self = Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
       return
@@ -83,7 +83,7 @@ extension Image {
 
   /// Validates if an SVG file can be loaded and parsed
   public static func validateSVG(svgPath: String) -> Bool {
-    guard let url = Bundle.module.url(forResource: svgPath, withExtension: nil) else { return false }
+    guard let url = Bundle.game.url(forResource: svgPath, withExtension: nil) else { return false }
     guard let data = try? Data(contentsOf: url) else { return false }
     return validateSVGData(data)
   }

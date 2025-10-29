@@ -25,14 +25,14 @@ extension UISound {
   static func pageTurn() { play(["page_1", "page_2", "page_3"]) }
 }
 
-enum UISound {
-  nonisolated(unsafe) static var volume: Float = 1.0
+@MainActor enum UISound {
+  static var volume: Float = Config.current.uiVolume
 
 //  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
   private nonisolated(unsafe) static var lastPlayedSounds: [String: String] = [:]
 
   static func play(_ soundName: String, volume: Float = 1) {
-    guard let path = Bundle.module.path(forResource: "UI/Sounds/\(soundName)", ofType: "wav") else {
+    guard let path = Bundle.game.path(forResource: "UI/Sounds/\(soundName)", ofType: "wav") else {
       logger.error("failed to load \(soundName)")
       return
     }

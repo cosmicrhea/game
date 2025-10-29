@@ -74,11 +74,11 @@ public class OptionsPanel: Screen {
     focusViaKeyboard = true
     switch key {
     case .w, .up:
-      // Move selection visually upward (previous row)
+      // Move selection visually upward (previous row, lower index)
       moveFocus(-1)
       return true
     case .s, .down:
-      // Move selection visually downward (next row)
+      // Move selection visually downward (next row, higher index)
       moveFocus(+1)
       return true
     default:
@@ -186,12 +186,10 @@ public class OptionsPanel: Screen {
     let height = h - bottomMargin - topMargin
     panelRect = Rect(x: left + sidePadding, y: bottom, width: width, height: height)
 
-    // Rows rects and control frames anchored to bottom of panelRect
-    let totalRowsHeight = Float(rows.count) * rowHeight
-    let startY = panelRect.maxY - totalRowsHeight
+    // Rows rects and control frames anchored to top of panelRect
     rowRects = rows.enumerated().map { (i, _) in
       Rect(
-        x: panelRect.origin.x + 24, y: startY + Float(i) * rowHeight, width: panelRect.size.width - 48,
+        x: panelRect.origin.x + 24, y: panelRect.maxY - Float(i + 1) * rowHeight, width: panelRect.size.width - 48,
         height: rowHeight)
     }
 

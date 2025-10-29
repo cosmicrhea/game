@@ -1,10 +1,9 @@
-@MainActor
 final class InventoryView: RenderLoop {
   private let promptList = PromptList(.inventory)
   private var slotGrid: SlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
   private let healthCallout = Callout(style: .healthDisplay)
-  private let healthDisplay = HealthDisplay()
+  internal let healthDisplay = HealthDisplay()
 
   // Mouse tracking
   private var lastMouseX: Double = 0
@@ -101,12 +100,6 @@ final class InventoryView: RenderLoop {
 
     // Let SlotGrid handle all input (including menu)
     if slotGrid.handleKey(key) {
-      return
-    }
-
-    // Debug: adjust health with 9/0
-    if key == .num9 || key == .num0 {
-      healthDisplay.onKeyPressed(key)
       return
     }
 

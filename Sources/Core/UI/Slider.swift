@@ -1,8 +1,8 @@
 /// A horizontal slider control with tick marks and a large thumb.
 ///
-/// - Draws a rounded track with evenly spaced tick marks
-/// - Supports mouse dragging when not focused
-/// - Supports keyboard input with A/D or Left/Right when `isFocused == true`
+/// Draws a rounded track with evenly spaced tick marks. Supports mouse dragging when not focused,
+/// and keyboard input with A/D or Left/Right when `isFocused == true`. Values automatically snap
+/// to tick positions when `continuous` is `false` and `tickCount > 1`.
 @MainActor
 public final class Slider: OptionsControl, AltClickable {
   public enum Style { case tall, pill, inspector }
@@ -22,7 +22,11 @@ public final class Slider: OptionsControl, AltClickable {
   /// and fires `onValueChanged` if it actually changed.
   public var value: Float {
     didSet {
-      let clamped = Self.clamp(value, minimumValue, maximumValue)
+      var clamped = Self.clamp(value, minimumValue, maximumValue)
+      // Snap to tick if tickmarks are enabled
+      if tickCount > 1 && !isContinuous {
+        clamped = snapToTick(clamped)
+      }
       if clamped != value {
         value = clamped
         return
@@ -31,10 +35,11 @@ public final class Slider: OptionsControl, AltClickable {
     }
   }
 
-  /// Number of visual tick marks (including endpoints). Use 0 for no ticks.
+  /// Number of visual tick marks (including endpoints). Use `0` for no ticks.
+  /// Automatically set to `0` when `isContinuous` is `true`.
   public var tickCount: Int
 
-  /// Whether this slider has keyboard focus. When true, A/D and Left/Right adjust value.
+  /// Whether this slider has keyboard focus. When `true`, A/D and Left/Right adjust value.
   public var isFocused: Bool = false
 
   /// Called whenever `value` changes after clamping.
@@ -68,7 +73,8 @@ public final class Slider: OptionsControl, AltClickable {
   public var valueLabelStyle: TextStyle = TextStyle.itemDescription
   public var valueFormatter: ((Float) -> String)? = nil
 
-  /// If true, suppress tick marks and allow continuous value updates.
+  /// If `true`, suppresses tick marks and allows continuous value updates without snapping.
+  /// When set to `true`, `tickCount` is automatically set to `0`.
   public var isContinuous: Bool = false
 
   // MARK: - Private State
@@ -82,22 +88,39 @@ public final class Slider: OptionsControl, AltClickable {
 
   // MARK: - Init
 
+  /// Creates a new slider with the specified parameters.
+  ///
+  /// - Parameters:
+  ///   - frame: The frame where the slider is drawn. Defaults to `.zero`.
+  ///   - minimumValue: The minimum value of the slider. Defaults to `0`.
+  ///   - maximumValue: The maximum value of the slider. Defaults to `1`.
+  ///   - value: The initial value of the slider. Defaults to `0.5`. Will be clamped to the valid range.
+  ///   - tickCount: Number of visual tick marks (including endpoints). Use `0` for no ticks. Defaults to `11`.
+  ///     Ignored when `continuous` is `true`.
+  ///   - continuous: If `true`, suppresses tick marks and allows continuous value updates without snapping.
+  ///     Defaults to `false`.
+  ///
+  /// When `continuous` is `false` and `tickCount > 1`, the initial value will be snapped to the nearest
+  /// tick position. The slider will continue to snap values to tick positions during interaction.
   public init(
-    frame: Rect = .zero, minimumValue: Float = 0, maximumValue: Float = 1, value: Float = 0.5, tickCount: Int = 5
+    frame: Rect = .zero, minimumValue: Float = 0, maximumValue: Float = 1, value: Float = 0.5, tickCount: Int = 11,
+    continuous: Bool = false
   ) {
     self.frame = frame
     self.minimumValue = minimumValue
     self.maximumValue = max(maximumValue, minimumValue + 0.0001)
-    self.value = value
-    self.tickCount = max(0, tickCount)
-    self.value = Self.clamp(value, minimumValue, self.maximumValue)
+    self.isContinuous = continuous
+    // If continuous, disable tickmarks; otherwise use provided tickCount
+    self.tickCount = continuous ? 0 : max(0, tickCount)
+    // Set value after tickCount is set so snapping can work
+    let clamped = Self.clamp(value, minimumValue, self.maximumValue)
+    if tickCount > 1 && !continuous {
+      // Snap to tick position
+      self.value = Self.snapToTick(clamped, min: minimumValue, max: self.maximumValue, tickCount: tickCount)
+    } else {
+      self.value = clamped
+    }
     self.initialValue = self.value
-  }
-
-  /// Smooth slider initializer: no tick marks, continuous value changes.
-  public convenience init(smooth frame: Rect = .zero, min: Float = 0, max: Float = 1, value: Float = 0.5) {
-    self.init(frame: frame, minimumValue: min, maximumValue: max, value: value, tickCount: 0)
-    self.isContinuous = true
   }
 
   // MARK: - Drawing
@@ -114,22 +137,6 @@ public final class Slider: OptionsControl, AltClickable {
 
     // Draw base track
     RoundedRect(trackRect, cornerRadius: m.trackCornerRadius).draw(color: trackColor)
-
-    // Draw tick marks
-    if tickCount > 0 && !isContinuous {
-      let segments = max(1, tickCount - 1)
-      for i in 0...segments {
-        let t = Float(i) / Float(segments)
-        let cx = trackRect.origin.x + t * trackRect.size.width
-        let tickRect = Rect(
-          x: cx - tickWidth * 0.5,
-          y: frame.midY - tickHeight * 0.5,
-          width: tickWidth,
-          height: tickHeight
-        )
-        tickRect.fill(with: tickColor)
-      }
-    }
 
     // Draw filled portion of the track from neutralValue to current value
     let valueRatio = normalizedValue()
@@ -149,12 +156,28 @@ public final class Slider: OptionsControl, AltClickable {
       RoundedRect(fillRect, cornerRadius: m.trackCornerRadius).draw(color: fillColor)
     }
 
+    // Draw tick marks (after filled track so they're visible on top)
+    if tickCount > 0 && !isContinuous {
+      let segments = max(1, tickCount - 1)
+      for i in 0...segments {
+        let t = Float(i) / Float(segments)
+        let cx = trackRect.origin.x + t * trackRect.size.width
+        let tickRect = Rect(
+          x: cx - tickWidth * 0.5,
+          y: frame.midY - tickHeight * 0.5,
+          width: tickWidth,
+          height: tickHeight
+        )
+        tickRect.fill(with: tickColor)
+      }
+    }
+
     // Thumb (skip for inspector style)
     if style != .inspector {
       let thumbCenterX = trackRect.origin.x + trackRect.size.width * valueRatio
       let thumbRect = Rect(
-        x: thumbCenterX - m.thumbSize.width * 0.5,
-        y: frame.midY - m.thumbSize.height * 0.5,
+        x: floor(thumbCenterX - m.thumbSize.width * 0.5),
+        y: floor(frame.midY - m.thumbSize.height * 0.5),
         width: m.thumbSize.width,
         height: m.thumbSize.height
       )
@@ -294,7 +317,27 @@ public final class Slider: OptionsControl, AltClickable {
   }
 
   private func stepValue(by delta: Float) {
-    value = Self.clamp(value + delta, minimumValue, maximumValue)
+    let newValue = Self.clamp(value + delta, minimumValue, maximumValue)
+    value = newValue
+  }
+
+  /// Snaps a value to the nearest tick position if tickmarks are enabled
+  private func snapToTick(_ v: Float) -> Float {
+    guard tickCount > 1 && !isContinuous else { return v }
+    return Self.snapToTick(v, min: minimumValue, max: maximumValue, tickCount: tickCount)
+  }
+
+  /// Static helper to snap a value to the nearest tick position
+  private static func snapToTick(_ v: Float, min: Float, max: Float, tickCount: Int) -> Float {
+    guard tickCount > 1 else { return v }
+    guard max != min else { return v }
+
+    let segments = Float(tickCount - 1)
+    let normalized = (v - min) / (max - min)
+    let tickIndex = (normalized * segments).rounded()
+    let clampedTickIndex = Swift.max(0, Swift.min(segments, tickIndex))
+    let snapped = min + (clampedTickIndex / segments) * (max - min)
+    return snapped
   }
 
   private func valueForPoint(_ p: Point, within track: Rect) -> Float {
@@ -302,9 +345,7 @@ public final class Slider: OptionsControl, AltClickable {
     let t = (clampedX - track.origin.x) / max(1, track.size.width)
     let v = minimumValue + t * (maximumValue - minimumValue)
     if tickCount > 1 && !isContinuous {
-      let step = (maximumValue - minimumValue) / Float(tickCount - 1)
-      let snapped = ((v - minimumValue) / step).rounded() * step + minimumValue
-      return Self.clamp(snapped, minimumValue, maximumValue)
+      return snapToTick(v)
     }
     return Self.clamp(v, minimumValue, maximumValue)
   }
@@ -319,8 +360,8 @@ public final class Slider: OptionsControl, AltClickable {
     let ratio = normalizedValue()
     let thumbCenterX = trackRect.origin.x + trackRect.size.width * ratio
     let thumbRect = Rect(
-      x: thumbCenterX - m.thumbSize.width * 0.5,
-      y: frame.midY - m.thumbSize.height * 0.5,
+      x: floor(thumbCenterX - m.thumbSize.width * 0.5),
+      y: floor(frame.midY - m.thumbSize.height * 0.5),
       width: m.thumbSize.width,
       height: m.thumbSize.height
     )

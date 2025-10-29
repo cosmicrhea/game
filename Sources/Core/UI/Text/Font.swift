@@ -47,7 +47,7 @@ public final class Font {
     let extensions = ["ttf", "otf"]
     var entries: [ResolvedFont] = []
     for ext in extensions {
-      let urls = Bundle.module.urls(forResourcesWithExtension: ext, subdirectory: defaultFontsPath) ?? []
+      let urls = Bundle.game.urls(forResourcesWithExtension: ext, subdirectory: defaultFontsPath) ?? []
       for url in urls {
         let name = url.deletingPathExtension().lastPathComponent
         entries.append(ResolvedFont(url: url, displayName: name, baseName: name, pixelSize: nil))
