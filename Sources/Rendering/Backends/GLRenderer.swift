@@ -1364,4 +1364,175 @@ public final class GLRenderer: Renderer {
     glDeleteBuffers(1, &vbo)
     glDeleteBuffers(1, &ebo)
   }
+
+  /// Draw a simple 3D line between two points in world space
+  /// - Parameters:
+  ///   - from: Start position of the line
+  ///   - to: End position of the line
+  ///   - color: Color of the line
+  ///   - projection: Camera projection matrix
+  ///   - view: Camera view matrix
+  ///   - lineThickness: Thickness of the line (default: 0.01)
+  ///   - depthTest: Whether to enable depth testing (default: false for wireframe overlay)
+  public func drawDebugLine3D(
+    from: vec3,
+    to: vec3,
+    color: Color,
+    projection: mat4,
+    view: mat4,
+    lineThickness: Float = 0.01,
+    depthTest: Bool = false
+  ) {
+    let direction = to - from
+    let lineLength = length(direction)
+
+    guard lineLength > 0.001 else { return }  // Don't draw degenerate lines
+
+    // Simple cylinder for line segment (just a thin box aligned with direction)
+    let normalizedDirection = normalize(direction)
+    let halfThickness = lineThickness * 0.5
+
+    // Generate simple box geometry aligned with direction
+    // Use a simple cross-section: 4 vertices forming a square perpendicular to direction
+    let perpendicular =
+      abs(normalizedDirection.y) < 0.9
+      ? normalize(cross(normalizedDirection, vec3(0, 1, 0)))
+      : normalize(cross(normalizedDirection, vec3(1, 0, 0)))
+    let perpendicular2 = normalize(cross(normalizedDirection, perpendicular))
+
+    // Generate 8 vertices for a box (2 cross-sections, 4 vertices each)
+    var vertices: [Float] = []
+    var indices: [UInt32] = []
+
+    // First cross-section at 'from'
+    let offset1 = perpendicular * halfThickness + perpendicular2 * halfThickness
+    let offset2 = perpendicular * halfThickness - perpendicular2 * halfThickness
+    let offset3 = -perpendicular * halfThickness - perpendicular2 * halfThickness
+    let offset4 = -perpendicular * halfThickness + perpendicular2 * halfThickness
+
+    vertices.append(contentsOf: [from.x + offset1.x, from.y + offset1.y, from.z + offset1.z])
+    vertices.append(contentsOf: [from.x + offset2.x, from.y + offset2.y, from.z + offset2.z])
+    vertices.append(contentsOf: [from.x + offset3.x, from.y + offset3.y, from.z + offset3.z])
+    vertices.append(contentsOf: [from.x + offset4.x, from.y + offset4.y, from.z + offset4.z])
+
+    // Second cross-section at 'to'
+    vertices.append(contentsOf: [to.x + offset1.x, to.y + offset1.y, to.z + offset1.z])
+    vertices.append(contentsOf: [to.x + offset2.x, to.y + offset2.y, to.z + offset2.z])
+    vertices.append(contentsOf: [to.x + offset3.x, to.y + offset3.y, to.z + offset3.z])
+    vertices.append(contentsOf: [to.x + offset4.x, to.y + offset4.y, to.z + offset4.z])
+
+    // Generate indices for box faces (6 faces, 2 triangles each = 12 triangles = 36 indices)
+    // But for wireframe, we only need edges: 12 edges, 2 vertices each = 24 indices
+    // Actually, for simple lines we can just draw a thin cylinder
+    // Let's use a simpler approach: just draw the 4 edges connecting the two cross-sections
+    let edgeIndices: [UInt32] = [
+      // Connect corresponding vertices between cross-sections
+      0, 4, 1, 5, 2, 6, 3, 7,
+      // Connect vertices within each cross-section
+      0, 1, 1, 2, 2, 3, 3, 0,
+      4, 5, 5, 6, 6, 7, 7, 4,
+    ]
+
+    // Interleave with color data
+    var interleavedData: [Float] = []
+    interleavedData.reserveCapacity(vertices.count / 3 * 6)  // pos(3) + color(3)
+
+    for i in 0..<(vertices.count / 3) {
+      let baseIndex = i * 3
+      interleavedData.append(vertices[baseIndex + 0])
+      interleavedData.append(vertices[baseIndex + 1])
+      interleavedData.append(vertices[baseIndex + 2])
+      interleavedData.append(color.red)
+      interleavedData.append(color.green)
+      interleavedData.append(color.blue)
+    }
+
+    // Create VAO, VBO, EBO
+    var vao: GLuint = 0
+    var vbo: GLuint = 0
+    var ebo: GLuint = 0
+    glGenVertexArrays(1, &vao)
+    glGenBuffers(1, &vbo)
+    glGenBuffers(1, &ebo)
+
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(
+      GL_ARRAY_BUFFER,
+      interleavedData.count * MemoryLayout<Float>.stride,
+      interleavedData,
+      GL_DYNAMIC_DRAW
+    )
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    edgeIndices.withUnsafeBytes { bytes in
+      glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        bytes.count,
+        bytes.baseAddress,
+        GL_DYNAMIC_DRAW
+      )
+    }
+
+    // Position attribute (location 0)
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(
+      0, 3, GL_FLOAT, false,
+      GLsizei(6 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 0)
+    )
+
+    // Color attribute (location 1)
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(
+      1, 3, GL_FLOAT, false,
+      GLsizei(6 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 3 * MemoryLayout<Float>.stride)
+    )
+
+    // Set up 3D rendering state
+    let wasDepthEnabled = glIsEnabled(GL_DEPTH_TEST)
+    let wasCullEnabled = glIsEnabled(GL_CULL_FACE)
+
+    if depthTest {
+      glEnable(GL_DEPTH_TEST)
+    } else {
+      glDisable(GL_DEPTH_TEST)
+    }
+    glDisable(GL_CULL_FACE)
+
+    // Use debug3d shader
+    debug3dProgram.use()
+
+    // Set identity model matrix (vertices already in world space)
+    let identityModel = mat4(1)
+    debug3dProgram.setMat4("model", value: identityModel)
+    debug3dProgram.setMat4("view", value: view)
+    debug3dProgram.setMat4("projection", value: projection)
+
+    // Draw as lines
+    glBindVertexArray(vao)
+    glDrawElements(
+      GL_LINES,
+      GLsizei(edgeIndices.count),
+      GL_UNSIGNED_INT,
+      nil
+    )
+    glBindVertexArray(0)
+
+    // Restore state
+    if wasDepthEnabled {
+      glEnable(GL_DEPTH_TEST)
+    } else {
+      glDisable(GL_DEPTH_TEST)
+    }
+    if wasCullEnabled {
+      glEnable(GL_CULL_FACE)
+    }
+
+    // Cleanup
+    glDeleteVertexArrays(1, &vao)
+    glDeleteBuffers(1, &vbo)
+    glDeleteBuffers(1, &ebo)
+  }
 }

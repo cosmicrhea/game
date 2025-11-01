@@ -1,4 +1,5 @@
 import Assimp
+import Jolt
 
 @Editor final class MainLoop: RenderLoop {
   // Scene configuration
@@ -18,6 +19,18 @@ import Assimp
 
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
   @Editable(range: -2.0...2.0) var capsuleHeightOffset: Float = 0.75
+
+  // Debug renderer for physics visualization
+  private var debugRenderer: DebugRenderer?
+  private var physicsSystem: PhysicsSystem?
+  // Store filter objects so they stay alive (PhysicsSystem only keeps references)
+  private var broadPhaseLayerInterface: BroadPhaseLayerInterfaceTable?
+  private var objectLayerPairFilter: ObjectLayerPairFilterTable?
+  private var objectVsBroadPhaseLayerFilter: ObjectVsBroadPhaseLayerFilterTable?
+  var currentProjection: mat4 = mat4(1)  // Accessible by debug renderer implementation
+  var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
+
+  @Editable var showDebugRenderer: Bool = false
 
   // Scene and camera
   private var scene: Assimp.Scene?
@@ -82,6 +95,71 @@ import Assimp
 
     // Initialize main menu
     mainMenu = MainMenu()
+
+    // Initialize Jolt runtime (required before using any Jolt features)
+    JoltRuntime.initialize()
+
+    // Initialize physics system for collision body visualization
+    // Set up collision filtering (required for PhysicsSystem)
+    // Note: Object layers are 0-indexed, so numObjectLayers: 3 means we can use layers 0, 1, 2
+    let numObjectLayers: UInt32 = 3  // 0=unused, 1=static, 2=dynamic
+    let numBroadPhaseLayers: UInt32 = 2  // Keep it simple - 2 broad phase layers
+
+    // Create broad phase layer interface
+    let broadPhaseLayerInterface = BroadPhaseLayerInterfaceTable(
+      numObjectLayers: numObjectLayers,
+      numBroadPhaseLayers: numBroadPhaseLayers
+    )
+    // Map all object layers to the first broad phase layer (simple setup)
+    broadPhaseLayerInterface.map(objectLayer: 1, to: 0)  // Static objects
+    broadPhaseLayerInterface.map(objectLayer: 2, to: 0)  // Dynamic objects (if we add them)
+
+    // Create object layer pair filter (allows all collisions)
+    let objectLayerPairFilter = ObjectLayerPairFilterTable(numObjectLayers: numObjectLayers)
+    // Enable collisions between all layers
+    objectLayerPairFilter.enableCollision(1, 1)  // Static vs Static
+    objectLayerPairFilter.enableCollision(1, 2)  // Static vs Dynamic
+    objectLayerPairFilter.enableCollision(2, 2)  // Dynamic vs Dynamic
+
+    // Create object vs broad phase layer filter
+    let objectVsBroadPhaseLayerFilter = ObjectVsBroadPhaseLayerFilterTable(
+      broadPhaseLayerInterface: broadPhaseLayerInterface,
+      numBroadPhaseLayers: numBroadPhaseLayers,
+      objectLayerPairFilter: objectLayerPairFilter,
+      numObjectLayers: numObjectLayers
+    )
+
+    // Create physics system with proper filters
+    physicsSystem = PhysicsSystem(
+      maxBodies: 1024,
+      broadPhaseLayerInterface: broadPhaseLayerInterface,
+      objectLayerPairFilter: objectLayerPairFilter,
+      objectVsBroadPhaseLayerFilter: objectVsBroadPhaseLayerFilter
+    )
+    physicsSystem?.setGravity(Vec3(x: 0, y: -9.81, z: 0))
+
+    // Store filters so they stay alive (PhysicsSystem only keeps references)
+    self.broadPhaseLayerInterface = broadPhaseLayerInterface
+    self.objectLayerPairFilter = objectLayerPairFilter
+    self.objectVsBroadPhaseLayerFilter = objectVsBroadPhaseLayerFilter
+
+    // Initialize debug renderer
+    let debugProcs = DebugRendererImplementation()
+    debugRenderer = DebugRenderer(procs: debugProcs)
+    debugProcs.renderLoop = self
+
+    // Load collision bodies into physics system when scene is ready
+    Task {
+      // Wait for scene to load
+      while scene == nil {
+        try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+      }
+      await MainActor.run {
+        if let loadedScene = scene {
+          loadCollisionBodiesIntoPhysics(scene: loadedScene)
+        }
+      }
+    }
   }
 
   private func loadScene() {
@@ -108,8 +186,10 @@ import Assimp
           // Spawn at Entry_1 if present
           if let entryNode = scene.rootNode.findNode(named: "Entry_1") {
             let entryWorld = self.calculateNodeWorldTransform(entryNode, scene: scene)
-            // Position from world transform translation
-            self.spawnPosition = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
+            // Position from world transform translation (column 3, rows 0-2)
+            // In GLMath mat4, [3] is the 4th column which contains translation
+            let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
+            self.spawnPosition = extractedPos
             // Forward direction from world transform's third row (basis Z)
             let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
             // Our movement uses forward = (sin(theta), 0, cos(theta)). Blender/glTF forward differs by ~90°.
@@ -119,6 +199,9 @@ import Assimp
             self.playerPosition = self.spawnPosition
             self.playerRotation = self.spawnRotation
             print("🚀 Spawned capsule at Entry_1: \(self.playerPosition)")
+            print(
+              "📐 Entry_1 world transform translation column [3]: (\(entryWorld[3].x), \(entryWorld[3].y), \(entryWorld[3].z))"
+            )
             // Disable small-room clamping for real scene navigation
             self.restrictMovementToRoom = false
           }
@@ -224,8 +307,13 @@ import Assimp
       camera1Node = node
       camera1WorldTransform = calculateNodeWorldTransform(node, scene: scene)
       print("✅ Active camera node: \(nodeName)")
+      // Debug: Print camera transform
+      let cameraPos = vec3(camera1WorldTransform[3].x, camera1WorldTransform[3].y, camera1WorldTransform[3].z)
+      print("📷 Camera world transform position: \(cameraPos)")
     } else {
       print("⚠️ Camera node not found: \(nodeName)")
+      camera1Node = nil
+      camera1WorldTransform = mat4(1)
     }
 
     if let cam = scene.cameras.first(where: { $0.name == nodeName }) {
@@ -234,9 +322,12 @@ import Assimp
       prerenderedEnvironment?.near = cam.clipPlaneNear
       prerenderedEnvironment?.far = cam.clipPlaneFar
       // If Blender mist settings are known, keep defaults (0.1 / 25.0) or adjust here
-      print("✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV)")
+      print(
+        "✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
+      )
     } else {
       print("⚠️ Camera struct not found for name: \(nodeName)")
+      camera1 = nil
     }
   }
 
@@ -360,6 +451,11 @@ import Assimp
           print("🌫️ Debug: Mist visualization mode = \(modeNames[env.debugMistMode])")
         }
 
+      case .u:
+        UISound.select()
+        showDebugRenderer.toggle()
+        print("Debug renderer: \(showDebugRenderer ? "ON" : "OFF")")
+
       default:
         break
       }
@@ -441,19 +537,6 @@ import Assimp
       let halfRoom = roomSize / 2.0
       playerPosition.x = max(-halfRoom, min(halfRoom, playerPosition.x))
       playerPosition.z = max(-halfRoom, min(halfRoom, playerPosition.z))
-
-      //      // Simple collision with box
-      //      let halfBox = boxSize / 2.0
-      //      let diff = playerPosition - boxPosition
-      //      let diffX = diff.x * diff.x
-      //      let diffY = diff.y * diff.y
-      //      let diffZ = diff.z * diff.z
-      //      let distanceToBox = GLMath.sqrt(diffX + diffY + diffZ)
-      //      if distanceToBox < halfBox + 0.5 {  // 0.5 is player radius
-      //        // Push player away from box
-      //        let direction = diff / distanceToBox
-      //        playerPosition = boxPosition + direction * (halfBox + 0.5)
-      //      }
     }
   }
 
@@ -468,29 +551,51 @@ import Assimp
       // Use Camera_1 projection if available, otherwise fallback to default
       let projection: mat4
       if let camera1 = camera1 {
-        // Use the aspect ratio from the viewport, or camera's aspect if available
-        let finalAspect = camera1.aspect > 0 ? camera1.aspect : aspectRatio
-        projection = GLMath.perspective(camera1.horizontalFOV, finalAspect, camera1.clipPlaneNear, camera1.clipPlaneFar)
+        // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
+        // The prerendered images were rendered with a specific aspect ratio, so we should match it
+        let finalAspect: Float
+        if camera1.aspect > 0 {
+          // Use camera's aspect ratio (this is what the prerendered images were rendered with)
+          finalAspect = camera1.aspect
+        } else {
+          // Fallback to viewport aspect ratio
+          finalAspect = aspectRatio
+        }
+
+        // Convert horizontal FOV to vertical FOV
+        // GLMath.perspective expects vertical FOV (fovy), but Assimp gives us horizontal FOV
+        // Formula: verticalFOV = 2 * atan(tan(horizontalFOV / 2) / aspectRatio)
+        let horizontalFOVHalf = camera1.horizontalFOV / 2.0
+        let verticalFOV = 2.0 * atan(tan(horizontalFOVHalf) / finalAspect)
+
+        projection = GLMath.perspective(verticalFOV, finalAspect, camera1.clipPlaneNear, camera1.clipPlaneFar)
+
+        // Debug: Print aspect ratio mismatch if significant
+        if abs(finalAspect - aspectRatio) > 0.01 {
+          print("⚠️ Aspect ratio mismatch: camera=\(finalAspect), viewport=\(aspectRatio)")
+        }
       } else {
         projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
       }
 
-      // Render prerendered environment first (as background)
-      prerenderedEnvironment?.render(projectionMatrix: projection)
+      GraphicsContext.current?.renderer.withUIContext {
+        // Render prerendered environment first (as background)
+        prerenderedEnvironment?.render(projectionMatrix: projection)
+      }
 
       // Get view matrix from camera node's world transform
-      // In glTF/Assimp, the camera node's transform IS the camera transform in world space
-      // We just invert it to get the view matrix
+      // In glTF/Assimp, the camera node's transform IS the camera-to-world transform
+      // To get the view matrix (world-to-camera), we simply invert it
       let view: mat4
       let cameraWorld: mat4
-      if camera1Node != nil {
-        // Use the camera node's world transform directly
+      // Check if camera world transform is valid (not identity)
+      if camera1WorldTransform != mat4(1) {
         cameraWorld = camera1WorldTransform
-        // Invert to get view matrix (view = inverse(camera_world_transform))
+        // The view matrix is the inverse of the camera's world transform
+        // This matches how the prerendered images were rendered
         view = inverse(cameraWorld)
       } else {
-        // Fallback: use identity view matrix if camera not available (shouldn't happen normally)
-        print("⚠️ Warning: Scene camera not available, using identity view matrix")
+        // Fallback: use identity view matrix if camera not available
         cameraWorld = mat4(1)
         view = mat4(1)
       }
@@ -539,7 +644,32 @@ import Assimp
 
       // Draw 3D debug arrows for all Entry_* nodes
       if let loadedScene = scene {
-        drawEntryArrows(in: loadedScene, projection: projection, view: view)
+        //drawEntryArrows(in: loadedScene, projection: projection, view: view)
+      }
+
+      // Update debug renderer camera and draw if enabled
+      if showDebugRenderer, let debugRenderer = debugRenderer {
+        currentProjection = projection
+        currentView = view
+
+        // Set camera position for debug renderer (extract from view matrix)
+        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+        debugRenderer.setCameraPosition(RVec3(x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z))
+
+        // Call nextFrame to clear previous frame's geometry
+        debugRenderer.nextFrame()
+
+        // Draw all physics bodies using Jolt's drawBodies (draws actual geometry, not just AABBs)
+        if let physicsSystem = physicsSystem {
+          physicsSystem.drawBodies(debugRenderer: debugRenderer)
+        }
+
+        // Draw entry arrows using Jolt debug renderer
+        if let loadedScene = scene {
+          drawEntryArrowsWithJolt(scene: loadedScene, debugRenderer: debugRenderer)
+        }
+
+        debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF_00FF, size: 2.0)
       }
 
       // Debug overlay (top-left)
@@ -552,7 +682,7 @@ import Assimp
 
 extension MainLoop {
   private func drawDebugInfo() {
-    var overlayLines = [
+    let overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
       "Scene: \(sceneName)",
       "Camera: \(selectedCamera)",
@@ -567,6 +697,7 @@ extension MainLoop {
         playerRotation * 180.0 / .pi,
         playerRotation
       ),
+      "Debug Renderer: \(showDebugRenderer ? "ON" : "OFF")",
       //"Health: 100% ",
       //"Triggers: none",
       //"Actions: none",
@@ -597,5 +728,299 @@ extension MainLoop {
       for child in node.children { traverse(child) }
     }
     traverse(scene.rootNode)
+  }
+
+  private func loadCollisionBodiesIntoPhysics(scene: Assimp.Scene) {
+    guard let physicsSystem = physicsSystem else { return }
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    // Simple object layer for static collision bodies
+    let staticLayer: ObjectLayer = 1
+
+    func traverse(_ node: Assimp.Node) {
+      if let name = node.name, name.contains("-col") {
+        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+
+        // Get mesh from this node
+        if node.numberOfMeshes > 0 {
+          let meshIndex = node.meshes[0]
+          if meshIndex < scene.meshes.count {
+            let mesh = scene.meshes[Int(meshIndex)]
+
+            // Extract triangles from mesh and transform them to world space (includes scale/rotation/translation)
+            // We transform to world space because the visual meshes are rendered with world transforms
+            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+
+            guard !triangles.isEmpty else { return }
+
+            // Create mesh shape from triangles (already in world space, no body transform needed)
+            let meshShape = MeshShape(triangles: triangles)
+
+            // Position is at origin since triangles are already in world space
+            let position = vec3(0, 0, 0)
+
+            // Rotation is identity since triangles are already in world space
+            let rotation = Quat.identity
+
+            // Create body settings
+            let bodySettings = BodyCreationSettings(
+              shape: meshShape,
+              position: RVec3(x: position.x, y: position.y, z: position.z),
+              rotation: rotation,
+              motionType: .static,
+              objectLayer: staticLayer
+            )
+
+            // Create and add body to physics system
+            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+            if bodyID != 0 {
+              print("✅ Created collision body ID: \(bodyID) for node '\(name)'")
+            } else {
+              print("❌ Failed to create collision body for node '\(name)'")
+            }
+          }
+        }
+      }
+      for child in node.children { traverse(child) }
+    }
+    traverse(scene.rootNode)
+  }
+
+  private func extractTrianglesFromMesh(mesh: Assimp.Mesh, transform: mat4) -> [Triangle] {
+    guard mesh.numberOfVertices > 0, mesh.numberOfFaces > 0 else { return [] }
+
+    let vertices = mesh.vertices
+    var triangles: [Triangle] = []
+
+    // Extract faces (triangles) and transform them to world space
+    for face in mesh.faces {
+      guard face.numberOfIndices == 3 else { continue }  // Only process triangles
+
+      let i1 = Int(face.indices[0])
+      let i2 = Int(face.indices[1])
+      let i3 = Int(face.indices[2])
+
+      guard i1 < mesh.numberOfVertices, i2 < mesh.numberOfVertices, i3 < mesh.numberOfVertices else {
+        continue
+      }
+
+      // Get vertex positions in local space
+      let v1Local = vec3(
+        Float(vertices[i1 * 3 + 0]),
+        Float(vertices[i1 * 3 + 1]),
+        Float(vertices[i1 * 3 + 2])
+      )
+      let v2Local = vec3(
+        Float(vertices[i2 * 3 + 0]),
+        Float(vertices[i2 * 3 + 1]),
+        Float(vertices[i2 * 3 + 2])
+      )
+      let v3Local = vec3(
+        Float(vertices[i3 * 3 + 0]),
+        Float(vertices[i3 * 3 + 1]),
+        Float(vertices[i3 * 3 + 2])
+      )
+
+      // Transform to world space (includes scale, rotation, translation)
+      let v1World = transform * vec4(v1Local.x, v1Local.y, v1Local.z, 1.0)
+      let v2World = transform * vec4(v2Local.x, v2Local.y, v2Local.z, 1.0)
+      let v3World = transform * vec4(v3Local.x, v3Local.y, v3Local.z, 1.0)
+
+      triangles.append(
+        Triangle(
+          v1: Vec3(x: v1World.x, y: v1World.y, z: v1World.z),
+          v2: Vec3(x: v2World.x, y: v2World.y, z: v2World.z),
+          v3: Vec3(x: v3World.x, y: v3World.y, z: v3World.z),
+          materialIndex: 0
+        ))
+    }
+
+    return triangles
+  }
+
+  private func extractRotationQuat(from transform: mat4) -> Quat {
+    // Extract rotation from 3x3 upper-left matrix
+    // Convert matrix to quaternion
+    let m = transform
+
+    // Matrix to quaternion conversion
+    let trace = m[0].x + m[1].y + m[2].z
+
+    let q: Quat
+    if trace > 0 {
+      let s = sqrt(trace + 1.0) * 2.0  // s = 4 * qw
+      let w = 0.25 * s
+      let x = (m[2].y - m[1].z) / s
+      let y = (m[0].z - m[2].x) / s
+      let z = (m[1].x - m[0].y) / s
+      q = Quat(x: x, y: y, z: z, w: w)
+    } else if (m[0].x > m[1].y) && (m[0].x > m[2].z) {
+      let s = sqrt(1.0 + m[0].x - m[1].y - m[2].z) * 2.0  // s = 4 * qx
+      let w = (m[2].y - m[1].z) / s
+      let x = 0.25 * s
+      let y = (m[0].y + m[1].x) / s
+      let z = (m[0].z + m[2].x) / s
+      q = Quat(x: x, y: y, z: z, w: w)
+    } else if m[1].y > m[2].z {
+      let s = sqrt(1.0 + m[1].y - m[0].x - m[2].z) * 2.0  // s = 4 * qy
+      let w = (m[0].z - m[2].x) / s
+      let x = (m[0].y + m[1].x) / s
+      let y = 0.25 * s
+      let z = (m[1].z + m[2].y) / s
+      q = Quat(x: x, y: y, z: z, w: w)
+    } else {
+      let s = sqrt(1.0 + m[2].z - m[0].x - m[1].y) * 2.0  // s = 4 * qz
+      let w = (m[1].x - m[0].y) / s
+      let x = (m[0].z + m[2].x) / s
+      let y = (m[1].z + m[2].y) / s
+      let z = 0.25 * s
+      q = Quat(x: x, y: y, z: z, w: w)
+    }
+
+    // Normalize quaternion (required by Jolt)
+    let length = sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
+    guard length > 0.0001 else {
+      // If quaternion is degenerate, return identity
+      return Quat.identity
+    }
+    let invLength = 1.0 / length
+    return Quat(x: q.x * invLength, y: q.y * invLength, z: q.z * invLength, w: q.w * invLength)
+  }
+
+  private func drawCollisionBodies(scene: Assimp.Scene, debugRenderer: DebugRenderer) {
+    func traverse(_ node: Assimp.Node) {
+      if let name = node.name, name.contains("-col") {
+        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+
+        // Get mesh from this node
+        if node.numberOfMeshes > 0 {
+          let meshIndex = node.meshes[0]
+          if meshIndex < scene.meshes.count {
+            let mesh = scene.meshes[Int(meshIndex)]
+
+            // Calculate bounding box from mesh vertices
+            if let aabb = calculateMeshAABB(mesh: mesh, transform: worldTransform) {
+              // Draw wireframe box using debug renderer
+              let cyanColor: DebugColor = 0xFF00_FFFF  // RGBA: cyan
+              debugRenderer.drawWireBox(aabb, color: cyanColor)
+            }
+          }
+        }
+      }
+      for child in node.children { traverse(child) }
+    }
+    traverse(scene.rootNode)
+  }
+
+  private func calculateMeshAABB(mesh: Assimp.Mesh, transform: mat4) -> AABB? {
+    guard mesh.numberOfVertices > 0 else { return nil }
+
+    let vertices = mesh.vertices  // Mesh has a 'vertices' property, not 'positions'
+
+    // Transform first vertex to initialize min/max
+    let firstPos = vec3(
+      Float(vertices[0]),
+      Float(vertices[1]),
+      Float(vertices[2])
+    )
+    let firstWorld = transform * vec4(firstPos.x, firstPos.y, firstPos.z, 1.0)
+    var minPoint = vec3(firstWorld.x, firstWorld.y, firstWorld.z)
+    var maxPoint = minPoint
+
+    // Transform all vertices and find min/max
+    for i in 0..<mesh.numberOfVertices {
+      let pos = vec3(
+        Float(vertices[i * 3 + 0]),
+        Float(vertices[i * 3 + 1]),
+        Float(vertices[i * 3 + 2])
+      )
+      let worldPos = transform * vec4(pos.x, pos.y, pos.z, 1.0)
+      let worldVec = vec3(worldPos.x, worldPos.y, worldPos.z)
+
+      minPoint.x = min(minPoint.x, worldVec.x)
+      minPoint.y = min(minPoint.y, worldVec.y)
+      minPoint.z = min(minPoint.z, worldVec.z)
+      maxPoint.x = max(maxPoint.x, worldVec.x)
+      maxPoint.y = max(maxPoint.y, worldVec.y)
+      maxPoint.z = max(maxPoint.z, worldVec.z)
+    }
+
+    return AABB(
+      min: Vec3(x: minPoint.x, y: minPoint.y, z: minPoint.z), max: Vec3(x: maxPoint.x, y: maxPoint.y, z: maxPoint.z))
+  }
+
+  private func drawEntryArrowsWithJolt(scene: Assimp.Scene, debugRenderer: DebugRenderer) {
+    func traverse(_ node: Assimp.Node) {
+      if let name = node.name, name.hasPrefix("Entry_") {
+        let world = calculateNodeWorldTransform(node, scene: scene)
+        let origin = vec3(world[3].x, world[3].y, world[3].z)
+        // Extract forward direction from Z basis vector
+        let forwardZ = vec3(world[2].x, world[2].y, world[2].z)
+        // Rotate 90° around Y axis: swap X and Z, negate Z
+        // This rotates the forward vector to align with our coordinate system
+        let forward = vec3(-forwardZ.z, forwardZ.y, forwardZ.x)
+
+        // Draw arrow using Jolt debug renderer
+        let arrowLength: Float = 2.0
+        let to = origin + normalize(forward) * arrowLength
+        let magentaColor: DebugColor = 0xFFFF_00FF  // RGBA: magenta
+        debugRenderer.drawArrow(
+          from: RVec3(x: origin.x, y: origin.y, z: origin.z),
+          to: RVec3(x: to.x, y: to.y, z: to.z),
+          color: magentaColor,
+          size: 0.5
+        )
+      }
+      for child in node.children { traverse(child) }
+    }
+    traverse(scene.rootNode)
+  }
+}
+
+// MARK: - Debug Renderer Implementation
+
+private final class DebugRendererImplementation: @preconcurrency DebugRendererProcs {
+  weak var renderLoop: MainLoop?
+
+  func drawLine(from: RVec3, to: RVec3, color: DebugColor) {
+    guard let renderLoop = renderLoop else { return }
+    let fromVec = vec3(Float(from.x), Float(from.y), Float(from.z))
+    let toVec = vec3(Float(to.x), Float(to.y), Float(to.z))
+
+    // Convert DebugColor (RGBA packed UInt32) to Color
+    // Jolt uses RGBA format: r=byte0, g=byte1, b=byte2, a=byte3
+    let r = Float((color >> 0) & 0xFF) / 255.0
+    let g = Float((color >> 8) & 0xFF) / 255.0
+    let b = Float((color >> 16) & 0xFF) / 255.0
+    let a = Float((color >> 24) & 0xFF) / 255.0
+    let lineColor = Color(red: r, green: g, blue: b, alpha: a)
+
+    MainActor.assumeIsolated {
+      // Use GLRenderer directly instead of drawDebugLine
+      guard let renderer = GraphicsContext.current?.renderer as? GLRenderer else { return }
+      renderer.drawDebugLine3D(
+        from: fromVec,
+        to: toVec,
+        color: lineColor,
+        projection: renderLoop.currentProjection,
+        view: renderLoop.currentView,
+        lineThickness: 0.005,  // Thin line for wireframe
+        depthTest: false  // Always on top for debug overlay
+      )
+    }
+  }
+
+  func drawTriangle(
+    v1: RVec3, v2: RVec3, v3: RVec3, color: DebugColor, castShadow: DebugRenderer.CastShadow
+  ) {
+    // Draw triangle as wireframe using lines
+    drawLine(from: v1, to: v2, color: color)
+    drawLine(from: v2, to: v3, color: color)
+    drawLine(from: v3, to: v1, color: color)
+  }
+
+  func drawText3D(position: RVec3, text: String, color: DebugColor, height: Float) {
+    // For now, just ignore text rendering
+    // TODO: Implement 3D text rendering if needed
   }
 }

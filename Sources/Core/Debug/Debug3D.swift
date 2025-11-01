@@ -112,4 +112,44 @@ extension vec3 {
       depthTest: depthTest
     )
   }
+  
+  /// Draw a 3D debug line between two points
+  public func drawDebugLine(to end: vec3, color: Color, projection: mat4, view: mat4, depthTest: Bool = true) {
+    // Use 2D projection for simple line drawing
+    guard let renderer = GraphicsContext.current?.renderer else { return }
+
+    func mul(_ m: mat4, _ v: vec4) -> vec4 {
+      let r0 = m[0]
+      let r1 = m[1]
+      let r2 = m[2]
+      let r3 = m[3]
+      return vec4(
+        r0.x * v.x + r0.y * v.y + r0.z * v.z + r0.w * v.w,
+        r1.x * v.x + r1.y * v.y + r1.z * v.z + r1.w * v.w,
+        r2.x * v.x + r2.y * v.y + r2.z * v.z + r2.w * v.w,
+        r3.x * v.x + r3.y * v.y + r3.z * v.z + r3.w * v.w
+      )
+    }
+
+    func project(_ p: vec3) -> Point? {
+      let mvp = projection * view
+      let clip = mul(mvp, vec4(p.x, p.y, p.z, 1))
+      if abs(clip.w) < 0.0001 { return nil }
+      let ndc = vec3(clip.x / clip.w, clip.y / clip.w, clip.z / clip.w)
+      // Only draw if in front of camera
+      if ndc.z < -1.0 || ndc.z > 1.0 { return nil }
+      let vp = Engine.viewportSize
+      let x = (ndc.x * 0.5 + 0.5) * vp.width
+      let y = (1.0 - (ndc.y * 0.5 + 0.5)) * vp.height  // Flip Y
+      return Point(x, y)
+    }
+
+    guard let startPoint = project(self), let endPoint = project(end) else { return }
+
+    // Draw line
+    var path = BezierPath()
+    path.move(to: startPoint)
+    path.addLine(to: endPoint)
+    renderer.drawStroke(path, color: color, lineWidth: 1)
+  }
 }
