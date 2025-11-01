@@ -16,11 +16,17 @@ import Assimp
   // Capsule mesh from GLB file
   private var capsuleMeshInstances: [MeshInstance] = []
 
+  // Capsule height offset - adjust if capsule origin is at center instead of bottom
+  @Editable(range: -2.0...2.0) var capsuleHeightOffset: Float = 0.75
+
   // Scene and camera
   private var scene: Assimp.Scene?
   private var camera1: Assimp.Camera?
   private var camera1Node: Assimp.Node?
   private var camera1WorldTransform: mat4 = mat4(1)
+
+  // Scene lights
+  private var sceneLights: [(light: Assimp.Light, worldTransform: mat4)] = []
 
   // Prerendered environment renderer
   private var prerenderedEnvironment: PrerenderedEnvironment?
@@ -53,9 +59,6 @@ import Assimp
   private var restrictMovementToRoom: Bool = false
   private let boxSize: Float = 2.0
   private let boxPosition: vec3 = vec3(3, 0, 3)
-
-  // Debug: toggle depth clearing (so capsule renders on top)
-  private var debugClearDepth: Bool = false
 
   init() {
     setupGameplay()
@@ -99,6 +102,9 @@ import Assimp
           // Initialize active camera from scene using default name Camera_1
           self.syncActiveCamera(name: "Camera_1")
 
+          // Load scene lights
+          self.loadSceneLights()
+
           // Spawn at Entry_1 if present
           if let entryNode = scene.rootNode.findNode(named: "Entry_1") {
             let entryWorld = self.calculateNodeWorldTransform(entryNode, scene: scene)
@@ -121,6 +127,93 @@ import Assimp
         fatalError("Failed to load scene: \(error)")
       }
     }
+  }
+
+  /// Load scene lights and their world transforms
+  private func loadSceneLights() {
+    guard let scene = self.scene else { return }
+    sceneLights.removeAll()
+
+    for light in scene.lights {
+      guard let lightName = light.name else { continue }
+
+      // Find the node with the same name as the light
+      if let lightNode = scene.rootNode.findNode(named: lightName) {
+        let worldTransform = calculateNodeWorldTransform(lightNode, scene: scene)
+        sceneLights.append((light: light, worldTransform: worldTransform))
+        print("💡 Loaded light '\(lightName)' type: \(light.type)")
+      } else {
+        print("⚠️ Light node '\(lightName)' not found in scene graph")
+      }
+    }
+
+    if sceneLights.isEmpty {
+      print("⚠️ No lights found in scene")
+    }
+  }
+
+  /// Get lighting from scene lights (returns main light and fill light)
+  private func getSceneLighting() -> (
+    mainLight: (direction: vec3, color: vec3, intensity: Float),
+    fillLight: (direction: vec3, color: vec3, intensity: Float)
+  ) {
+    // Default lighting
+    var mainLight = (direction: vec3(0, -1, 0), color: vec3(1, 1, 1), intensity: Float(1.0))
+    var fillLight = (direction: vec3(-0.3, -0.5, -0.2), color: vec3(0.8, 0.9, 1.0), intensity: Float(0.4))
+
+    // Use first directional light as main light
+    if let firstDirectionalLight = sceneLights.first(where: { $0.light.type == .directional }) {
+      let light = firstDirectionalLight.light
+      let worldTransform = firstDirectionalLight.worldTransform
+
+      // Transform light direction to world space
+      // Light direction is in local space, transform it using the rotation part of the world transform
+      let localDir = vec3(light.direction.x, light.direction.y, light.direction.z)
+      // Extract rotation matrix (first 3x3) and transform the direction
+      let rotMatrix = mat3(
+        vec3(worldTransform[0].x, worldTransform[0].y, worldTransform[0].z),
+        vec3(worldTransform[1].x, worldTransform[1].y, worldTransform[1].z),
+        vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
+      )
+      let worldDir = normalize(rotMatrix * localDir)
+
+      // Use negative direction (light points toward negative direction)
+      mainLight.direction = -worldDir
+      mainLight.color = vec3(light.colorDiffuse.x, light.colorDiffuse.y, light.colorDiffuse.z)
+      mainLight.intensity = 1.0
+
+      print(
+        "💡 Using directional light '\(light.name ?? "unnamed")' - direction: \(mainLight.direction), color: \(mainLight.color)"
+      )
+    }
+
+    // Use second directional light or first point light as fill light if available
+    if sceneLights.count > 1 {
+      let secondLight = sceneLights[1]
+      let light = secondLight.light
+      let worldTransform = secondLight.worldTransform
+
+      if light.type == .directional {
+        let localDir = vec3(light.direction.x, light.direction.y, light.direction.z)
+        let rotMatrix = mat3(
+          vec3(worldTransform[0].x, worldTransform[0].y, worldTransform[0].z),
+          vec3(worldTransform[1].x, worldTransform[1].y, worldTransform[1].z),
+          vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
+        )
+        let worldDir = normalize(rotMatrix * localDir)
+        fillLight.direction = -worldDir
+      } else if light.type == .point {
+        // For point lights, calculate direction from light position to player
+        let lightPos = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
+        let toPlayer = normalize(playerPosition - lightPos)
+        fillLight.direction = toPlayer
+      }
+
+      fillLight.color = vec3(light.colorDiffuse.x, light.colorDiffuse.y, light.colorDiffuse.z)
+      fillLight.intensity = 0.4
+    }
+
+    return (mainLight, fillLight)
   }
 
   /// Syncs `camera1`, its node/world transform and prerender near/far from the given camera name
@@ -258,12 +351,6 @@ import Assimp
         playerPosition = spawnPosition
         playerRotation = spawnRotation
 
-      case .c:
-        UISound.select()
-        // Toggle depth clearing for debugging
-        debugClearDepth.toggle()
-        print("🔧 Debug: Depth clearing \(debugClearDepth ? "enabled" : "disabled")")
-
       case .l:
         UISound.select()
         // Cycle through mist debug modes: normal -> mist only -> mist overlay -> normal
@@ -391,11 +478,6 @@ import Assimp
       // Render prerendered environment first (as background)
       prerenderedEnvironment?.render(projectionMatrix: projection)
 
-      // Clear depth buffer if debug mode is enabled (so capsule renders on top)
-      if debugClearDepth {
-        glClear(GL_DEPTH_BUFFER_BIT)
-      }
-
       // Get view matrix from camera node's world transform
       // In glTF/Assimp, the camera node's transform IS the camera transform in world space
       // We just invert it to get the view matrix
@@ -423,7 +505,10 @@ import Assimp
         glDepthFunc(GL_LEQUAL)
 
         // Create model matrix: translate to player position, then rotate around Y axis
-        var modelMatrix = GLMath.translate(mat4(1), playerPosition)
+        // Offset Y downward so capsule sits on floor (assuming origin is at center)
+        var adjustedPosition = playerPosition
+        adjustedPosition.y -= capsuleHeightOffset
+        var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
         modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
 
         for meshInstance in capsuleMeshInstances {
@@ -433,17 +518,20 @@ import Assimp
           // Extract camera position from world transform (4th column)
           let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
 
+          // Get lighting from scene lights
+          let lighting = getSceneLighting()
+
           meshInstance.draw(
             projection: projection,
             view: view,
             modelMatrix: combinedModelMatrix,
             cameraPosition: cameraPosition,
-            lightDirection: vec3(0, -1, 0),
-            lightColor: vec3(1, 1, 1),
-            lightIntensity: 1.0,
-            fillLightDirection: vec3(-0.3, -0.5, -0.2),
-            fillLightColor: vec3(0.8, 0.9, 1.0),
-            fillLightIntensity: 0.4,
+            lightDirection: lighting.mainLight.direction,
+            lightColor: lighting.mainLight.color,
+            lightIntensity: lighting.mainLight.intensity,
+            fillLightDirection: lighting.fillLight.direction,
+            fillLightColor: lighting.fillLight.color,
+            fillLightIntensity: lighting.fillLight.intensity,
             diffuseOnly: false
           )
         }
@@ -455,7 +543,7 @@ import Assimp
       }
 
       // Debug overlay (top-left)
-      drawDebugInfo(showDepthClearDebug: debugClearDepth)
+      drawDebugInfo()
     }
   }
 }
@@ -463,7 +551,7 @@ import Assimp
 // MARK: - Debug
 
 extension MainLoop {
-  private func drawDebugInfo(showDepthClearDebug: Bool = false) {
+  private func drawDebugInfo() {
     var overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
       "Scene: \(sceneName)",
@@ -483,10 +571,6 @@ extension MainLoop {
       //"Triggers: none",
       //"Actions: none",
     ]
-
-    if showDepthClearDebug {
-      overlayLines.append("🔧 Depth Clear: ON (C to toggle)")
-    }
 
     let overlay = overlayLines.joined(separator: "\n")
 

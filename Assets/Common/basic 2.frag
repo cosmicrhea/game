@@ -87,6 +87,7 @@ void main() {
   float materialMetallic = hasMetallicTexture ? texture(metallicTexture, TexCoord).r : metallic;
   float ao = hasAoTexture ? texture(aoTexture, TexCoord).r : 1.0;
   
+  
   // Simple diffuse-only rendering for debugging
   if (diffuseOnly) {
     FragColor = vec4(albedo, opacity);
