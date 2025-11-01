@@ -80,8 +80,8 @@
   }()
 
   // Accent selector (bottom-left)
-  private lazy var accentSelector: AccentRadioGroup = {
-    let g = AccentRadioGroup(frame: Rect(x: 20, y: 20, width: 240, height: 44))
+  private lazy var accentSelector: SwatchPicker = {
+    let g = SwatchPicker(frame: Rect(x: 20, y: 20, width: 240, height: 44))
     return g
   }()
 

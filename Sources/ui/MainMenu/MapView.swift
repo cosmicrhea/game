@@ -16,15 +16,15 @@ class MapView: RenderLoop {
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid
 
-  init() {
-    Task {
-      meshInstances = try await MeshInstance.loadAsync(
-        path: "Scenes/tunnels_mockup",
-        onSceneProgress: { progress in },
-        onTextureProgress: { current, total, progress in }
-      )
-    }
-  }
+  // init() {
+  //   Task {
+  //     meshInstances = try await MeshInstance.loadAsync(
+  //       path: "Scenes/tunnels_mockup",
+  //       onSceneProgress: { progress in },
+  //       onTextureProgress: { current, total, progress in }
+  //     )
+  //   }
+  // }
 
   func update(deltaTime: Float) {
     // Update any animations or effects

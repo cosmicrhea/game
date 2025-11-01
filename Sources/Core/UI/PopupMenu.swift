@@ -318,7 +318,7 @@ public class PopupMenu {
 
         // Apply fade to icon
         let fadeAlpha = isVisible ? animationProgress : (1.0 - animationProgress)
-        let iconTint = Color.white.withAlphaComponent(fadeAlpha)
+        let iconTint = Color(red: 0.85, green: 0.85, blue: 0.85).withAlphaComponent(fadeAlpha)
         icon.draw(in: iconRect, tint: iconTint)
       }
 

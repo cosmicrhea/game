@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Debug Game",
+      "program": "${workspaceFolder:glass}/.build/debug/Game",
+      "preLaunchTask": "swift: Build Debug Game"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:glass}",
+      "name": "Release Game",
+      "program": "${workspaceFolder:glass}/.build/release/Game",
+      "preLaunchTask": "swift: Build Release Game"
+    }
+  ]
+}

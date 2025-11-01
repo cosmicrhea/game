@@ -12,7 +12,8 @@ extension Document {
     .photoC,
     //.testResults, // TODO: redaction style
     .glasportReport,
-    .idCard,
+    //.idCard,
+    nil,
     nil,
     .photoD,
     nil,

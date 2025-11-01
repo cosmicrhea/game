@@ -6,10 +6,8 @@ import unistd
   import AppKit
 #endif
 
-///// The width of the game window in pixels.
-//public let WIDTH = 1280 // 1800
-///// The height of the game window in pixels.
-//public let HEIGHT = 800 // 1126
+let DESIGN_RESOLUTION = Size(1280, 800)
+//let DESIGN_RESOLUTION = Size(1800, 1126)
 
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
@@ -40,7 +38,7 @@ public final class Engine {
   public static func main() { shared.run() }
 
   // TODO: learn about Swift concurrency and how to use it correctly
-  private nonisolated(unsafe) static var _cachedViewportSize: Size = Size(1280, 800)
+  private nonisolated(unsafe) static var _cachedViewportSize: Size = DESIGN_RESOLUTION
   public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
   private var config: Config { .current }
@@ -83,10 +81,10 @@ public final class Engine {
       print("|ω･)ﾉ♡☆")
     #endif
 
-    print("Bundle.game: \(Bundle.game)")
-    print("Bundle.main: \(Bundle.main)")
-    print("Bundle.module: \(Bundle.module)")
-    print("#bundle: \(#bundle)")
+    //    print("Bundle.game: \(Bundle.game)")
+    //    print("Bundle.main: \(Bundle.main)")
+    //    print("Bundle.module: \(Bundle.module)")
+    //    print("#bundle: \(#bundle)")
 
     LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 
@@ -126,7 +124,11 @@ public final class Engine {
   }
 
   private func setupWindow() {
-    window = try! GLFWWindow(width: 1280, height: 800, title: "")
+    window = try! GLFWWindow(
+      width: Int(DESIGN_RESOLUTION.width),
+      height: Int(DESIGN_RESOLUTION.height),
+      title: ""
+    )
 
     #if canImport(AppKit)
       NSWindowSwizzling.run()
@@ -143,6 +145,7 @@ public final class Engine {
     // We shouldn’t need this icon thing for release; it’ll be embedded in .app/.exe/etc.
     window.setIcon(GLFW.Image("UI/AppIcon/icon~masked.webp"))
     window.mouse.setCursor(to: .dot)
+    //window.mouse.setCursor(to: .regular)
   }
 
   private func setupEditorWindow() {
@@ -150,7 +153,14 @@ public final class Engine {
     // are visible in both windows. Ensure it starts hidden to avoid flashing at launch.
     let previousVisibleHint = GLFWWindow.hints.visible
     GLFWWindow.hints.visible = false
-    editorWindow = try! GLFWWindow(width: 400, height: 800, title: "", sharedContext: window.context)
+
+    editorWindow = try! GLFWWindow(
+      width: 400,
+      height: Int(DESIGN_RESOLUTION.height),
+      title: "",
+      sharedContext: window.context
+    )
+
     GLFWWindow.hints.visible = previousVisibleHint
 
     #if canImport(AppKit)
@@ -523,7 +533,7 @@ public final class Engine {
     // Restore previous context
     previousContext.makeCurrent()
   }
-  
+
   private func runMainLoop() {
     while !window.shouldClose {
       let currentFrame = Float(GLFWSession.currentTime)

@@ -4,12 +4,14 @@ public final class GLRenderer: Renderer {
   private let textProgram: GLProgram
   private let fboProgram: GLProgram
   private let gradientProgram: GLProgram
+  private let debug3dProgram: GLProgram
 
   // Clear color state
-  private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
+  //private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
+  private var clearColor = Color.black
 
   // Viewport state
-  private var _viewportSize: Size = Size(1280, 720)  // Default fallback
+  private var _viewportSize: Size = DESIGN_RESOLUTION
   private var frameCount: Int = 0
 
   public var viewportSize: Size {
@@ -70,6 +72,7 @@ public final class GLRenderer: Renderer {
     self.textProgram = try! GLProgram("UI/text")
     self.fboProgram = try! GLProgram("UI/fbo", "UI/fbo")
     self.gradientProgram = try! GLProgram("Common/gradient", "Common/gradient")
+    self.debug3dProgram = try! GLProgram("Common/debug3d", "Common/debug3d")
 
     // Enable depth testing
     glEnable(GL_DEPTH_TEST)
@@ -1163,6 +1166,198 @@ public final class GLRenderer: Renderer {
 
     // Draw the triangles
     glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+
+    // Cleanup
+    glDeleteVertexArrays(1, &vao)
+    glDeleteBuffers(1, &vbo)
+    glDeleteBuffers(1, &ebo)
+  }
+
+  // MARK: - 3D Debug Drawing
+
+  /// Draw a 3D debug arrow in world space
+  /// - Parameters:
+  ///   - from: Start position of the arrow
+  ///   - to: End position of the arrow
+  ///   - color: Color of the arrow
+  ///   - projection: Camera projection matrix
+  ///   - view: Camera view matrix
+  ///   - headLength: Length of the arrowhead (default: 10% of total length)
+  ///   - headRadius: Radius of the arrowhead base (default: 3% of total length)
+  ///   - lineThickness: Thickness of the lines (default: 0.01)
+  ///   - depthTest: Whether to enable depth testing (default: true)
+  public func drawDebugArrow3D(
+    from: vec3,
+    to: vec3,
+    color: Color,
+    projection: mat4,
+    view: mat4,
+    headLength: Float? = nil,
+    headRadius: Float? = nil,
+    lineThickness: Float = 1.0,
+    depthTest: Bool = true
+  ) {
+    let direction = to - from
+    let arrowLength = length(direction)
+
+    guard arrowLength > 0.001 else { return }  // Don't draw degenerate arrows
+
+    let normalizedDirection = normalize(direction)
+
+    // Calculate shaft radius from lineThickness
+    let baseShaftRadius = arrowLength * 0.01
+    let actualShaftRadius = baseShaftRadius * lineThickness
+    let actualHeadRadius = (headRadius ?? (arrowLength * 0.03)) * lineThickness
+
+    // Generate volumetric arrow geometry (proper 3D mesh, not wireframe)
+    let (volumetricVertices, volumetricIndices) = ArrowGeometryGenerator.generateArrow(
+      length: arrowLength,
+      headLength: headLength,
+      headRadius: actualHeadRadius,
+      shaftRadius: actualShaftRadius,
+      segments: 8
+    )
+
+    // Transform arrow geometry from local space (+Z axis) to world space
+    // Arrow points along +Z axis in local space, need to align with direction vector
+    let zAxis = vec3(0, 0, 1)
+    let dotProduct = dot(zAxis, normalizedDirection)
+
+    // Build model matrix: translate to start, then rotate to direction
+    var modelMatrix = mat4(1)
+    modelMatrix = GLMath.translate(modelMatrix, from)
+
+    // Handle rotation - check if direction is already aligned with +Z
+    if abs(dotProduct - 1.0) > 0.001 {
+      // Check if direction is opposite to +Z (special case)
+      if abs(dotProduct + 1.0) < 0.001 {
+        // 180 degree rotation around any perpendicular axis
+        modelMatrix = GLMath.rotate(modelMatrix, Float.pi, vec3(1, 0, 0))
+      } else {
+        // General rotation
+        let rotationAxis = cross(zAxis, normalizedDirection)
+        if length(rotationAxis) > 0.001 {
+          let normalizedAxis = normalize(rotationAxis)
+          let rotationAngle = acos(max(-1.0, min(1.0, dotProduct)))
+          modelMatrix = GLMath.rotate(modelMatrix, rotationAngle, normalizedAxis)
+        }
+      }
+    }
+
+    // Volumetric vertices format: [pos(3), normal(3), uv(2), tangent(3), bitangent(3)] = 14 floats per vertex
+    let floatsPerVertex = 14
+    let vertexCount = volumetricVertices.count / floatsPerVertex
+
+    // Transform vertices and extract position + color
+    var interleavedData: [Float] = []
+    interleavedData.reserveCapacity(vertexCount * 6)  // pos(3) + color(3)
+
+    for i in 0..<vertexCount {
+      let baseIndex = i * floatsPerVertex
+
+      // Extract position from volumetric vertex data
+      let localPos = vec3(
+        volumetricVertices[baseIndex + 0],
+        volumetricVertices[baseIndex + 1],
+        volumetricVertices[baseIndex + 2]
+      )
+
+      // Transform position by model matrix
+      let worldPos = modelMatrix * vec4(localPos.x, localPos.y, localPos.z, 1.0)
+
+      // Add transformed position
+      interleavedData.append(worldPos.x)
+      interleavedData.append(worldPos.y)
+      interleavedData.append(worldPos.z)
+
+      // Add color
+      interleavedData.append(color.red)
+      interleavedData.append(color.green)
+      interleavedData.append(color.blue)
+    }
+
+    // Create VAO/VBO/EBO
+    var vao: GLuint = 0
+    var vbo: GLuint = 0
+    var ebo: GLuint = 0
+    glGenVertexArrays(1, &vao)
+    glGenBuffers(1, &vbo)
+    glGenBuffers(1, &ebo)
+
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(
+      GL_ARRAY_BUFFER,
+      interleavedData.count * MemoryLayout<Float>.stride,
+      interleavedData,
+      GL_DYNAMIC_DRAW
+    )
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    volumetricIndices.withUnsafeBytes { bytes in
+      glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        bytes.count,
+        bytes.baseAddress,
+        GL_DYNAMIC_DRAW
+      )
+    }
+
+    // Position attribute (location 0)
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(
+      0, 3, GL_FLOAT, false,
+      GLsizei(6 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 0)
+    )
+
+    // Color attribute (location 1)
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(
+      1, 3, GL_FLOAT, false,
+      GLsizei(6 * MemoryLayout<Float>.stride),
+      UnsafeRawPointer(bitPattern: 3 * MemoryLayout<Float>.stride)
+    )
+
+    // Set up 3D rendering state (depth testing optionally enabled, no face culling for lines)
+    let wasDepthEnabled = glIsEnabled(GL_DEPTH_TEST)
+    let wasCullEnabled = glIsEnabled(GL_CULL_FACE)
+
+    if depthTest {
+      glEnable(GL_DEPTH_TEST)
+    } else {
+      glDisable(GL_DEPTH_TEST)
+    }
+    glDisable(GL_CULL_FACE)
+
+    // Use debug3d shader
+    debug3dProgram.use()
+
+    // Set identity model matrix (vertices already transformed)
+    let identityModel = mat4(1)
+    debug3dProgram.setMat4("model", value: identityModel)
+    debug3dProgram.setMat4("view", value: view)
+    debug3dProgram.setMat4("projection", value: projection)
+
+    // Draw triangles (volumetric mesh, not lines)
+    glBindVertexArray(vao)
+    glDrawElements(
+      GL_TRIANGLES,
+      GLsizei(volumetricIndices.count),
+      GL_UNSIGNED_INT,
+      nil
+    )
+    glBindVertexArray(0)
+
+    // Restore state
+    if wasDepthEnabled {
+      glEnable(GL_DEPTH_TEST)
+    } else {
+      glDisable(GL_DEPTH_TEST)
+    }
+    if wasCullEnabled {
+      glEnable(GL_CULL_FACE)
+    }
 
     // Cleanup
     glDeleteVertexArrays(1, &vao)

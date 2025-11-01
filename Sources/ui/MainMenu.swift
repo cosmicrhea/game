@@ -34,8 +34,8 @@
     }
   }
 
-  func setActiveTab(_ tab: MainMenuTabs.Tab) {
-    tabs.setActiveTab(tab)
+  func setActiveTab(_ tab: MainMenuTabs.Tab, animated: Bool = true) {
+    tabs.setActiveTab(tab, animated: animated)
   }
 
   func update(window: Window, deltaTime: Float) {
@@ -152,9 +152,23 @@ final class MainMenuTabs {
     return currentTab
   }
 
-  func setActiveTab(_ tab: Tab) {
+  func setActiveTab(_ tab: Tab, animated: Bool = true) {
     currentTab = tab
     onTabChanged?(currentTab)
+
+    if !animated {
+      // Immediately set animation progress and scales for all tabs
+      for tabItem in Tab.allCases {
+        let isActive = tabItem == currentTab
+        let targetProgress: Float = isActive ? 1.0 : 0.0
+        animationProgress[tabItem] = targetProgress
+
+        // Calculate final scale immediately
+        let easedProgress = easing.apply(targetProgress)
+        let scale = lerp(inactiveIconScale, activeIconScale, easedProgress)
+        iconScales[tabItem] = scale
+      }
+    }
   }
 
   func update(deltaTime: Float) {

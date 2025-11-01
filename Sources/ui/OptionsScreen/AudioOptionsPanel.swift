@@ -17,7 +17,7 @@ final class AudioOptionsPanel: OptionsPanel {
   override init() {
     super.init()
 
-    //print(try! AudioDevice.outputDevices.map { ($0.id, $0.name, $0.isDefault) })
+    print(try! AudioDevice.outputDevices.map { ($0.id, $0.name, $0.isDefault) })
 
     voiceVolumeSlider.onValueChanged = { value in
       Config.current.voiceVolume = value

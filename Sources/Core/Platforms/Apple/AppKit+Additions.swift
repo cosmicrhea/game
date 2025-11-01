@@ -30,7 +30,7 @@
 
   @objc class NSWindowSwizzling: NSObject {
     @objc func updateTextPropertiesWithFont(_ font: NSFont) {
-      // ignore the passed-in font and replace it with monospace (same size)
+      // ignore the passed-in font and replace it with monospaced digit system font (same size)
       let newFont = NSFont.monospacedDigitSystemFont(ofSize: font.pointSize, weight: .bold)
 
       // call the *original* method with our font instead

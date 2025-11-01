@@ -99,7 +99,7 @@ final class TextEffectsDemo: RenderLoop {
     glClearColor(0.1, 0.1, 0.2, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
 
-    let ws = (Int32(Engine.viewportSize.width), Int32(Engine.viewportSize.height))
+    //let ws = (Int32(Engine.viewportSize.width), Int32(Engine.viewportSize.height))
 
     // Layout constants
     let titleHeight: Float = 24
@@ -169,10 +169,7 @@ final class TextEffectsDemo: RenderLoop {
 
       // Draw debug rectangle if needed
       if Config.current.wireframeMode {
-        Debug.drawRect(
-          x: screenX, y: screenY, width: effect.width, height: effect.height,
-          windowSize: ws, lineWidth: 1.0
-        )
+        Rect(x: screenX, y: screenY, width: effect.width, height: effect.height).frame(with: .magenta)
       }
     }
   }

@@ -16,11 +16,15 @@ final class PrerenderedEnvironment {
   private var ebo: GLuint = 0
 
   // Camera parameters
-  private let near: Float = 0.1
-  private let far: Float = 100.0
+  public var near: Float = 0.1
+  public var far: Float = 100.0
 
   // Texture filtering toggle
   @Editable public var nearestNeighborFiltering: Bool = true
+
+  // Debug mist visualization
+  @Editable public var debugMistMode: Int = 0  // 0 = normal, 1 = mist only, 2 = mist overlay
+  @Editable(range: 0.0...1.0) public var mistOverlayOpacity: Float = 0.5
 
   // Camera selection for editor
   @Editable public var selectedCamera: String = "1" {
@@ -43,8 +47,8 @@ final class PrerenderedEnvironment {
   private var availableCameras: [String] = []
   private var currentCameraIndex: Int = 0
 
-  init(scenePath: String = "Scenes/Renders/radar_office", cameraName: String = "1") throws {
-    self.scenePath = scenePath
+  init(_ sceneName: String, cameraName: String = "1") throws {
+    self.scenePath = "Scenes/Renders/\(sceneName)"
 
     // Load the PrerenderedEnvironment shader
     do {
@@ -124,7 +128,7 @@ final class PrerenderedEnvironment {
     }
 
     availableCameras = Array(cameraNames).sorted()
-    logger.info("📷 Found cameras: \(availableCameras)")
+    logger.trace("📷 Found cameras: \(availableCameras)")
   }
 
   /// Get the current camera name
@@ -163,7 +167,7 @@ final class PrerenderedEnvironment {
       return prefix.allSatisfy { $0.isNumber }
     }.sorted(using: .localizedStandard)
 
-    logger.info("🎬 Found \(albedoFrames.count) frames for camera '\(currentCameraName)': \(albedoFrames)")
+    logger.trace("🎬 Found \(albedoFrames.count) frames for camera '\(currentCameraName)': \(albedoFrames)")
 
     guard !albedoFrames.isEmpty else {
       throw NSError(
@@ -175,6 +179,10 @@ final class PrerenderedEnvironment {
 
     totalFrames = albedoFrames.count
     logger.trace("🎬 Found \(totalFrames) frames: \(albedoFrames)")
+
+    // Clear old frames before loading new ones
+    albedoImages.removeAll()
+    mistImages.removeAll()
 
     // Load all frames
     albedoImages.reserveCapacity(totalFrames)
@@ -348,7 +356,7 @@ final class PrerenderedEnvironment {
     }
   }
 
-  func render() {
+  func render(projectionMatrix: mat4) {
     guard totalFrames > 0 else {
       logger.error("❌ No frames loaded, cannot render")
       return
@@ -357,20 +365,22 @@ final class PrerenderedEnvironment {
     logger.trace("🎬 Rendering PrerenderedEnvironment frame \(currentFrame)/\(totalFrames)...")
     shader.use()
 
+    // Ensure background writes depth for integration with 3D
+    glEnable(GL_DEPTH_TEST)
+    glDepthMask(true)
+    glDepthFunc(GL_ALWAYS)  // always write our gl_FragDepth
+
     // Get current frame images
     let currentAlbedoImage = albedoImages[currentFrame]
     let currentMistImage = mistImages[currentFrame]
 
-    // Calculate viewport aspect ratio
-    let viewportAspect = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
-    let imageAspect = currentAlbedoImage.naturalSize.width / currentAlbedoImage.naturalSize.height
-    let aspectCorrection = viewportAspect / imageAspect  // Try inverted
-
     // Set uniforms
     shader.setFloat("near", value: near)
     shader.setFloat("far", value: far)
-    shader.setFloat("uAspectRatio", value: aspectCorrection)
-    logger.trace("📐 Set uniforms: near=\(near), far=\(far), aspectCorrection=\(aspectCorrection)")
+    shader.setMat4("view_to_clip_matrix", value: projectionMatrix)
+    shader.setInt("debugMistMode", value: Int32(debugMistMode))
+    shader.setFloat("mistOverlayOpacity", value: mistOverlayOpacity)
+    logger.trace("📐 Set uniforms: near=\(near), far=\(far), debugMistMode=\(debugMistMode)")
 
     // Bind textures using the current frame's texture IDs
     glActiveTexture(GL_TEXTURE0)
@@ -382,11 +392,6 @@ final class PrerenderedEnvironment {
     glBindTexture(GL_TEXTURE_2D, GLuint(currentMistImage.textureID))
     shader.setInt("mist_texture", value: 1)
     logger.trace("🌫️ Bound mist texture: ID \(currentMistImage.textureID)")
-
-    glActiveTexture(GL_TEXTURE2)
-    glBindTexture(GL_TEXTURE_2D, GLuint(currentMistImage.textureID))  // Use mist as depth too
-    shader.setInt("depth_texture", value: 2)
-    logger.trace("📏 Bound depth texture: ID \(currentMistImage.textureID)")
 
     // Draw fullscreen quad
     glBindVertexArray(vao)

@@ -1,5 +1,5 @@
 @MainActor
-public final class AccentRadioGroup: OptionsControl {
+public final class SwatchPicker: OptionsControl {
 
   // MARK: - Public API
 
@@ -42,7 +42,7 @@ public final class AccentRadioGroup: OptionsControl {
 
   // MARK: - Init
 
-  public init(frame: Rect = .zero, selectedIndex: Int = 0, swatches: [Swatch] = AccentRadioGroup.defaultSwatches()) {
+  public init(frame: Rect = .zero, selectedIndex: Int = 0, swatches: [Swatch] = SwatchPicker.defaultSwatches()) {
     self.frame = frame
     self.swatches = swatches
     self.selectedIndex = max(0, min(selectedIndex, max(0, swatches.count - 1)))

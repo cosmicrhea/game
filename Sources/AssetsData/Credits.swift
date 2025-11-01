@@ -124,8 +124,8 @@ enum CreditsData {
     [
       Image("UI/Credits/Blender.png")
     ],
-    [
-      Image("UI/Credits/Assimp.png")
-    ],
+    // [
+    //   Image("UI/Credits/Assimp.png")
+    // ],
   ]
 }

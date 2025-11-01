@@ -278,6 +278,8 @@ class MeshInstance: @unchecked Sendable {
       }
     }
 
+    //print(scene.rootNode)
+
     // Add a small delay to make scene loading progress visible
     // try? await Task.sleep(nanoseconds: 200_000_000)  // 0.2 seconds
 

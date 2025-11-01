@@ -90,10 +90,7 @@ final class PromptListDemo: RenderLoop {
 
       if Config.current.wireframeMode {
         // Draw debug rectangle around the packed group
-        Debug.drawRect(
-          x: screenX, y: screenY, width: Float(group.width), height: Float(group.height),
-          windowSize: ws, lineWidth: 2.0
-        )
+        Rect(x: screenX, y: screenY, width: Float(group.width), height: Float(group.height)).frame(with: .magenta)
       }
     }
   }
