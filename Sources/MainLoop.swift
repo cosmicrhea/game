@@ -18,7 +18,7 @@ import Jolt
   private var capsuleMeshInstances: [MeshInstance] = []
 
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
-  @Editable(range: -2.0...2.0) var capsuleHeightOffset: Float = 0.75
+  @Editable(range: -2.0...2.0) var capsuleHeightOffset: Float = 1.25
 
   // Debug renderer for physics visualization
   private var debugRenderer: DebugRenderer?
@@ -27,6 +27,8 @@ import Jolt
   private var broadPhaseLayerInterface: BroadPhaseLayerInterfaceTable?
   private var objectLayerPairFilter: ObjectLayerPairFilterTable?
   private var objectVsBroadPhaseLayerFilter: ObjectVsBroadPhaseLayerFilterTable?
+  // Character controller for player capsule
+  private var characterController: CharacterVirtual?
   var currentProjection: mat4 = mat4(1)  // Accessible by debug renderer implementation
   var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
 
@@ -148,6 +150,9 @@ import Jolt
     debugRenderer = DebugRenderer(procs: debugProcs)
     debugProcs.renderLoop = self
 
+    // Create ground plane immediately (doesn't depend on scene)
+    createGroundPlane()
+
     // Load collision bodies into physics system when scene is ready
     Task {
       // Wait for scene to load
@@ -202,6 +207,12 @@ import Jolt
             print(
               "📐 Entry_1 world transform translation column [3]: (\(entryWorld[3].x), \(entryWorld[3].y), \(entryWorld[3].z))"
             )
+
+            // Create character controller for physics-based movement
+            if let physicsSystem = self.physicsSystem {
+              self.createCharacterController(at: extractedPos, rotation: self.spawnRotation, in: physicsSystem)
+            }
+
             // Disable small-room clamping for real scene navigation
             self.restrictMovementToRoom = false
           }
@@ -306,10 +317,10 @@ import Jolt
     if let node = scene.rootNode.findNode(named: nodeName) {
       camera1Node = node
       camera1WorldTransform = calculateNodeWorldTransform(node, scene: scene)
-      print("✅ Active camera node: \(nodeName)")
+      //print("✅ Active camera node: \(nodeName)")
       // Debug: Print camera transform
       let cameraPos = vec3(camera1WorldTransform[3].x, camera1WorldTransform[3].y, camera1WorldTransform[3].z)
-      print("📷 Camera world transform position: \(cameraPos)")
+      //print("📷 Camera world transform position: \(cameraPos)")
     } else {
       print("⚠️ Camera node not found: \(nodeName)")
       camera1Node = nil
@@ -322,9 +333,7 @@ import Jolt
       prerenderedEnvironment?.near = cam.clipPlaneNear
       prerenderedEnvironment?.far = cam.clipPlaneFar
       // If Blender mist settings are known, keep defaults (0.1 / 25.0) or adjust here
-      print(
-        "✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
-      )
+      //print("✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)")
     } else {
       print("⚠️ Camera struct not found for name: \(nodeName)")
       camera1 = nil
@@ -442,6 +451,14 @@ import Jolt
         playerPosition = spawnPosition
         playerRotation = spawnRotation
 
+        // Also reset character controller if it exists
+        if let characterController = characterController {
+          characterController.position = RVec3(x: spawnPosition.x, y: spawnPosition.y, z: spawnPosition.z)
+          let rotationQuat = Quat(x: 0, y: sin(spawnRotation / 2), z: 0, w: cos(spawnRotation / 2))
+          characterController.rotation = rotationQuat
+          characterController.linearVelocity = Vec3(x: 0, y: 0, z: 0)  // Stop all movement
+        }
+
       case .l:
         UISound.select()
         // Cycle through mist debug modes: normal -> mist only -> mist overlay -> normal
@@ -507,6 +524,42 @@ import Jolt
     return prerenderedEnvironment?.getAvailableCameras() ?? ["1"]
   }
 
+  private func createCharacterController(at position: vec3, rotation: Float, in system: PhysicsSystem) {
+    guard characterController == nil else { return }  // Only create once
+
+    // Create capsule shape for character (radius ~0.4, halfHeight ~0.8)
+    let capsuleRadius: Float = 0.4
+    let capsuleHalfHeight: Float = 0.8
+    let capsuleShape = CapsuleShape(halfHeight: capsuleHalfHeight, radius: capsuleRadius)
+
+    // Create supporting volume (plane at bottom of capsule for ground detection)
+    let supportingPlane = Plane(normal: Vec3(x: 0, y: 1, z: 0), distance: -capsuleRadius)
+
+    // Create character settings
+    let characterSettings = CharacterVirtualSettings(
+      up: Vec3(x: 0, y: 1, z: 0),
+      supportingVolume: supportingPlane,
+      shape: capsuleShape
+    )
+
+    // Convert rotation to quaternion
+    let rotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
+
+    // Create character controller
+    characterController = CharacterVirtual(
+      settings: characterSettings,
+      position: RVec3(x: position.x, y: position.y, z: position.z),
+      rotation: rotationQuat,
+      in: system
+    )
+
+    // Set mass and strength
+    characterController?.mass = 70.0  // kg
+    characterController?.maxStrength = 500.0  // N
+
+    print("✅ Created character controller at position (\(position.x), \(position.y), \(position.z))")
+  }
+
   private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
     // Tank controls: A/D rotate, W/S move forward/backward
     let rotationDelta = rotationSpeed * deltaTime
@@ -523,20 +576,81 @@ import Jolt
     let forwardZ = GLMath.cos(playerRotation)
     let forward = vec3(forwardX, 0, forwardZ)
 
-    let moveDistance = moveSpeed * deltaTime
+    // Update character controller if it exists
+    if let characterController = characterController, let physicsSystem = physicsSystem {
+      // Check for speed boost (Shift key)
+      let speedMultiplier: Float
+      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
+        speedMultiplier = 2.5  // 2.5x speed when holding Shift
+      } else {
+        speedMultiplier = 1.0
+      }
+      let currentMoveSpeed = moveSpeed * speedMultiplier
 
-    if keyboard.state(of: .w) == .pressed {
-      playerPosition += forward * moveDistance
-    }
-    if keyboard.state(of: .s) == .pressed {
-      playerPosition -= forward * moveDistance
-    }
+      // Calculate desired horizontal velocity from input
+      var desiredVelocity = Vec3(x: 0, y: 0, z: 0)
 
-    if restrictMovementToRoom {
-      // Simple collision with room boundaries
-      let halfRoom = roomSize / 2.0
-      playerPosition.x = max(-halfRoom, min(halfRoom, playerPosition.x))
-      playerPosition.z = max(-halfRoom, min(halfRoom, playerPosition.z))
+      if keyboard.state(of: .w) == .pressed {
+        desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
+      }
+      if keyboard.state(of: .s) == .pressed {
+        desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
+      }
+
+      // Get current velocity and preserve Y component (gravity)
+      var currentVelocity = characterController.linearVelocity
+      let currentYVelocity = currentVelocity.y
+
+      // Set horizontal velocity, preserve vertical
+      currentVelocity.x = desiredVelocity.x
+      currentVelocity.z = desiredVelocity.z
+      // Apply gravity if not on ground
+      if !characterController.isSupported {
+        currentVelocity.y = currentYVelocity + physicsSystem.getGravity().y * deltaTime
+      } else {
+        currentVelocity.y = 0  // On ground, no vertical velocity
+      }
+
+      characterController.linearVelocity = currentVelocity
+
+      // Update character rotation
+      let rotationQuat = Quat(x: 0, y: sin(playerRotation / 2), z: 0, w: cos(playerRotation / 2))
+      characterController.rotation = rotationQuat
+
+      // Update character controller (this does the physics movement)
+      let characterLayer: ObjectLayer = 2  // Dynamic layer
+      characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
+
+      // Update physics system
+      physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: nil)
+
+      // Read position back from character controller
+      let characterPos = characterController.position
+      playerPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
+    } else {
+      // Fallback to manual movement if character controller not available
+      // Check for speed boost (Shift key)
+      let speedMultiplier: Float
+      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
+        speedMultiplier = 2.5  // 2.5x speed when holding Shift
+      } else {
+        speedMultiplier = 1.0
+      }
+      let moveDistance = moveSpeed * speedMultiplier * deltaTime
+
+      if keyboard.state(of: .w) == .pressed {
+        playerPosition += forward * moveDistance
+      }
+      if keyboard.state(of: .s) == .pressed {
+        playerPosition -= forward * moveDistance
+      }
+
+      if restrictMovementToRoom {
+        // Simple collision with room boundaries
+        let halfRoom = roomSize / 2.0
+        playerPosition.x = max(-halfRoom, min(halfRoom, playerPosition.x))
+        playerPosition.z = max(-halfRoom, min(halfRoom, playerPosition.z))
+      }
     }
   }
 
@@ -730,6 +844,39 @@ extension MainLoop {
     traverse(scene.rootNode)
   }
 
+  private func createGroundPlane() {
+    guard let physicsSystem = physicsSystem else { return }
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    // Use a large BoxShape instead of PlaneShape for better reliability
+    // PlaneShape can have issues with collision detection when the character moves away from the origin
+    // A large flat box is more reliable and still very efficient
+    let groundHalfExtent = Vec3(x: 500.0, y: 0.5, z: 500.0)  // Very large flat box
+    let groundShape = BoxShape(halfExtent: groundHalfExtent)
+
+    // Position at y = -0.5 so top surface is at y = 0
+    let groundPosition = RVec3(x: 0, y: -0.5, z: 0)
+    let groundRotation = Quat.identity
+
+    // Create body settings
+    let groundLayer: ObjectLayer = 1  // Static layer
+    let bodySettings = BodyCreationSettings(
+      shape: groundShape,
+      position: groundPosition,
+      rotation: groundRotation,
+      motionType: .static,
+      objectLayer: groundLayer
+    )
+
+    // Create and add ground body
+    let groundBodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+    if groundBodyID != 0 {
+      print("✅ Created ground plane body ID: \(groundBodyID)")
+    } else {
+      print("❌ Failed to create ground plane")
+    }
+  }
+
   private func loadCollisionBodiesIntoPhysics(scene: Assimp.Scene) {
     guard let physicsSystem = physicsSystem else { return }
     let bodyInterface = physicsSystem.bodyInterface()
@@ -901,7 +1048,7 @@ extension MainLoop {
             // Calculate bounding box from mesh vertices
             if let aabb = calculateMeshAABB(mesh: mesh, transform: worldTransform) {
               // Draw wireframe box using debug renderer
-              let cyanColor: DebugColor = 0xFF00_FFFF  // RGBA: cyan
+              let cyanColor: Jolt.Color = 0xFF00_FFFF  // RGBA: cyan
               debugRenderer.drawWireBox(aabb, color: cyanColor)
             }
           }
@@ -963,7 +1110,7 @@ extension MainLoop {
         // Draw arrow using Jolt debug renderer
         let arrowLength: Float = 2.0
         let to = origin + normalize(forward) * arrowLength
-        let magentaColor: DebugColor = 0xFFFF_00FF  // RGBA: magenta
+        let magentaColor: Jolt.Color = 0xFFFF_00FF  // RGBA: magenta
         debugRenderer.drawArrow(
           from: RVec3(x: origin.x, y: origin.y, z: origin.z),
           to: RVec3(x: to.x, y: to.y, z: to.z),
@@ -979,21 +1126,16 @@ extension MainLoop {
 
 // MARK: - Debug Renderer Implementation
 
-private final class DebugRendererImplementation: @preconcurrency DebugRendererProcs {
+private final class DebugRendererImplementation: DebugRendererProcs {
   weak var renderLoop: MainLoop?
 
-  func drawLine(from: RVec3, to: RVec3, color: DebugColor) {
+  func drawLine(from: RVec3, to: RVec3, color: Jolt.Color) {
     guard let renderLoop = renderLoop else { return }
     let fromVec = vec3(Float(from.x), Float(from.y), Float(from.z))
     let toVec = vec3(Float(to.x), Float(to.y), Float(to.z))
 
-    // Convert DebugColor (RGBA packed UInt32) to Color
-    // Jolt uses RGBA format: r=byte0, g=byte1, b=byte2, a=byte3
-    let r = Float((color >> 0) & 0xFF) / 255.0
-    let g = Float((color >> 8) & 0xFF) / 255.0
-    let b = Float((color >> 16) & 0xFF) / 255.0
-    let a = Float((color >> 24) & 0xFF) / 255.0
-    let lineColor = Color(red: r, green: g, blue: b, alpha: a)
+    // Convert Jolt.Color (RGBA packed UInt32) to Color
+    let lineColor = Color(color)
 
     MainActor.assumeIsolated {
       // Use GLRenderer directly instead of drawDebugLine
@@ -1011,7 +1153,7 @@ private final class DebugRendererImplementation: @preconcurrency DebugRendererPr
   }
 
   func drawTriangle(
-    v1: RVec3, v2: RVec3, v3: RVec3, color: DebugColor, castShadow: DebugRenderer.CastShadow
+    v1: RVec3, v2: RVec3, v3: RVec3, color: Jolt.Color, castShadow: DebugRenderer.CastShadow
   ) {
     // Draw triangle as wireframe using lines
     drawLine(from: v1, to: v2, color: color)
@@ -1019,7 +1161,8 @@ private final class DebugRendererImplementation: @preconcurrency DebugRendererPr
     drawLine(from: v3, to: v1, color: color)
   }
 
-  func drawText3D(position: RVec3, text: String, color: DebugColor, height: Float) {
+  func drawText3D(position: RVec3, text: String, color: Jolt.Color, height: Float) {
+    print(#function, text)
     // For now, just ignore text rendering
     // TODO: Implement 3D text rendering if needed
   }

@@ -112,7 +112,7 @@ extension vec3 {
       depthTest: depthTest
     )
   }
-  
+
   /// Draw a 3D debug line between two points
   public func drawDebugLine(to end: vec3, color: Color, projection: mat4, view: mat4, depthTest: Bool = true) {
     // Use 2D projection for simple line drawing
