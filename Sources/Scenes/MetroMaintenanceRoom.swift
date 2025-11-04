@@ -1,3 +1,5 @@
+@objcMembers
+@MainActor
 class MetroMaintenanceRoom: Script {
 
   func bulletinBoard() {

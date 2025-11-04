@@ -1,3 +1,5 @@
+@objcMembers
+@MainActor
 class MetroMaintenanceCorridor: Script {
 
   func openDoor() {

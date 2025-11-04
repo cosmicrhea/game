@@ -1,3 +1,5 @@
+@objcMembers
+@MainActor
 class DebugRoom: Script {
 
   func ladder() {

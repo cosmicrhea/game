@@ -4,8 +4,8 @@ extension Item {
   static let morphine = Item(
     id: "morphine",
     kind: .recovery,
-    name: "Morphine Sulfate",
-    description: "Pills that restore a large amount of vitality.",
+    name: "Morphine",
+    description: "A painkiller that restores a large amount of vitality.",
   )
 
   // MARK: - Mêlée
@@ -44,7 +44,7 @@ extension Item {
     id: "beretta92",
     kind: .weapon,
     name: "Beretta 92",
-    description: "Compact 9mm pistol.",
+    description: "A compact 9mm pistol.",
   )
 
   static let fnx45 = Item(
@@ -67,7 +67,7 @@ extension Item {
     id: "spas12",
     kind: .weapon,
     name: "SPAS-12",
-    description: "A sporting shotgun with a 12-gauge barrel and a detachable magazine.",
+    description: "A sporting shotgun with a 12-gauge barrel.",
   )
 
   // MARK: - SMGs
@@ -94,7 +94,7 @@ extension Item {
     id: "utility_key",
     name: "Utility Key",
     //realName: "Generator Key",
-    description: "A key for utility cabinets.",
+    description: "A generic key for utility cabinets.",
   )
 
   static let metroKey = Item(

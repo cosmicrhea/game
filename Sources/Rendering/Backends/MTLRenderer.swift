@@ -164,7 +164,9 @@ public final class MTLRenderer: Renderer {
   public func drawImage(
     textureID: UInt64,
     in rect: Rect,
-    tint: Color?
+    tint: Color?,
+    strokeWidth: Float,
+    strokeColor: Color?
   ) {
     guard let renderEncoder = currentRenderEncoder,
       let vertexBuffer = imageVertexBuffer,
@@ -213,19 +215,59 @@ public final class MTLRenderer: Renderer {
 
     // Create uniforms
     let mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
-    let tintColor = tint ?? .white
-
-    var uniforms = ImageUniforms(
-      mvp: mvp,
-      tint: SIMD4<Float>(tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha)
-    )
-
-    renderEncoder.setVertexBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
-    renderEncoder.setFragmentBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
 
     // For now, we'll use a placeholder texture since we don't have texture management yet
     // TODO: Implement proper texture management
     print("MTLRenderer.drawImage: textureID=\(textureID), rect=\(rect), tint=\(tint != nil ? "Color" : "nil")")
+
+    // Draw stroke outline if specified
+    if strokeWidth > 0, let strokeColor = strokeColor {
+      var strokeUniforms = ImageUniforms(
+        mvp: mvp,
+        tint: SIMD4<Float>(strokeColor.red, strokeColor.green, strokeColor.blue, strokeColor.alpha)
+      )
+
+      renderEncoder.setFragmentBytes(&strokeUniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+
+      // Draw image at multiple offsets to create outline effect
+      let offsets: [(Float, Float)] = [
+        (-strokeWidth, 0), (strokeWidth, 0),
+        (0, -strokeWidth), (0, strokeWidth),
+        (-strokeWidth, -strokeWidth), (strokeWidth, strokeWidth),
+        (-strokeWidth, strokeWidth), (strokeWidth, -strokeWidth),
+      ]
+
+      for (offsetX, offsetY) in offsets {
+        var offsetVertices = vertices
+        for i in stride(from: 0, to: offsetVertices.count, by: 4) {
+          offsetVertices[i] += offsetX
+          offsetVertices[i + 1] += offsetY
+        }
+
+        let offsetVertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: offsetVertices.count)
+        offsetVertexData.initialize(from: offsetVertices, count: offsetVertices.count)
+
+        renderEncoder.drawIndexedPrimitives(
+          type: .triangle,
+          indexCount: indices.count,
+          indexType: .uint32,
+          indexBuffer: indexBuffer,
+          indexBufferOffset: 0
+        )
+      }
+    }
+
+    // Draw fill
+    let tintColor = tint ?? .white
+    var fillUniforms = ImageUniforms(
+      mvp: mvp,
+      tint: SIMD4<Float>(tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha)
+    )
+
+    let fillVertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: vertices.count)
+    fillVertexData.initialize(from: vertices, count: vertices.count)
+
+    renderEncoder.setFragmentBytes(&fillUniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
 
     // Draw the quad
     renderEncoder.drawIndexedPrimitives(
@@ -241,7 +283,9 @@ public final class MTLRenderer: Renderer {
     textureID: UInt64,
     in rect: Rect,
     uv: Rect,
-    tint: Color?
+    tint: Color?,
+    strokeWidth: Float,
+    strokeColor: Color?
   ) {
     guard let renderEncoder = currentRenderEncoder,
       let vertexBuffer = imageVertexBuffer,
@@ -282,22 +326,64 @@ public final class MTLRenderer: Renderer {
     renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
 
     // Create uniforms
-    let mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
-    let tintColor = tint ?? .white
-
-    var uniforms = ImageUniforms(
-      mvp: mvp,
-      tint: SIMD4<Float>(tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha)
-    )
-
-    renderEncoder.setVertexBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
-    renderEncoder.setFragmentBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+    var mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
 
     // For now, we'll use a placeholder texture since we don't have texture management yet
     // TODO: Implement proper texture management
     print(
       "MTLRenderer.drawImageRegion: textureID=\(textureID), rect=\(rect), uv=\(uv), tint=\(tint != nil ? "Color" : "nil")"
     )
+
+    // Draw stroke outline if specified
+    if strokeWidth > 0, let strokeColor = strokeColor {
+      var strokeUniforms = ImageUniforms(
+        mvp: mvp,
+        tint: SIMD4<Float>(strokeColor.red, strokeColor.green, strokeColor.blue, strokeColor.alpha)
+      )
+
+      renderEncoder.setVertexBytes(&mvp, length: MemoryLayout<float4x4>.size, index: 0)
+      renderEncoder.setFragmentBytes(&strokeUniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+
+      // Draw image at multiple offsets to create outline effect
+      let offsets: [(Float, Float)] = [
+        (-strokeWidth, 0), (strokeWidth, 0),
+        (0, -strokeWidth), (0, strokeWidth),
+        (-strokeWidth, -strokeWidth), (strokeWidth, strokeWidth),
+        (-strokeWidth, strokeWidth), (strokeWidth, -strokeWidth),
+      ]
+
+      for (offsetX, offsetY) in offsets {
+        var offsetVertices = vertices
+        for i in stride(from: 0, to: offsetVertices.count, by: 4) {
+          offsetVertices[i] += offsetX
+          offsetVertices[i + 1] += offsetY
+        }
+
+        let offsetVertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: offsetVertices.count)
+        offsetVertexData.initialize(from: offsetVertices, count: offsetVertices.count)
+
+        renderEncoder.drawIndexedPrimitives(
+          type: .triangle,
+          indexCount: indices.count,
+          indexType: .uint32,
+          indexBuffer: indexBuffer,
+          indexBufferOffset: 0
+        )
+      }
+    }
+
+    // Draw fill
+    let tintColor = tint ?? .white
+    var fillUniforms = ImageUniforms(
+      mvp: mvp,
+      tint: SIMD4<Float>(tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha)
+    )
+
+    let fillVertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: vertices.count)
+    fillVertexData.initialize(from: vertices, count: vertices.count)
+
+    renderEncoder.setVertexBytes(&mvp, length: MemoryLayout<float4x4>.size, index: 0)
+    renderEncoder.setFragmentBytes(&fillUniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
 
     // Draw the quad
     renderEncoder.drawIndexedPrimitives(
@@ -314,7 +400,9 @@ public final class MTLRenderer: Renderer {
     in rect: Rect,
     rotation: Float,
     scale: Point,
-    tint: Color?
+    tint: Color?,
+    strokeWidth: Float,
+    strokeColor: Color?
   ) {
     guard let renderEncoder = currentRenderEncoder,
       let vertexBuffer = imageVertexBuffer,
@@ -369,15 +457,67 @@ public final class MTLRenderer: Renderer {
     renderEncoder.setRenderPipelineState(imagePipelineState)
     renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
 
-    var uniforms = ImageUniforms(
-      mvp: createOrthographicMatrix(viewportSize: currentViewportSize),
-      tint: SIMD4<Float>((tint ?? .white).red, (tint ?? .white).green, (tint ?? .white).blue, (tint ?? .white).alpha)
-    )
-    renderEncoder.setVertexBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
-    renderEncoder.setFragmentBytes(&uniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+    var mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
 
     // TODO: bind real texture by textureID when texture binding is implemented
     print("MTLRenderer.drawImageTransformed: textureID=\(textureID), rotation=\(rotation)")
+
+    // Draw stroke outline if specified
+    if strokeWidth > 0, let strokeColor = strokeColor {
+      // Rotate offset vectors for transformed images
+      let offsets: [(Float, Float)] = [
+        (-strokeWidth, 0), (strokeWidth, 0),
+        (0, -strokeWidth), (0, strokeWidth),
+        (-strokeWidth, -strokeWidth), (strokeWidth, strokeWidth),
+        (-strokeWidth, strokeWidth), (strokeWidth, -strokeWidth),
+      ]
+
+      // Rotate offset vectors
+      let c = cos(rotation)
+      let s = sin(rotation)
+      func rotOffset(_ offsetX: Float, _ offsetY: Float) -> (Float, Float) {
+        let rx = offsetX * c - offsetY * s
+        let ry = offsetX * s + offsetY * c
+        return (rx, ry)
+      }
+
+      var strokeUniforms = ImageUniforms(
+        mvp: mvp,
+        tint: SIMD4<Float>(strokeColor.red, strokeColor.green, strokeColor.blue, strokeColor.alpha)
+      )
+
+      renderEncoder.setVertexBytes(&mvp, length: MemoryLayout<float4x4>.size, index: 0)
+      renderEncoder.setFragmentBytes(&strokeUniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
+
+      for (offsetX, offsetY) in offsets {
+        let (rotX, rotY) = rotOffset(offsetX, offsetY)
+        var offsetVertices = vertices
+        for i in stride(from: 0, to: offsetVertices.count, by: 4) {
+          offsetVertices[i] += rotX
+          offsetVertices[i + 1] += rotY
+        }
+
+        let offsetVertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: offsetVertices.count)
+        offsetVertexData.initialize(from: offsetVertices, count: offsetVertices.count)
+
+        renderEncoder.drawIndexedPrimitives(
+          type: .triangle, indexCount: indices.count, indexType: .uint32, indexBuffer: indexBuffer,
+          indexBufferOffset: 0)
+      }
+    }
+
+    // Draw fill
+    let tintColor = tint ?? .white
+    var fillUniforms = ImageUniforms(
+      mvp: mvp,
+      tint: SIMD4<Float>(tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha)
+    )
+
+    let fillVertexData = vertexBuffer.contents().bindMemory(to: Float.self, capacity: vertices.count)
+    fillVertexData.initialize(from: vertices, count: vertices.count)
+
+    renderEncoder.setVertexBytes(&mvp, length: MemoryLayout<float4x4>.size, index: 0)
+    renderEncoder.setFragmentBytes(&fillUniforms, length: MemoryLayout<ImageUniforms>.size, index: 0)
 
     renderEncoder.drawIndexedPrimitives(
       type: .triangle, indexCount: indices.count, indexType: .uint32, indexBuffer: indexBuffer, indexBufferOffset: 0)

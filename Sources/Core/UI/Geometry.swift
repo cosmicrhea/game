@@ -1,5 +1,5 @@
 /// A 2D point with floating-point coordinates.
-public struct Point: Equatable, Hashable, Sendable {
+public struct Point: Equatable, Hashable, Sendable, CustomStringConvertible {
   /// The x-coordinate of the point.
   public var x: Float
   /// The y-coordinate of the point.
@@ -56,7 +56,7 @@ public struct Point: Equatable, Hashable, Sendable {
 }
 
 /// A 2D size with floating-point dimensions.
-public struct Size: Equatable, Hashable, Sendable {
+public struct Size: Equatable, Hashable, Sendable, CustomStringConvertible {
   /// The width of the size.
   public var width: Float
   /// The height of the size.
@@ -361,7 +361,7 @@ public enum RectEdge {
   case maxYEdge
 }
 
-/// 
+///
 public struct RectCorner: OptionSet, Sendable {
   public static let topLeft = Self(rawValue: 1 << 0)
   public static let topRight = Self(rawValue: 1 << 1)

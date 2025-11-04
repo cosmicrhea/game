@@ -35,8 +35,17 @@ public final class ImageAtlas {
   ///   - name: The name of the atlas entry to draw.
   ///   - rect: Destination rectangle in points.
   ///   - tint: Optional color tint to apply; defaults to `nil` (no tint).
+  ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
+  ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  public func draw(name: String, in rect: Rect, tint: Color? = nil, context: GraphicsContext? = nil) {
+  public func draw(
+    name: String,
+    in rect: Rect,
+    tint: Color? = nil,
+    strokeWidth: Float? = nil,
+    strokeColor: Color? = nil,
+    context: GraphicsContext? = nil
+  ) {
     guard let entry = entries[name] else {
       logger.error("ImageAtlas.draw: entry '\(name)' not found")
       return
@@ -53,7 +62,9 @@ public final class ImageAtlas {
       textureID: texture.textureID,
       in: rect,
       uv: entry.uv,
-      tint: tint
+      tint: tint,
+      strokeWidth: strokeWidth ?? 0,
+      strokeColor: strokeColor
     )
   }
 

@@ -6,7 +6,7 @@ final class HealthDisplay {
   var rect: Rect {
     let w: Float = 128
     let h: Float = 128
-    let origin = Point(44, 96 + 24)
+    let origin = Point(44, 288 + 24)
     return Rect(origin: origin, size: Size(w, h))
   }
 
@@ -37,7 +37,7 @@ final class HealthDisplay {
     // Status text
     let status: (text: String, color: Color) = {
       switch health {
-      case let h where h >= 0.50: return ("Clear", Color(0.65, 0.88, 0.95, 1.0)) // OK? Fine? Clear?
+      case let h where h >= 0.50: return ("Clear", Color(0.65, 0.88, 0.95, 1.0))  // OK? Fine? Clear?
       case let h where h >= 0.33: return ("Caution", Color.amber)
       default: return ("Critical", Color.rose)
       }

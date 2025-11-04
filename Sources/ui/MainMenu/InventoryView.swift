@@ -21,6 +21,11 @@ final class InventoryView: RenderLoop {
     return isShowingItem
   }
 
+  // Public property to check if slot menu is visible
+  public var isSlotMenuVisible: Bool {
+    return slotGrid.slotMenu.isVisible
+  }
+
   init() {
     slotGrid = SlotGrid(
       columns: 4,
@@ -50,11 +55,11 @@ final class InventoryView: RenderLoop {
         return (Float(Engine.viewportSize.width) - totalSize.width) * 0.5
       } else {
         // Align to the right side with a comfortable margin
-        let rightMargin: Float = 152
+        let rightMargin: Float = 288
         return Float(Engine.viewportSize.width) - totalSize.width - rightMargin
       }
     }()
-    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 64
+    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 128
     let gridPosition = Point(x, y)
     slotGrid.setPosition(gridPosition)
   }
@@ -73,8 +78,8 @@ final class InventoryView: RenderLoop {
       updateItemDescription()
     }
 
-    // Update slot grid
-    slotGrid.update(deltaTime: deltaTime)
+    //    // Update slot grid
+    //    slotGrid.update(deltaTime: deltaTime)
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -216,13 +221,13 @@ final class InventoryView: RenderLoop {
 
     // Place items with different quantities
     let itemsWithQuantities: [(Item, Int?)] = [
-//      (.knife, nil),
-//      (.glock17, 15),
-//      (.handgunAmmo, 69),
-//       (.sigp320, 0),
-//      (.morphine, nil),
-//       (.glock18, 17),
-//      (.metroKey, nil),
+      //      (.knife, nil),
+      //      (.glock17, 15),
+      //      (.handgunAmmo, 69),
+      //       (.sigp320, 0),
+      //      (.morphine, nil),
+      //       (.glock18, 17),
+      //      (.metroKey, nil),
       // (.utilityKey, nil),
 
       (.morphine, nil),

@@ -1,14 +1,16 @@
 import Assimp
+import Foundation
 import Jolt
 
 @Editor final class MainLoop: RenderLoop {
   // Scene configuration
   private let sceneName: String = "test"
+  //  private let sceneName: String = "radar_office"
 
   // Gameplay state
   private var playerPosition: vec3 = vec3(0, 0, 0)
   private var playerRotation: Float = 0.0
-  private var moveSpeed: Float = 5.0
+  private var moveSpeed: Float = 3.0
   private var rotationSpeed: Float = 2.0  // radians per second
   private var smoothedFPS: Float = 60.0
   private var spawnPosition: vec3 = vec3(0, 0, 0)
@@ -18,21 +20,32 @@ import Jolt
   private var capsuleMeshInstances: [MeshInstance] = []
 
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
-  @Editable(range: -2.0...2.0) var capsuleHeightOffset: Float = 1.25
+  private let capsuleHeightOffset: Float = 1.25
 
   // Debug renderer for physics visualization
   private var debugRenderer: DebugRenderer?
   private var physicsSystem: PhysicsSystem?
+  // Job system for physics updates (required, cannot be null)
+  private var jobSystem: JobSystemThreadPool?
   // Store filter objects so they stay alive (PhysicsSystem only keeps references)
   private var broadPhaseLayerInterface: BroadPhaseLayerInterfaceTable?
   private var objectLayerPairFilter: ObjectLayerPairFilterTable?
   private var objectVsBroadPhaseLayerFilter: ObjectVsBroadPhaseLayerFilterTable?
   // Character controller for player capsule
   private var characterController: CharacterVirtual?
+  // Mapping from action body IDs to their node names
+  private var actionBodyNames: [BodyID: String] = [:]
+  // Currently detected action body name (updated each frame)
+  private var detectedActionName: String?
+  // Sensor body in front of capsule for detecting action triggers
+  private var capsuleSensorBodyID: BodyID?
+  // Flag to track if physics system is ready for updates
+  private var physicsSystemReady: Bool = false
   var currentProjection: mat4 = mat4(1)  // Accessible by debug renderer implementation
   var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
 
-  @Editable var showDebugRenderer: Bool = false
+  @Editable var visualizePhysics: Bool = false
+  @Editable var disableDepth: Bool = false
 
   // Scene and camera
   private var scene: Assimp.Scene?
@@ -46,13 +59,15 @@ import Jolt
   // Prerendered environment renderer
   private var prerenderedEnvironment: PrerenderedEnvironment?
 
-  @Editable var nearestNeighbor: Bool = true {
+  //@Editable
+  var nearestNeighbor: Bool = true {
     didSet {
       prerenderedEnvironment?.nearestNeighborFiltering = nearestNeighbor
     }
   }
 
-  @Editable var selectedCamera: String = "1" {
+  // @Editable
+  var selectedCamera: String = "1" {
     didSet {
       if selectedCamera != oldValue {
         try? prerenderedEnvironment?.switchToCamera(selectedCamera)
@@ -61,13 +76,18 @@ import Jolt
   }
 
   /// Options for selectedCamera picker - automatically discovered by editor
-  @EditableOptions var selectedCameraOptions: [String] {
-    return prerenderedEnvironment?.getAvailableCameras() ?? ["1"]
-  }
+  // @EditableOptions var selectedCameraOptions: [String] {
+  //   return prerenderedEnvironment?.getAvailableCameras() ?? ["1"]
+  // }
 
   // Main menu system
   private var mainMenu: MainMenu?
   private var showingMainMenu: Bool = false
+
+  // Dialog system
+  private var dialogView: DialogView?
+  // Scene script instance
+  private var sceneScript: Script?
 
   // Room boundaries
   private let roomSize: Float = 10.0
@@ -85,6 +105,12 @@ import Jolt
 
     // Load capsule mesh from GLB file
     loadCapsuleMesh()
+
+    // Initialize dialog view
+    dialogView = DialogView()
+
+    // Load scene script class dynamically
+    loadSceneScript()
 
     // Initialize prerendered environment
     do {
@@ -131,6 +157,13 @@ import Jolt
       numObjectLayers: numObjectLayers
     )
 
+    // Create job system for physics updates (required for PhysicsSystem::Update)
+    jobSystem = JobSystemThreadPool(
+      maxJobs: 1024,
+      maxBarriers: 8,
+      numThreads: -1  // Auto-detect number of threads
+    )
+
     // Create physics system with proper filters
     physicsSystem = PhysicsSystem(
       maxBodies: 1024,
@@ -162,6 +195,25 @@ import Jolt
       await MainActor.run {
         if let loadedScene = scene {
           loadCollisionBodiesIntoPhysics(scene: loadedScene)
+          loadActionBodiesIntoPhysics(scene: loadedScene)
+          // Optimize broad phase after adding bodies (recommended before first Update)
+          physicsSystem?.optimizeBroadPhase()
+
+          // Create character controller now that physics is ready
+          if let physicsSystem = physicsSystem {
+            // Spawn at Entry_1 if present
+            if let entryNode = loadedScene.rootNode.findNode(named: "Entry_1") {
+              let entryWorld = calculateNodeWorldTransform(entryNode, scene: loadedScene)
+              let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
+              let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
+              let yaw = atan2(fwd.x, fwd.z)
+              let spawnRot = yaw - (.pi * 0.5)
+              createCharacterController(at: extractedPos, rotation: spawnRot, in: physicsSystem)
+            }
+          }
+
+          // Mark physics system as ready for updates
+          physicsSystemReady = true
         }
       }
     }
@@ -207,11 +259,7 @@ import Jolt
             print(
               "📐 Entry_1 world transform translation column [3]: (\(entryWorld[3].x), \(entryWorld[3].y), \(entryWorld[3].z))"
             )
-
-            // Create character controller for physics-based movement
-            if let physicsSystem = self.physicsSystem {
-              self.createCharacterController(at: extractedPos, rotation: self.spawnRotation, in: physicsSystem)
-            }
+            // Character controller will be created after physics system is ready (in setupGameplay)
 
             // Disable small-room clamping for real scene navigation
             self.restrictMovementToRoom = false
@@ -317,10 +365,10 @@ import Jolt
     if let node = scene.rootNode.findNode(named: nodeName) {
       camera1Node = node
       camera1WorldTransform = calculateNodeWorldTransform(node, scene: scene)
-      //print("✅ Active camera node: \(nodeName)")
+      print("✅ Active camera node: \(nodeName)")
       // Debug: Print camera transform
       let cameraPos = vec3(camera1WorldTransform[3].x, camera1WorldTransform[3].y, camera1WorldTransform[3].z)
-      //print("📷 Camera world transform position: \(cameraPos)")
+      print("📷 Camera world transform position: \(cameraPos)")
     } else {
       print("⚠️ Camera node not found: \(nodeName)")
       camera1Node = nil
@@ -333,7 +381,9 @@ import Jolt
       prerenderedEnvironment?.near = cam.clipPlaneNear
       prerenderedEnvironment?.far = cam.clipPlaneFar
       // If Blender mist settings are known, keep defaults (0.1 / 25.0) or adjust here
-      //print("✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)")
+      print(
+        "✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
+      )
     } else {
       print("⚠️ Camera struct not found for name: \(nodeName)")
       camera1 = nil
@@ -386,12 +436,19 @@ import Jolt
       // Update main menu
       mainMenu?.update(window: window, deltaTime: deltaTime)
     } else {
-      // Handle WASD movement
-      handleMovement(window.keyboard, deltaTime)
+      // Only handle movement if dialog is not active (text is empty)
+      let isDialogActive = dialogView?.text.isEmpty == false
+      if !isDialogActive {
+        // Handle WASD movement
+        handleMovement(window.keyboard, deltaTime)
+      }
 
       // Update prerendered environment animation
       prerenderedEnvironment?.update()
     }
+
+    // Update dialog view
+    dialogView?.update(deltaTime: deltaTime)
 
     // Update FPS (EMA)
     if deltaTime > 0 {
@@ -402,8 +459,22 @@ import Jolt
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     if showingMainMenu {
-      // Handle escape to close main menu
+      // Handle escape key with nested view support
       if key == .escape {
+        // If there's a nested view (item/document), let MainMenu handle it first
+        if let mainMenu = mainMenu, mainMenu.hasNestedViewOpen {
+          // Forward to main menu, which will forward to the nested view
+          mainMenu.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+          return
+        }
+        // No nested view, close the main menu
+        UISound.select()
+        hideMainMenu()
+        return
+      }
+
+      // Handle I, M, and Tab to close main menu (always close, no nested check)
+      if key == .i || key == .m || key == .tab {
         UISound.select()
         hideMainMenu()
         return
@@ -412,7 +483,38 @@ import Jolt
       // Forward other input to main menu
       mainMenu?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
     } else {
-      // Handle gameplay keys
+      // Check if dialog is active (text is not empty)
+      let isDialogActive = dialogView?.text.isEmpty == false
+
+      // Handle dialog advancement keys first (these always work)
+      switch key {
+      case .f, .space, .enter, .numpadEnter:
+        // Handle interaction - either advance dialog or interact with action
+        // Dialog advancement keys always work, even when dialog is active
+        if let dialogView = dialogView, !dialogView.text.isEmpty {
+          // If dialog is showing, try to advance it
+          if dialogView.tryAdvance() {
+            // Advanced to next page/chunk
+            //UISound.select()
+          } else if dialogView.isFinished {
+            // Dialog finished, close it
+            //UISound.select()
+            dialogView.text = ""
+          }
+        } else {
+          // No dialog showing, handle interaction with detected action
+          handleInteraction()
+        }
+        return
+
+      default:
+        break
+      }
+
+      // Skip other gameplay keys if dialog is active and not finished
+      guard !isDialogActive else { return }
+
+      // Handle other gameplay keys
       switch key {
       case .tab, .i:
         UISound.select()
@@ -430,20 +532,22 @@ import Jolt
         UISound.select()
         prerenderedEnvironment?.cycleToNextCamera()
         selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-        // Try to sync to corresponding Assimp camera (e.g., "1" -> "Camera_1")
-        if let name = Int(selectedCamera) { syncActiveCamera(name: "Camera_\(name)") }
+        // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
+        syncActiveCamera(name: "Camera_\(selectedCamera)")
 
       case .apostrophe:
         UISound.select()
         prerenderedEnvironment?.cycleToPreviousCamera()
         selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-        if let name = Int(selectedCamera) { syncActiveCamera(name: "Camera_\(name)") }
+        // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
+        syncActiveCamera(name: "Camera_\(selectedCamera)")
 
       case .graveAccent:
         UISound.select()
         prerenderedEnvironment?.switchToDebugCamera()
         selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-        if let name = Int(selectedCamera) { syncActiveCamera(name: "Camera_\(name)") }
+        // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
+        syncActiveCamera(name: "Camera_\(selectedCamera)")
 
       case .r:
         UISound.select()
@@ -470,13 +574,12 @@ import Jolt
 
       case .u:
         UISound.select()
-        showDebugRenderer.toggle()
-        print("Debug renderer: \(showDebugRenderer ? "ON" : "OFF")")
+        visualizePhysics.toggle()
+        print("Debug renderer: \(visualizePhysics ? "ON" : "OFF")")
 
       default:
         break
       }
-
     }
   }
 
@@ -494,7 +597,41 @@ import Jolt
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     if showingMainMenu {
+      // Handle right-click with nested view support (same as Escape)
+      if button == .right {
+        // If there's a nested view (item/document), let MainMenu handle it first
+        if let mainMenu = mainMenu, mainMenu.hasNestedViewOpen {
+          // Forward to main menu, which will forward to the nested view
+          mainMenu.onMouseButtonPressed(window: window, button: button, mods: mods)
+          return
+        }
+        // No nested view, close the main menu
+        UISound.select()
+        hideMainMenu()
+        return
+      }
+
+      // Forward other mouse input to main menu
       mainMenu?.onMouseButtonPressed(window: window, button: button, mods: mods)
+    } else {
+      // Handle interaction - either advance dialog or interact with action
+      // Dialog advancement always works, even when dialog is active
+      if button == .left {
+        if let dialogView = dialogView, !dialogView.text.isEmpty {
+          // If dialog is showing, try to advance it
+          if dialogView.tryAdvance() {
+            // Advanced to next page/chunk
+            UISound.select()
+          } else if dialogView.isFinished {
+            // Dialog finished, close it
+            dialogView.text = ""
+            UISound.select()
+          }
+        } else {
+          // No dialog showing, handle interaction with detected action
+          handleInteraction()
+        }
+      }
     }
   }
 
@@ -517,6 +654,55 @@ import Jolt
 
   private func hideMainMenu() {
     showingMainMenu = false
+  }
+
+  private func loadSceneScript() {
+    guard let dialogView = dialogView else { return }
+
+    // Convert scene name to class name (e.g., "radar_office" -> "RadarOffice", "test" -> "Test")
+    let className = sceneNameToClassName(sceneName)
+
+    // Try to load the class using Objective-C runtime
+    // NSClassFromString requires the full module name in Swift
+    let fullClassName = "Game.\(className)"
+    guard let scriptClass = NSClassFromString(fullClassName) as? Script.Type else {
+      logger.error("⚠️ Could not load scene script class: \(fullClassName)")
+      return
+    }
+
+    // Create an instance of the script class, passing dialogView to init
+    sceneScript = scriptClass.init(dialogView: dialogView)
+    logger.info("✅ Loaded scene script: \(className)")
+  }
+
+  /// Convert scene name to class name
+  /// Examples: "test" -> "Test", "radar_office" -> "RadarOffice"
+  private func sceneNameToClassName(_ sceneName: String) -> String {
+    // Split by underscores and capitalize first letter of each word
+    let components = sceneName.split(separator: "_")
+    let capitalized = components.map { word in
+      word.isEmpty ? "" : word.prefix(1).uppercased() + word.dropFirst().lowercased()
+    }
+    return capitalized.joined()
+  }
+
+  private func handleInteraction() {
+    guard let detectedActionName else { return }
+    guard let sceneScript = sceneScript else { return }
+
+    // Convert action name to method name (e.g., "Stove" -> "stove")
+    let methodName = detectedActionName.prefix(1).lowercased() + detectedActionName.dropFirst()
+
+    // Create selector for method with no parameters using Foundation
+    let selector = Selector(methodName)
+
+    // Check if the method exists and call it
+    if sceneScript.responds(to: selector) {
+      _ = sceneScript.perform(selector)
+    } else {
+      // If method not found, log a warning
+      logger.warning("⚠️ Scene script does not respond to method: \(methodName)")
+    }
   }
 
   /// Get available cameras for editor integration
@@ -557,17 +743,56 @@ import Jolt
     characterController?.mass = 70.0  // kg
     characterController?.maxStrength = 500.0  // N
 
+    // Create a sensor sphere in front of the capsule for detecting action triggers
+    createCapsuleSensor(at: position, in: system)
+
     print("✅ Created character controller at position (\(position.x), \(position.y), \(position.z))")
+  }
+
+  private func createCapsuleSensor(at position: vec3, in system: PhysicsSystem) {
+    guard let physicsSystem = physicsSystem else { return }
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    // Create a small sphere sensor in front of the capsule
+    // Position it slightly in front and at the same height as the capsule
+    let sensorRadius: Float = 0.5
+    let sensorDistance: Float = 1.2  // Distance in front of capsule
+    let sensorShape = SphereShape(radius: sensorRadius)
+
+    // Position sensor in front of capsule (using forward direction)
+    let forwardX = GLMath.sin(spawnRotation)
+    let forwardZ = GLMath.cos(spawnRotation)
+    let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
+    let sensorPosition = position + sensorOffset
+
+    // Create body settings - make it a kinematic sensor so it moves with the capsule
+    let bodySettings = BodyCreationSettings(
+      shape: sensorShape,
+      position: RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z),
+      rotation: Quat.identity,
+      motionType: .kinematic,
+      objectLayer: 2  // Same layer as character
+    )
+    bodySettings.isSensor = true  // Make it a sensor
+
+    // Create and add sensor body
+    let sensorBodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+    if sensorBodyID != 0 {
+      capsuleSensorBodyID = sensorBodyID
+      print("✅ Created capsule sensor body ID: \(sensorBodyID)")
+    } else {
+      print("❌ Failed to create capsule sensor")
+    }
   }
 
   private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
     // Tank controls: A/D rotate, W/S move forward/backward
     let rotationDelta = rotationSpeed * deltaTime
 
-    if keyboard.state(of: .a) == .pressed {
+    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
       playerRotation += rotationDelta
     }
-    if keyboard.state(of: .d) == .pressed {
+    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
       playerRotation -= rotationDelta
     }
 
@@ -590,10 +815,9 @@ import Jolt
       // Calculate desired horizontal velocity from input
       var desiredVelocity = Vec3(x: 0, y: 0, z: 0)
 
-      if keyboard.state(of: .w) == .pressed {
+      if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
         desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
-      }
-      if keyboard.state(of: .s) == .pressed {
+      } else if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
         desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
       }
 
@@ -617,40 +841,94 @@ import Jolt
       let rotationQuat = Quat(x: 0, y: sin(playerRotation / 2), z: 0, w: cos(playerRotation / 2))
       characterController.rotation = rotationQuat
 
-      // Update character controller (this does the physics movement)
-      let characterLayer: ObjectLayer = 2  // Dynamic layer
-      characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
+      // Only update character controller and physics system if ready
+      if physicsSystemReady {
+        // Update character controller (this does the physics movement)
+        let characterLayer: ObjectLayer = 2  // Dynamic layer
+        characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
 
-      // Update physics system
-      physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: nil)
+        // Update physics system (jobSystem is required)
+        if let jobSystem {
+          physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: jobSystem)
+        }
+      }
+
+      // Check for action body contacts (sensor bodies)
+      // Query the sensor body to see if it's touching any action bodies
+      detectedActionName = nil
+
+      // Also check character controller contacts
+      let contacts = characterController.activeContacts()
+      for contact in contacts {
+        if contact.isSensorB, let actionName = actionBodyNames[contact.bodyID] {
+          detectedActionName = actionName.replacing(/-action$/, with: "")
+          break  // Just show first detected action
+        }
+      }
+
+      // Update capsule sensor position to follow the capsule in front
+      // And check for action body overlaps using collision query
+      if let sensorBodyID = capsuleSensorBodyID {
+        let bodyInterface = physicsSystem.bodyInterface()
+
+        // Calculate position in front of capsule based on current rotation
+        let forwardX = GLMath.sin(playerRotation)
+        let forwardZ = GLMath.cos(playerRotation)
+        let sensorDistance: Float = 1.2
+        let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
+        let sensorPosition = playerPosition + sensorOffset
+
+        // Update sensor position using Body wrapper
+        var sensorBody = bodyInterface.body(sensorBodyID, in: physicsSystem)
+        sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
+
+        // Query for overlapping action bodies using collision query
+        let sensorShape = SphereShape(radius: 0.5)
+        var baseOffset = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
+        let queryResults = physicsSystem.collideShapeAll(
+          shape: sensorShape,
+          scale: Vec3(x: 1, y: 1, z: 1),
+          baseOffset: &baseOffset
+        )
+
+        // Check if any of the colliding bodies are action bodies
+        // JPH_CollideShapeResult has bodyID2 field (not bodyID)
+        for result in queryResults {
+          let bodyID = result.bodyID2
+          if let actionName = actionBodyNames[bodyID] {
+            detectedActionName = actionName.replacing(/-action$/, with: "")
+            break  // Just show first detected action
+          }
+        }
+      }
 
       // Read position back from character controller
       let characterPos = characterController.position
       playerPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
-    } else {
-      // Fallback to manual movement if character controller not available
-      // Check for speed boost (Shift key)
-      let speedMultiplier: Float
-      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
-        speedMultiplier = 2.5  // 2.5x speed when holding Shift
-      } else {
-        speedMultiplier = 1.0
-      }
-      let moveDistance = moveSpeed * speedMultiplier * deltaTime
-
-      if keyboard.state(of: .w) == .pressed {
-        playerPosition += forward * moveDistance
-      }
-      if keyboard.state(of: .s) == .pressed {
-        playerPosition -= forward * moveDistance
-      }
-
-      if restrictMovementToRoom {
-        // Simple collision with room boundaries
-        let halfRoom = roomSize / 2.0
-        playerPosition.x = max(-halfRoom, min(halfRoom, playerPosition.x))
-        playerPosition.z = max(-halfRoom, min(halfRoom, playerPosition.z))
-      }
+      //    } else {
+      //      // Fallback to manual movement if character controller not available
+      //      // Check for speed boost (Shift key)
+      //      let speedMultiplier: Float
+      //      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
+      //        speedMultiplier = 2.5  // 2.5x speed when holding Shift
+      //      } else {
+      //        speedMultiplier = 1.0
+      //      }
+      //      let moveDistance = moveSpeed * speedMultiplier * deltaTime
+      //
+      //      if keyboard.state(of: .w) == .pressed {
+      //        playerPosition += forward * moveDistance
+      //      }
+      //      if keyboard.state(of: .s) == .pressed {
+      //        playerPosition -= forward * moveDistance
+      //      }
+      //
+      //      if restrictMovementToRoom {
+      //        // Simple collision with room boundaries
+      //        let halfRoom = roomSize / 2.0
+      //        playerPosition.x = max(-halfRoom, min(halfRoom, playerPosition.x))
+      //        playerPosition.z = max(-halfRoom, min(halfRoom, playerPosition.z))
+      //      }
     }
   }
 
@@ -695,6 +973,11 @@ import Jolt
       GraphicsContext.current?.renderer.withUIContext {
         // Render prerendered environment first (as background)
         prerenderedEnvironment?.render(projectionMatrix: projection)
+
+        // Clear depth buffer after rendering if debug flag is set
+        if disableDepth {
+          glClear(GL_DEPTH_BUFFER_BIT)
+        }
       }
 
       // Get view matrix from camera node's world transform
@@ -757,12 +1040,12 @@ import Jolt
       }
 
       // Draw 3D debug arrows for all Entry_* nodes
-      if let loadedScene = scene {
-        //drawEntryArrows(in: loadedScene, projection: projection, view: view)
-      }
+      //      if let loadedScene = scene {
+      //drawEntryArrows(in: loadedScene, projection: projection, view: view)
+      //      }
 
       // Update debug renderer camera and draw if enabled
-      if showDebugRenderer, let debugRenderer = debugRenderer {
+      if visualizePhysics, let debugRenderer = debugRenderer {
         currentProjection = projection
         currentView = view
 
@@ -788,6 +1071,11 @@ import Jolt
 
       // Debug overlay (top-left)
       drawDebugInfo()
+
+      // Draw dialog view (on top of everything)
+      GraphicsContext.current?.renderer.withUIContext {
+        dialogView?.draw()
+      }
     }
   }
 }
@@ -798,7 +1086,7 @@ extension MainLoop {
   private func drawDebugInfo() {
     let overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
-      "Scene: \(sceneName)",
+      //"Scene: \(sceneName)",
       "Camera: \(selectedCamera)",
       String(
         format: "Position: %.2f, %.2f, %.2f",
@@ -811,10 +1099,8 @@ extension MainLoop {
         playerRotation * 180.0 / .pi,
         playerRotation
       ),
-      "Debug Renderer: \(showDebugRenderer ? "ON" : "OFF")",
-      //"Health: 100% ",
-      //"Triggers: none",
-      //"Actions: none",
+      "Debug Renderer: \(visualizePhysics ? "ON" : "OFF")",
+      detectedActionName != nil ? "Action: \(detectedActionName!)" : "Action: none",
     ]
 
     let overlay = overlayLines.joined(separator: "\n")
@@ -924,6 +1210,65 @@ extension MainLoop {
               print("✅ Created collision body ID: \(bodyID) for node '\(name)'")
             } else {
               print("❌ Failed to create collision body for node '\(name)'")
+            }
+          }
+        }
+      }
+      for child in node.children { traverse(child) }
+    }
+    traverse(scene.rootNode)
+  }
+
+  private func loadActionBodiesIntoPhysics(scene: Assimp.Scene) {
+    guard let physicsSystem = physicsSystem else { return }
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    // Simple object layer for static action bodies (same as collision bodies)
+    let staticLayer: ObjectLayer = 1
+
+    func traverse(_ node: Assimp.Node) {
+      if let name = node.name, name.contains("-action") {
+        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+
+        // Get mesh from this node
+        if node.numberOfMeshes > 0 {
+          let meshIndex = node.meshes[0]
+          if meshIndex < scene.meshes.count {
+            let mesh = scene.meshes[Int(meshIndex)]
+
+            // Extract triangles from mesh and transform them to world space
+            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+
+            guard !triangles.isEmpty else { return }
+
+            // Create mesh shape from triangles (already in world space)
+            let meshShape = MeshShape(triangles: triangles)
+
+            // Position is at origin since triangles are already in world space
+            let position = vec3(0, 0, 0)
+            let rotation = Quat.identity
+
+            // Create body settings - mark as sensor so it doesn't collide but triggers
+            let bodySettings = BodyCreationSettings(
+              shape: meshShape,
+              position: RVec3(x: position.x, y: position.y, z: position.z),
+              rotation: rotation,
+              motionType: .static,
+              objectLayer: staticLayer
+            )
+            bodySettings.isSensor = true  // Make it a sensor/trigger
+
+            // Store user data with body ID so we can map it back to name
+            // We'll store the name in actionBodyNames after creation
+
+            // Create and add body to physics system
+            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+            if bodyID != 0 {
+              // Store mapping from body ID to node name
+              actionBodyNames[bodyID] = name
+              print("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
+            } else {
+              print("❌ Failed to create action trigger body for node '\(name)'")
             }
           }
         }

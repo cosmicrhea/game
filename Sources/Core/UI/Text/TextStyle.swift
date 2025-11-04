@@ -1,9 +1,4 @@
 extension TextStyle {
-  static let `default` = TextStyle(
-    fontName: "Determination",
-    fontSize: 16,
-    color: .white
-  )
 
   static let titleScreen = TextStyle(
     fontName: "Broken Glass",
@@ -18,22 +13,16 @@ extension TextStyle {
   )
 
   static let dialog = TextStyle(
-    fontName: "Determination",
-    fontSize: 24,
-    color: .gray500
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 48,
+    color: Color(0.42069, 0.4971, 0.5320, 1), // based on gray500
+//    color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
+    strokeWidth: 2,
+    strokeColor: Color(red: 0.078, green: 0.059, blue: 0.055, alpha: 1.0)
   )
 
-  static let dialogEmphasis = TextStyle(
-    fontName: dialog.fontName,
-    fontSize: dialog.fontSize,
-    color: .indigo
-  )
-
-  static let subtle: TextStyle = TextStyle(
-    fontName: dialog.fontName,
-    fontSize: dialog.fontSize,
-    color: .gray700
-  )
+  static let dialogEmphasis = dialog.withColor(.indigo)
+  static let dialogSubtle = dialog.withColor(.gray700)
 
   static let document = TextStyle(
     fontName: "CreatoDisplay-Medium",
@@ -68,26 +57,17 @@ extension TextStyle {
     strokeColor: .gray700
   )
 
-  static let menuItemDisabled = TextStyle(
-    fontName: "CreatoDisplay-Bold",
-    fontSize: 32,
-    color: .gray500,
-    strokeWidth: 2,
-    strokeColor: .gray900
-  )
+  static let menuItemDisabled = menuItem
+    .withColor(.gray500)
+    .withStrokeColor(.gray900)
 
-  // Text field styles (no stroke)
   static let textField = TextStyle(
     fontName: "CreatoDisplay-Bold",
     fontSize: 18,
     color: .gray300
   )
 
-  static let textFieldPlaceholder = TextStyle(
-    fontName: "CreatoDisplay-Bold",
-    fontSize: 18,
-    color: .gray500
-  )
+  static let textFieldPlaceholder = textField.withColor(.gray500)
 
   static let version = TextStyle(
     fontName: "CreatoDisplay-Bold",
@@ -123,14 +103,12 @@ extension TextStyle {
 
     if selected && !disabled {
       // Red text with dark red stroke for selected items
-      return
-        baseStyle
+      return baseStyle
         .withColor(.rose)
         .withStroke(width: 2, color: Color(0.3, 0.1, 0.1, 1.0))  // Dark red stroke
     } else if selected && disabled {
       // Dark red for disabled AND selected items
-      return
-        baseStyle
+      return baseStyle
         .withColor(Color(0.4, 0.1, 0.1, 1.0))  // Dark red color
         .withStroke(width: 2, color: Color(0.2, 0.05, 0.05, 1.0))  // Darker red stroke
     } else if disabled {
@@ -141,4 +119,5 @@ extension TextStyle {
       return baseStyle.withColor(.gray300)
     }
   }
+
 }

@@ -1,7 +1,7 @@
 @Editor final class MainMenu: RenderLoop {
   private let objectiveCallout = Callout("Make your way to Kastellet", icon: .chevron)
 
-  @Editable(range: 100...300) var marginX: Float = 244
+  @Editable(range: 100...400) var tabsRightMargin: Float = 380
   @Editable var health: Float = 1.0 { didSet { inventoryView.healthDisplay.health = health } }
 
   // Tab views
@@ -38,8 +38,25 @@
     tabs.setActiveTab(tab, animated: animated)
   }
 
+  /// Check if there's a nested view open (item, document, or popup menu)
+  var hasNestedViewOpen: Bool {
+    // Check for popup menu in inventory slot grid
+    if tabs.activeTab == .inventory && inventoryView.isSlotMenuVisible {
+      return true
+    }
+    // Check for item view in inventory
+    if tabs.activeTab == .inventory && inventoryView.showingItem {
+      return true
+    }
+    // Check for document view in library
+    if tabs.activeTab == .library && libraryView.showingDocument {
+      return true
+    }
+    return false
+  }
+
   func update(window: Window, deltaTime: Float) {
-    tabs.marginX = marginX
+    tabs.rightMargin = tabsRightMargin
     tabs.update(deltaTime: deltaTime)
     activeView.update(window: window, deltaTime: deltaTime)
     objectiveCallout.update(deltaTime: deltaTime)
@@ -116,7 +133,7 @@ final class MainMenuTabs {
     case library
   }
 
-  var marginX: Float = 0
+  var rightMargin: Float = 0
 
   private var currentTab: Tab = .inventory
 
@@ -228,10 +245,10 @@ final class MainMenuTabs {
         return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
       } else {
         // Right-align the tabs; include extra margin to align with grid
-        return Float(Engine.viewportSize.width) - totalWidth - marginX
+        return Float(Engine.viewportSize.width) - totalWidth - rightMargin
       }
     }()
-    let iconY: Float = 80
+    let iconY: Float = 212
 
     for (index, tab) in Tab.allCases.enumerated() {
       let iconX = startX + Float(index) * iconSpacing
@@ -296,10 +313,10 @@ final class MainMenuTabs {
         return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
       } else {
         // Shift a bit further left than the grid's margin to center over grid
-        return Float(Engine.viewportSize.width) - totalWidth - marginX
+        return Float(Engine.viewportSize.width) - totalWidth - rightMargin
       }
     }()
-    let iconY: Float = Float(Engine.viewportSize.height) - 80
+    let iconY: Float = Float(Engine.viewportSize.height) - 212
 
     // Draw prompts further down
     let promptY = iconY

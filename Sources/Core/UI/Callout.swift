@@ -1,3 +1,5 @@
+// NOTE: This file is kinda obscure on purpose.
+
 /// Available icon types for callouts.
 public enum CalloutIcon: String, CaseIterable {
   /// A chevron arrow icon.
@@ -136,7 +138,7 @@ public class Callout {
       case .objective(let offset):
         let w = Float(Engine.viewportSize.width) / 3
         let h: Float = 36
-        let topMargin: Float = 128
+        let topMargin: Float = 288
         let origin = Point(0, Float(Engine.viewportSize.height) - h - topMargin - offset)
         return (Rect(origin: origin, size: Size(w, h)), .right)
       case .tutorial:
@@ -144,7 +146,7 @@ public class Callout {
         let h: Float = 36
         let origin = Point(
           Float(Engine.viewportSize.width) * 0.5 - w * 0.5,
-          Float(Engine.viewportSize.height) * 0.5 - h * 0.5 - 128)
+          Float(Engine.viewportSize.height) * 0.5 - h * 0.5 - 288)
         return (Rect(origin: origin, size: Size(w, h)), .both)
       case .promptList(let width):
         let w = width
@@ -152,14 +154,14 @@ public class Callout {
         let origin = Point(Float(Engine.viewportSize.width) - w, 0)
         return (Rect(origin: origin, size: Size(w, h)), .left)
       case .itemDescription:
-        let w: Float = 480
+        let w: Float = 640  // 512? // 380?
         let h: Float = 128
-        let origin = Point(Engine.viewportSize.width - w, 96)
+        let origin = Point(Engine.viewportSize.width - w, 288)
         return (Rect(origin: origin, size: Size(w, h)), .left)
       case .healthDisplay:
         let w: Float = 128 + 44 * 2
         let h: Float = 128 + 24
-        let origin = Point(0, 96)
+        let origin = Point(0, 288)
         return (Rect(origin: origin, size: Size(w, h)), .right)
       }
     }()

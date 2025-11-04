@@ -9,36 +9,53 @@ final class OptionsScreen: Screen {
   }
 
   private let listMenu = ListMenu()
+  private let controlsPanel = ControlsOptionsPanel()
+  private let cameraPanel = CameraOptionsPanel()
+  private let displayPanel = DisplayOptionsPanel()
   private let audioPanel = AudioOptionsPanel()
-  private var showingAudio = false
+  private let languagePanel = LanguageOptionsPanel()
+  private let graphicsPanel = GraphicsOptionsPanel()
+  private var currentPanel: Panel? = nil
+
+  private var activePanel: OptionsPanel? {
+    guard let currentPanel else { return nil }
+    switch currentPanel {
+    case .controls: return controlsPanel
+    case .camera: return cameraPanel
+    case .display: return displayPanel
+    case .audio: return audioPanel
+    case .language: return languagePanel
+    case .graphics: return graphicsPanel
+    }
+  }
 
   override init() {
     super.init()
 
     let menuItems = [
       ListMenu.MenuItem(id: "controls", label: "Controls") {
-        print("Opening controls settings...")
-        // TODO: Navigate to controls submenu
+        UISound.select()
+        self.currentPanel = .controls
       },
       ListMenu.MenuItem(id: "camera", label: "Camera") {
-        print("Opening camera settings...")
-        // TODO: Navigate to camera submenu
+        UISound.select()
+        self.currentPanel = .camera
       },
       ListMenu.MenuItem(id: "display", label: "Display") {
-        print("Opening display settings...")
-        // TODO: Navigate to display submenu
+        UISound.select()
+        self.currentPanel = .display
       },
       ListMenu.MenuItem(id: "audio", label: "Audio") {
         UISound.select()
-        self.showingAudio = true
+        self.currentPanel = .audio
       },
       ListMenu.MenuItem(id: "language", label: "Language") {
-        print("Opening language settings...")
-        // TODO: Navigate to language submenu
+        UISound.select()
+        self.currentPanel = .language
       },
       ListMenu.MenuItem(id: "graphics", label: "Graphics") {
-        print("Opening graphics settings...")
-        // TODO: Navigate to graphics submenu
+        UISound.select()
+        self.currentPanel = .graphics
       },
     ]
 
@@ -50,13 +67,13 @@ final class OptionsScreen: Screen {
   }
 
   override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    if showingAudio {
+    if let activePanel {
       if key == .escape {
         UISound.select()
-        showingAudio = false
+        currentPanel = nil
         return
       }
-      if audioPanel.handleKey(key) { return }
+      if activePanel.handleKey(key) { return }
     }
 
     switch key {
@@ -75,17 +92,17 @@ final class OptionsScreen: Screen {
     case .left:
       let mousePosition = Point(
         Float(window.mouse.position.x), Float(Engine.viewportSize.height) - Float(window.mouse.position.y))
-      if showingAudio {
-        audioPanel.onMouseButtonPressed(window: window, button: button, mods: mods)
+      if let activePanel {
+        activePanel.onMouseButtonPressed(window: window, button: button, mods: mods)
       } else {
         listMenu.handleMouseClick(at: mousePosition)
       }
 
     case .right:
       // Right click to go back
-      if showingAudio {
+      if currentPanel != nil {
         UISound.select()
-        showingAudio = false
+        currentPanel = nil
       } else {
         UISound.select()
         back()
@@ -98,17 +115,17 @@ final class OptionsScreen: Screen {
 
   override func onMouseMove(window: Window, x: Double, y: Double) {
     let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
-    if showingAudio {
-      audioPanel.onMouseMove(window: window, x: x, y: y)
+    if let activePanel {
+      activePanel.onMouseMove(window: window, x: x, y: y)
     } else {
       listMenu.handleMouseMove(at: mousePosition)
     }
   }
 
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    if showingAudio {
+    if let activePanel {
       if state == .released {
-        audioPanel.onMouseButtonReleased(window: window, button: button, mods: mods)
+        activePanel.onMouseButtonReleased(window: window, button: button, mods: mods)
       }
     }
   }
@@ -117,9 +134,9 @@ final class OptionsScreen: Screen {
     // Left column menu
     listMenu.draw()
 
-    // Right panel when showing audio
-    if showingAudio {
-      audioPanel.draw()
+    // Right panel when showing a panel
+    if let activePanel {
+      activePanel.draw()
     }
   }
 }

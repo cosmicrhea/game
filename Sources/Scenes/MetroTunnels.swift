@@ -1,3 +1,5 @@
+@objcMembers
+@MainActor
 class MetroTunnels: Script {
 
   func meetWithLiz() {

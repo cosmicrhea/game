@@ -4,10 +4,10 @@ final class ItemDescriptionView {
   private let itemCallout = Callout(style: .itemDescription)
 
   /// Title text to render (e.g. item name or document title)
-  var title: String = "" { didSet { /* no-op */  } }
+  var title: String = ""
 
   /// Optional description text (e.g. item description). Leave empty for none
-  var descriptionText: String = "" { didSet { /* no-op */  } }
+  var descriptionText: String = ""
 
   init() {
     // Default initializer; no content
@@ -17,18 +17,20 @@ final class ItemDescriptionView {
   @MainActor func draw() {
     itemCallout.draw()
 
-    let panelWidth: Float = 480
+    let panelWidth: Float = 640
     let panelHeight: Float = 128
-    let marginY: Float = 96
+    let marginY: Float = 288
     let paddingX: Float = 32
     let paddingY: Float = 22
 
     let labelX: Float = Engine.viewportSize.width - panelWidth + paddingX
     let labelY: Float = marginY + panelHeight - paddingY
     let descriptionY = labelY - 32
-    let wrapWidth = panelWidth - paddingX * 2 - 96
+    //let wrapWidth = panelWidth - paddingX * 2 - 96  // = 352; 330?
+    let wrapWidth: Float = 333.0  // = 352; 330?
 
     title.draw(at: Point(labelX, labelY), style: .itemName)
+
     if !descriptionText.isEmpty {
       descriptionText.draw(at: Point(labelX, descriptionY), style: .itemDescription, wrapWidth: wrapWidth)
     }

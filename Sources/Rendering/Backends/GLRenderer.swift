@@ -112,7 +112,9 @@ public final class GLRenderer: Renderer {
   public func drawImage(
     textureID: UInt64,
     in rect: Rect,
-    tint: Color?
+    tint: Color?,
+    strokeWidth: Float,
+    strokeColor: Color?
   ) {
     // Apply coordinate flipping if the current GraphicsContext is flipped
     let finalRect: Rect
@@ -162,11 +164,6 @@ public final class GLRenderer: Renderer {
     glEnableVertexAttribArray(1)
     glVertexAttribPointer(1, 2, GL_FLOAT, false, GLsizei(4 * MemoryLayout<Float>.stride), uvOff)
 
-    // Ortho MVP will be set by caller shaders expecting uMVP; set to identity-like in pixel space.
-    // We don't have viewport here; rely on the shader behaving like ImageRenderer.
-    // For now, mimic ImageRenderer's usage path: set uniforms each call.
-    // NOTE: For a real impl, pass viewport size into GLRenderer to compute MVP.
-
     // Save state and configure blending
     Self.withUIContext {
       imageProgram.use()
@@ -185,14 +182,47 @@ public final class GLRenderer: Renderer {
         imageProgram.setMat4("uMVP", value: buf.baseAddress!)
       }
 
-      let tintColor = tint ?? .white
-      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
-
       glActiveTexture(GL_TEXTURE0)
       glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
       imageProgram.setInt("uTexture", value: 0)
 
-      glBindVertexArray(vao)
+      // Draw stroke outline if specified (similar to text stroke)
+      if strokeWidth > 0, let strokeColor = strokeColor {
+        imageProgram.setVec4(
+          "uTint",
+          value: (strokeColor.red, strokeColor.green, strokeColor.blue, strokeColor.alpha))
+
+        // Draw image at multiple offsets to create outline effect
+        let offsets: [(Float, Float)] = [
+          (-strokeWidth, 0), (strokeWidth, 0),
+          (0, -strokeWidth), (0, strokeWidth),
+          (-strokeWidth, -strokeWidth), (strokeWidth, strokeWidth),
+          (-strokeWidth, strokeWidth), (strokeWidth, -strokeWidth),
+        ]
+
+        for (offsetX, offsetY) in offsets {
+          var offsetVerts = verts
+          for i in stride(from: 0, to: offsetVerts.count, by: 4) {
+            offsetVerts[i] += offsetX
+            offsetVerts[i + 1] += offsetY
+          }
+
+          glBindBuffer(GL_ARRAY_BUFFER, vbo)
+          glBufferData(
+            GL_ARRAY_BUFFER, offsetVerts.count * MemoryLayout<Float>.stride, offsetVerts,
+            GL_DYNAMIC_DRAW)
+
+          glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+        }
+      }
+
+      // Draw fill
+      let tintColor = tint ?? .white
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo)
+      glBufferData(GL_ARRAY_BUFFER, verts.count * MemoryLayout<Float>.stride, verts, GL_DYNAMIC_DRAW)
+
       glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
       glBindVertexArray(0)
     }
@@ -207,7 +237,9 @@ public final class GLRenderer: Renderer {
     in rect: Rect,
     rotation: Float,
     scale: Point,
-    tint: Color?
+    tint: Color?,
+    strokeWidth: Float,
+    strokeColor: Color?
   ) {
     // Apply coordinate flipping if the current GraphicsContext is flipped
     let finalRect: Rect
@@ -293,14 +325,57 @@ public final class GLRenderer: Renderer {
       ]
       mvp.withUnsafeBufferPointer { buf in imageProgram.setMat4("uMVP", value: buf.baseAddress!) }
 
-      let tintColor = tint ?? .white
-      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
-
       glActiveTexture(GL_TEXTURE0)
       glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
       imageProgram.setInt("uTexture", value: 0)
 
-      glBindVertexArray(vao)
+      // Draw stroke outline if specified
+      if strokeWidth > 0, let strokeColor = strokeColor {
+        imageProgram.setVec4(
+          "uTint",
+          value: (strokeColor.red, strokeColor.green, strokeColor.blue, strokeColor.alpha))
+
+        // For rotated images, apply stroke offsets in the rotated coordinate space
+        let offsets: [(Float, Float)] = [
+          (-strokeWidth, 0), (strokeWidth, 0),
+          (0, -strokeWidth), (0, strokeWidth),
+          (-strokeWidth, -strokeWidth), (strokeWidth, strokeWidth),
+          (-strokeWidth, strokeWidth), (strokeWidth, -strokeWidth),
+        ]
+
+        // Rotate offset vectors
+        let c = cos(rotation)
+        let s = sin(rotation)
+        func rotOffset(_ offsetX: Float, _ offsetY: Float) -> (Float, Float) {
+          let rx = offsetX * c - offsetY * s
+          let ry = offsetX * s + offsetY * c
+          return (rx, ry)
+        }
+
+        for (offsetX, offsetY) in offsets {
+          let (rotX, rotY) = rotOffset(offsetX, offsetY)
+          var offsetVerts = verts
+          for i in stride(from: 0, to: offsetVerts.count, by: 4) {
+            offsetVerts[i] += rotX
+            offsetVerts[i + 1] += rotY
+          }
+
+          glBindBuffer(GL_ARRAY_BUFFER, vbo)
+          glBufferData(
+            GL_ARRAY_BUFFER, offsetVerts.count * MemoryLayout<Float>.stride, offsetVerts,
+            GL_DYNAMIC_DRAW)
+
+          glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+        }
+      }
+
+      // Draw fill
+      let tintColor = tint ?? .white
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo)
+      glBufferData(GL_ARRAY_BUFFER, verts.count * MemoryLayout<Float>.stride, verts, GL_DYNAMIC_DRAW)
+
       glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
       glBindVertexArray(0)
     }
@@ -314,7 +389,9 @@ public final class GLRenderer: Renderer {
     textureID: UInt64,
     in rect: Rect,
     uv: Rect,
-    tint: Color?
+    tint: Color?,
+    strokeWidth: Float,
+    strokeColor: Color?
   ) {
     //print("GLRenderer.drawImageRegion: textureID=\(textureID), rect=\(rect), uv=\(uv)")
 
@@ -379,14 +456,47 @@ public final class GLRenderer: Renderer {
         imageProgram.setMat4("uMVP", value: buf.baseAddress!)
       }
 
-      let tintColor = tint ?? .white
-      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
-
       glActiveTexture(GL_TEXTURE0)
       glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
       imageProgram.setInt("uTexture", value: 0)
 
-      glBindVertexArray(vao)
+      // Draw stroke outline if specified
+      if strokeWidth > 0, let strokeColor = strokeColor {
+        imageProgram.setVec4(
+          "uTint",
+          value: (strokeColor.red, strokeColor.green, strokeColor.blue, strokeColor.alpha))
+
+        // Draw image at multiple offsets to create outline effect
+        let offsets: [(Float, Float)] = [
+          (-strokeWidth, 0), (strokeWidth, 0),
+          (0, -strokeWidth), (0, strokeWidth),
+          (-strokeWidth, -strokeWidth), (strokeWidth, strokeWidth),
+          (-strokeWidth, strokeWidth), (strokeWidth, -strokeWidth),
+        ]
+
+        for (offsetX, offsetY) in offsets {
+          var offsetVerts = verts
+          for i in stride(from: 0, to: offsetVerts.count, by: 4) {
+            offsetVerts[i] += offsetX
+            offsetVerts[i + 1] += offsetY
+          }
+
+          glBindBuffer(GL_ARRAY_BUFFER, vbo)
+          glBufferData(
+            GL_ARRAY_BUFFER, offsetVerts.count * MemoryLayout<Float>.stride, offsetVerts,
+            GL_DYNAMIC_DRAW)
+
+          glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+        }
+      }
+
+      // Draw fill
+      let tintColor = tint ?? .white
+      imageProgram.setVec4("uTint", value: (tintColor.red, tintColor.green, tintColor.blue, tintColor.alpha))
+
+      glBindBuffer(GL_ARRAY_BUFFER, vbo)
+      glBufferData(GL_ARRAY_BUFFER, verts.count * MemoryLayout<Float>.stride, verts, GL_DYNAMIC_DRAW)
+
       glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
       glBindVertexArray(0)
     }
@@ -1402,7 +1512,7 @@ public final class GLRenderer: Renderer {
 
     // Generate 8 vertices for a box (2 cross-sections, 4 vertices each)
     var vertices: [Float] = []
-    var indices: [UInt32] = []
+    //var indices: [UInt32] = []
 
     // First cross-section at 'from'
     let offset1 = perpendicular * halfThickness + perpendicular2 * halfThickness

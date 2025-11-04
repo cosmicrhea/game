@@ -7,6 +7,7 @@ import unistd
 #endif
 
 let DESIGN_RESOLUTION = Size(1280, 800)
+//let DESIGN_RESOLUTION = Size(1920, 1200)
 //let DESIGN_RESOLUTION = Size(1800, 1126)
 
 struct CLIOptions: ParsableArguments {
@@ -120,7 +121,10 @@ public final class Engine {
     GLFWWindow.hints.contextVersion = (4, 1)
     GLFWWindow.hints.openGLProfile = .core
     GLFWWindow.hints.openGLCompatibility = .forward
-    GLFWWindow.hints.retinaFramebuffer = false
+    #if os(macOS)
+      GLFWWindow.hints.retinaFramebuffer = false
+    #endif
+    GLFWWindow.hints.openGLDebugMode = true
   }
 
   private func setupWindow() {
@@ -138,6 +142,10 @@ public final class Engine {
       window.nsWindow?.hideStandardWindowButtons()
     //window.nsWindow?.darkenStandardWindowButtons()
     #endif
+
+    window.framebufferSizeChangeHandler = { [weak self] _, _, _ in
+      self?.advanceMainLoop()
+    }
 
     window.position = .zero
     window.context.makeCurrent()
@@ -239,6 +247,7 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
+      DialogDemo(),
       MapView(),
       ItemView(item: .sigp320),
       ItemStorageView(),
@@ -536,59 +545,63 @@ public final class Engine {
 
   private func runMainLoop() {
     while !window.shouldClose {
-      let currentFrame = Float(GLFWSession.currentTime)
-      deltaTime = currentFrame - lastFrame
-      lastFrame = currentFrame
-
-      activeLoop.update(window: window, deltaTime: deltaTime)
-
-      Self._cachedViewportSize = Size(Float(window.size.width), Float(window.size.height))
-      renderer.beginFrame(windowSize: Size(Float(window.size.width), Float(window.size.height)))
-
-      GraphicsContext.withContext(graphicsContext) {
-        activeLoop.draw()
-      }
-
-      // Draw screen fade in UI context so it always appears on top
-      renderer.withUIContext {
-        ScreenFadeFBO.shared.update(deltaTime: deltaTime)
-        ScreenFadeFBO.shared.draw(screenSize: renderer.viewportSize)
-      }
-
-      renderer.endFrame()
-
-      // Render editor window if visible (after main window is done)
-      if config.editorEnabled && !editorWindow.shouldClose {
-        // Advance editor UI animations with the same deltaTime
-        editorPanel.update(deltaTime: deltaTime)
-        renderEditorWindow()
-      }
-
-      if showStats && GLFWSession.currentTime - lastTitleUpdateTime > 1.0 {
-        lastTitleUpdateTime = GLFWSession.currentTime
-        updateWindowTitle()
-      }
-
-      if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
-        requestScreenshot = true
-        scheduleScreenshotAt = nil
-      }
-
-      if requestScreenshot {
-        requestScreenshot = false
-        saveScreenshot(
-          width: Int32(renderer.viewportSize.width),
-          height: Int32(renderer.viewportSize.height),
-          path: cli.screenshot
-        )
-      }
-
       if let t = scheduleExitAt, GLFWSession.currentTime >= t {
         break
       }
 
-      window.swapBuffers()
-      GLFWSession.pollInputEvents()
+      advanceMainLoop()
     }
+  }
+
+  private func advanceMainLoop() {
+    let currentFrame = Float(GLFWSession.currentTime)
+    deltaTime = currentFrame - lastFrame
+    lastFrame = currentFrame
+
+    activeLoop.update(window: window, deltaTime: deltaTime)
+
+    Self._cachedViewportSize = Size(Float(window.size.width), Float(window.size.height))
+    renderer.beginFrame(windowSize: Size(Float(window.size.width), Float(window.size.height)))
+
+    GraphicsContext.withContext(graphicsContext) {
+      activeLoop.draw()
+    }
+
+    // Draw screen fade in UI context so it always appears on top
+    renderer.withUIContext {
+      ScreenFadeFBO.shared.update(deltaTime: deltaTime)
+      ScreenFadeFBO.shared.draw(screenSize: renderer.viewportSize)
+    }
+
+    renderer.endFrame()
+
+    // Render editor window if visible (after main window is done)
+    if config.editorEnabled && !editorWindow.shouldClose {
+      // Advance editor UI animations with the same deltaTime
+      editorPanel.update(deltaTime: deltaTime)
+      renderEditorWindow()
+    }
+
+    if showStats && GLFWSession.currentTime - lastTitleUpdateTime > 1.0 {
+      lastTitleUpdateTime = GLFWSession.currentTime
+      updateWindowTitle()
+    }
+
+    if let t = scheduleScreenshotAt, GLFWSession.currentTime >= t {
+      requestScreenshot = true
+      scheduleScreenshotAt = nil
+    }
+
+    if requestScreenshot {
+      requestScreenshot = false
+      saveScreenshot(
+        width: Int32(renderer.viewportSize.width),
+        height: Int32(renderer.viewportSize.height),
+        path: cli.screenshot
+      )
+    }
+
+    window.swapBuffers()
+    GLFWSession.pollInputEvents()
   }
 }

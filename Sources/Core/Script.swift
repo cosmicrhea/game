@@ -13,7 +13,15 @@ class Character {
 
 }
 
+@MainActor
 class Script: NSObject {
+
+  private var dialogView: DialogView
+
+  required init(dialogView: DialogView) {
+    self.dialogView = dialogView
+    super.init()
+  }
 
   //private var storageView = ItemStorageView()
 
@@ -21,7 +29,8 @@ class Script: NSObject {
 
   func loadScene(_ name: String, entry entryName: String? = nil) {}
 
-  func say(_ string: String) {}
+  @MainActor func say(_ string: String) { dialogView.print(chunks: [string]) }
+  @MainActor func say(_ strings: [String]) { dialogView.print(chunks: strings) }
 
   func ask(_ string: String, options: [String]) -> String { options[0] }
 

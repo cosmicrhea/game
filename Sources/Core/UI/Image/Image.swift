@@ -68,8 +68,18 @@ public struct Image: Sendable {
   /// - Parameters:
   ///   - point: Destination origin in points.
   ///   - size: Optional draw size; defaults to `naturalSize`.
+  ///   - tint: Optional color tint to apply to the image.
+  ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
+  ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  public func draw(at point: Point, size: Size? = nil, context: GraphicsContext? = nil) {
+  public func draw(
+    at point: Point,
+    size: Size? = nil,
+    tint: Color? = nil,
+    strokeWidth: Float? = nil,
+    strokeColor: Color? = nil,
+    context: GraphicsContext? = nil
+  ) {
     let ctx = context ?? GraphicsContext.current
     guard let ctx else { return }
     guard textureID != 0 else { return }
@@ -92,16 +102,26 @@ public struct Image: Sendable {
     ctx.renderer.drawImage(
       textureID: textureID,
       in: adjustedRect,
-      tint: nil
+      tint: tint,
+      strokeWidth: strokeWidth ?? 0,
+      strokeColor: strokeColor
     )
   }
 
   /// Draws the image in the specified rectangle.
   /// - Parameters:
   ///   - rect: Destination rectangle in points.
-  ///   - tint:
+  ///   - tint: Optional color tint to apply to the image.
+  ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
+  ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
-  public func draw(in rect: Rect, tint: Color? = nil, context: GraphicsContext? = nil) {
+  public func draw(
+    in rect: Rect,
+    tint: Color? = nil,
+    strokeWidth: Float? = nil,
+    strokeColor: Color? = nil,
+    context: GraphicsContext? = nil
+  ) {
     let ctx = context ?? GraphicsContext.current
     guard let ctx else { return }
     guard textureID != 0 else { return }
@@ -123,7 +143,9 @@ public struct Image: Sendable {
     ctx.renderer.drawImage(
       textureID: textureID,
       in: adjustedRect,
-      tint: tint
+      tint: tint,
+      strokeWidth: strokeWidth ?? 0,
+      strokeColor: strokeColor
     )
   }
 
@@ -133,12 +155,16 @@ public struct Image: Sendable {
   ///   - rotation: Rotation in radians, applied around rect center.
   ///   - scale: Optional scale (default 1,1), applied around rect center.
   ///   - tint: Optional color tint.
+  ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
+  ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   public func draw(
     in rect: Rect,
     rotation: Float,
     scale: Point = Point(1, 1),
     tint: Color? = nil,
+    strokeWidth: Float? = nil,
+    strokeColor: Color? = nil,
     context: GraphicsContext? = nil
   ) {
     let ctx = context ?? GraphicsContext.current
@@ -163,7 +189,9 @@ public struct Image: Sendable {
       in: adjustedRect,
       rotation: rotation,
       scale: scale,
-      tint: tint
+      tint: tint,
+      strokeWidth: strokeWidth ?? 0,
+      strokeColor: strokeColor
     )
   }
 
@@ -175,11 +203,21 @@ public struct Image: Sendable {
     rotation: Float,
     scale: Point = Point(1, 1),
     tint: Color? = nil,
+    strokeWidth: Float? = nil,
+    strokeColor: Color? = nil,
     context: GraphicsContext? = nil
   ) {
     let drawSize = size ?? naturalSize
     let rect = Rect(origin: point, size: drawSize)
-    draw(in: rect, rotation: rotation, scale: scale, tint: tint, context: context)
+    draw(
+      in: rect,
+      rotation: rotation,
+      scale: scale,
+      tint: tint,
+      strokeWidth: strokeWidth,
+      strokeColor: strokeColor,
+      context: context
+    )
   }
 
   /// Writes the image to a PNG file.
