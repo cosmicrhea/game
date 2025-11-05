@@ -1,7 +1,7 @@
 @Editor final class MainMenu: RenderLoop {
   private let objectiveCallout = Callout("Make your way to Kastellet", icon: .chevron)
 
-  @Editable(range: 100...400) var tabsRightMargin: Float = 380
+  @Editable(range: 100...300) var marginX: Float = 244
   @Editable var health: Float = 1.0 { didSet { inventoryView.healthDisplay.health = health } }
 
   // Tab views
@@ -56,7 +56,7 @@
   }
 
   func update(window: Window, deltaTime: Float) {
-    tabs.rightMargin = tabsRightMargin
+    tabs.marginX = marginX
     tabs.update(deltaTime: deltaTime)
     activeView.update(window: window, deltaTime: deltaTime)
     objectiveCallout.update(deltaTime: deltaTime)
@@ -133,7 +133,7 @@ final class MainMenuTabs {
     case library
   }
 
-  var rightMargin: Float = 0
+  var marginX: Float = 0
 
   private var currentTab: Tab = .inventory
 
@@ -245,10 +245,10 @@ final class MainMenuTabs {
         return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
       } else {
         // Right-align the tabs; include extra margin to align with grid
-        return Float(Engine.viewportSize.width) - totalWidth - rightMargin
+        return Float(Engine.viewportSize.width) - totalWidth - marginX
       }
     }()
-    let iconY: Float = 212
+    let iconY: Float = 96
 
     for (index, tab) in Tab.allCases.enumerated() {
       let iconX = startX + Float(index) * iconSpacing
@@ -313,10 +313,10 @@ final class MainMenuTabs {
         return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
       } else {
         // Shift a bit further left than the grid's margin to center over grid
-        return Float(Engine.viewportSize.width) - totalWidth - rightMargin
+        return Float(Engine.viewportSize.width) - totalWidth - marginX
       }
     }()
-    let iconY: Float = Float(Engine.viewportSize.height) - 212
+    let iconY: Float = Float(Engine.viewportSize.height) - 96
 
     // Draw prompts further down
     let promptY = iconY

@@ -385,7 +385,7 @@
       at: Point(caretX, caretY),
       tint: TextStyle.dialog.color,
       // tint: .gray400,
-      scale: 0.75,
+      // scale: 0.75,
       deltaTime: deltaTime,
       strokeWidth: TextStyle.dialog.strokeWidth / 2,
       strokeColor: TextStyle.dialog.strokeColor

@@ -6,7 +6,7 @@ final class HealthDisplay {
   var rect: Rect {
     let w: Float = 128
     let h: Float = 128
-    let origin = Point(44, 288 + 24)
+    let origin = Point(44, 96 + 24)
     return Rect(origin: origin, size: Size(w, h))
   }
 

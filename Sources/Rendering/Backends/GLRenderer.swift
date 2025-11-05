@@ -12,16 +12,14 @@ public final class GLRenderer: Renderer {
 
   // Viewport state
   private var _viewportSize: Size = DESIGN_RESOLUTION
+  private var _coordinateSpaceSize: Size = DESIGN_RESOLUTION
+  private var _savedCoordinateSpaceSize: Size? = nil  // Save coordinate space when rendering to framebuffer
   private var frameCount: Int = 0
 
   public var viewportSize: Size {
-    // Try to get current viewport from OpenGL, fallback to stored value
-    var viewport: [GLint] = [0, 0, 0, 0]
-    glGetIntegerv(GL_VIEWPORT, &viewport)
-    if viewport[2] > 0 && viewport[3] > 0 {
-      return Size(Float(viewport[2]), Float(viewport[3]))
-    }
-    return _viewportSize
+    // Return coordinate space size (used for UI coordinates and orthographic matrix)
+    // This may differ from the actual GL viewport when VIEWPORT_SCALING is enabled
+    return _coordinateSpaceSize
   }
 
   // MARK: - UI State Management
@@ -82,18 +80,28 @@ public final class GLRenderer: Renderer {
   }
 
   public func beginFrame(windowSize: Size) {
-    // Set the viewport to match the window size
+    // Set the GL viewport to match the window size for full resolution rendering
     glViewport(0, 0, GLsizei(windowSize.width), GLsizei(windowSize.height))
 
-    // Update our stored viewport size
-    if windowSize != _viewportSize {
-      _viewportSize = windowSize
+    // Store window size for reference
+    _viewportSize = windowSize
+
+    // Coordinate space size is set separately via setCoordinateSpaceSize
+    // Default to window size if not explicitly set
+    if _coordinateSpaceSize == DESIGN_RESOLUTION && windowSize != DESIGN_RESOLUTION {
+      _coordinateSpaceSize = windowSize
     }
 
     // Clear the screen and set up OpenGL state
     glClearColor(clearColor.red, clearColor.green, clearColor.blue, clearColor.alpha)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     //    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)  // Default to filled polygons
+  }
+
+  /// Sets the coordinate space size used for UI coordinates and orthographic matrix.
+  /// This may differ from the actual GL viewport when VIEWPORT_SCALING is enabled.
+  func setCoordinateSpaceSize(_ size: Size) {
+    _coordinateSpaceSize = size
   }
 
   public func setWireframeMode(_ enabled: Bool) {
@@ -167,11 +175,9 @@ public final class GLRenderer: Renderer {
     // Save state and configure blending
     Self.withUIContext {
       imageProgram.use()
-      // The shader expects uMVP; use an orthographic matrix using current viewport
-      var viewport: [GLint] = [0, 0, 0, 0]
-      glGetIntegerv(GL_VIEWPORT, &viewport)
-      let W = Float(viewport[2])
-      let H = Float(viewport[3])
+      // The shader expects uMVP; use an orthographic matrix using coordinate space size
+      let W = viewportSize.width
+      let H = viewportSize.height
       let mvp: [Float] = [
         2 / W, 0, 0, 0,
         0, 2 / H, 0, 0,
@@ -313,10 +319,8 @@ public final class GLRenderer: Renderer {
     Self.withUIContext {
       imageProgram.use()
       // Use standard orthographic MVP mapping pixel positions to clip space
-      var viewport: [GLint] = [0, 0, 0, 0]
-      glGetIntegerv(GL_VIEWPORT, &viewport)
-      let W = Float(viewport[2])
-      let H = Float(viewport[3])
+      let W = viewportSize.width
+      let H = viewportSize.height
       let mvp: [Float] = [
         2 / W, 0, 0, 0,
         0, 2 / H, 0, 0,
@@ -442,10 +446,8 @@ public final class GLRenderer: Renderer {
 
     Self.withUIContext {
       imageProgram.use()
-      var viewport: [GLint] = [0, 0, 0, 0]
-      glGetIntegerv(GL_VIEWPORT, &viewport)
-      let W = Float(viewport[2])
-      let H = Float(viewport[3])
+      let W = viewportSize.width
+      let H = viewportSize.height
       let mvp: [Float] = [
         2 / W, 0, 0, 0,
         0, 2 / H, 0, 0,
@@ -530,10 +532,8 @@ public final class GLRenderer: Renderer {
 
     let layout = TextLayout(font: font, scale: 1.0)
 
-    // Get current viewport size from OpenGL
-    var viewport: [GLint] = [0, 0, 0, 0]
-    glGetIntegerv(GL_VIEWPORT, &viewport)
-    let windowSize = (w: Int32(viewport[2]), h: Int32(viewport[3]))
+    // Get current viewport size (coordinate space size)
+    let windowSize = (w: Int32(viewportSize.width), h: Int32(viewportSize.height))
 
     let text = attributedString.string
     let currentScale: Float = 1.0
@@ -804,10 +804,8 @@ public final class GLRenderer: Renderer {
       pathProgram.use()
 
       // Set up orthographic projection matrix AFTER using the program
-      var viewport: [GLint] = [0, 0, 0, 0]
-      glGetIntegerv(GL_VIEWPORT, &viewport)
-      let W = Float(viewport[2])
-      let H = Float(viewport[3])
+      let W = viewportSize.width
+      let H = viewportSize.height
 
       let mvp: [Float] = [
         2 / W, 0, 0, 0,
@@ -1108,10 +1106,19 @@ public final class GLRenderer: Renderer {
   public func beginFramebuffer(_ framebufferID: UInt64) {
     guard let framebuffer = framebuffers[framebufferID] else { return }
     framebuffer.bind()
+    // Save current coordinate space and set it to match framebuffer size for rendering
+    // This ensures the orthographic matrix matches the framebuffer dimensions
+    _savedCoordinateSpaceSize = _coordinateSpaceSize
+    _coordinateSpaceSize = framebuffer.framebufferSize
   }
 
   public func endFramebuffer() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
+    // Restore coordinate space that was saved before rendering to framebuffer
+    if let saved = _savedCoordinateSpaceSize {
+      _coordinateSpaceSize = saved
+      _savedCoordinateSpaceSize = nil
+    }
   }
 
   public func getFramebufferTextureID(_ framebufferID: UInt64) -> UInt64? {
@@ -1134,11 +1141,9 @@ public final class GLRenderer: Renderer {
     withUIContext {
       fboProgram.use()
 
-      // Get viewport for coordinate conversion
-      var viewport: [GLint] = [0, 0, 0, 0]
-      glGetIntegerv(GL_VIEWPORT, &viewport)
-      let W = Float(viewport[2])
-      let H = Float(viewport[3])
+      // Get viewport for coordinate conversion (use coordinate space size)
+      let W = viewportSize.width
+      let H = viewportSize.height
 
       // Create orthographic projection matrix
       let projection = GLMath.ortho(0, W, H, 0)

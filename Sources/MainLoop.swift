@@ -1088,19 +1088,21 @@ extension MainLoop {
       //String(format: "FPS: %.0f", smoothedFPS),
       //"Scene: \(sceneName)",
       "Camera: \(selectedCamera)",
+
       String(
         format: "Position: %.2f, %.2f, %.2f",
         playerPosition.x,
         playerPosition.y,
         playerPosition.z
       ),
+
       String(
         format: "Rotation: %.0f° (%.2f rad)",
         playerRotation * 180.0 / .pi,
         playerRotation
       ),
-      "Debug Renderer: \(visualizePhysics ? "ON" : "OFF")",
-      detectedActionName != nil ? "Action: \(detectedActionName!)" : "Action: none",
+
+      detectedActionName != nil ? "Action: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Action: none",
     ]
 
     let overlay = overlayLines.joined(separator: "\n")

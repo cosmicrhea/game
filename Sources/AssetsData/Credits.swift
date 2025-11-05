@@ -1,6 +1,6 @@
 enum CreditsData {
   static let credits: OrderedDictionary<String, [String]> = [
-    "Producer & Designer": ["Freya from the Discord"],
+    "Producer & Designer": ["cosmic_rhea"],
 
     "Environment Artists": [
       // https://sketchfab.com/jintrim3
@@ -44,7 +44,7 @@ enum CreditsData {
       "beyondmatter",
 
       // https://sketchfab.com/ecler
-      // Weapons
+      // SPAS-12, MP5, Beretta 92, FNX-45, Remington 870
       "Ecler",
     ],
 

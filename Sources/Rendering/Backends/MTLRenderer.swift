@@ -17,10 +17,13 @@ public final class MTLRenderer: Renderer {
   private var currentDrawable: CAMetalDrawable?
 
   private var currentViewportSize: Size = Size(0, 0)
+  private var coordinateSpaceSize: Size = DESIGN_RESOLUTION
   private var currentScale: Float = 1.0
 
   public var viewportSize: Size {
-    return currentViewportSize
+    // Return coordinate space size (used for UI coordinates and orthographic matrix)
+    // This may differ from the actual Metal viewport when VIEWPORT_SCALING is enabled
+    return coordinateSpaceSize
   }
 
   // Metal rendering state
@@ -73,8 +76,14 @@ public final class MTLRenderer: Renderer {
   }
 
   public func beginFrame(windowSize: Size) {
-    // Update viewport size from window size
+    // Store window size for actual Metal viewport
     currentViewportSize = windowSize
+    
+    // Coordinate space size is set separately via setCoordinateSpaceSize
+    // Default to window size if not explicitly set
+    if coordinateSpaceSize == DESIGN_RESOLUTION && windowSize != DESIGN_RESOLUTION {
+      coordinateSpaceSize = windowSize
+    }
 
     // Get next drawable from the layer
     guard let drawable = metalLayer.nextDrawable() else {
@@ -108,13 +117,19 @@ public final class MTLRenderer: Renderer {
     }
     self.currentRenderEncoder = renderEncoder
 
-    // Set viewport
+    // Set Metal viewport to full window size
     let viewport = MTLViewport(
       originX: 0, originY: 0,
       width: Double(currentViewportSize.width), height: Double(currentViewportSize.height),
       znear: 0.0, zfar: 1.0
     )
     renderEncoder.setViewport(viewport)
+  }
+  
+  /// Sets the coordinate space size used for UI coordinates and orthographic matrix.
+  /// This may differ from the actual Metal viewport when VIEWPORT_SCALING is enabled.
+  func setCoordinateSpaceSize(_ size: Size) {
+    coordinateSpaceSize = size
   }
 
   public func endFrame() {
@@ -214,7 +229,7 @@ public final class MTLRenderer: Renderer {
     renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
 
     // Create uniforms
-    let mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
+    let mvp = createOrthographicMatrix(viewportSize: coordinateSpaceSize)
 
     // For now, we'll use a placeholder texture since we don't have texture management yet
     // TODO: Implement proper texture management
@@ -764,7 +779,7 @@ public final class MTLRenderer: Renderer {
     renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
 
     // Create uniforms
-    let mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
+    let mvp = createOrthographicMatrix(viewportSize: coordinateSpaceSize)
 
     var uniforms = PathUniforms(
       mvp: mvp,

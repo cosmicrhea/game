@@ -130,15 +130,26 @@ class GLScreenEffect {
       glBindTexture(GL_TEXTURE_2D, captureTexture)
       shader.setInt("uTexture", value: 0)
 
+      // Get actual window size and coordinate space size
+      let actualWindowSize = Size(Float(width), Float(height))
+      let coordinateSpaceSize = GraphicsContext.current?.size ?? actualWindowSize
+      
       // Optional resolution uniform (uResolution)
+      // Use coordinate space size (DESIGN_RESOLUTION when VIEWPORT_SCALING is enabled)
+      // so shader coordinates match the coordinate space
       let resLocation = glGetUniformLocation(shader.programID, "uResolution")
       if resLocation != -1 {
-        glUniform2f(resLocation, Float(width), Float(height))
+        glUniform2f(resLocation, coordinateSpaceSize.width, coordinateSpaceSize.height)
       }
 
       // ShaderToy uniforms if present
+      // Pass coordinate space size for coordinate calculations
       let iResolutionLoc = glGetUniformLocation(shader.programID, "iResolution")
-      if iResolutionLoc != -1 { glUniform3f(iResolutionLoc, Float(width), Float(height), 1.0) }
+      if iResolutionLoc != -1 { glUniform3f(iResolutionLoc, coordinateSpaceSize.width, coordinateSpaceSize.height, 1.0) }
+      
+      // Pass actual window size for fragCoord scaling (if shader supports it)
+      let iWindowSizeLoc = glGetUniformLocation(shader.programID, "iWindowSize")
+      if iWindowSizeLoc != -1 { glUniform2f(iWindowSizeLoc, actualWindowSize.width, actualWindowSize.height) }
 
       let now = GLFWSession.currentTime
       let delta = max(0.0, now - lastTime)
@@ -169,7 +180,7 @@ class GLScreenEffect {
 
       let iChannelResolutionLoc = glGetUniformLocation(shader.programID, "iChannelResolution")
       if iChannelResolutionLoc != -1 {
-        glUniform3f(iChannelResolutionLoc + 0, Float(width), Float(height), 1.0)
+        glUniform3f(iChannelResolutionLoc + 0, coordinateSpaceSize.width, coordinateSpaceSize.height, 1.0)
         glUniform3f(iChannelResolutionLoc + 1, 0, 0, 0)
         glUniform3f(iChannelResolutionLoc + 2, 0, 0, 0)
         glUniform3f(iChannelResolutionLoc + 3, 0, 0, 0)

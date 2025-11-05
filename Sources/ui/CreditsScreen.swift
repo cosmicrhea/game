@@ -89,15 +89,19 @@ final class CreditsScreen: RenderLoop {
       let screenWidth = Engine.viewportSize.width
       let yPosition = screenHeight - scrollOffset
       let drawY = yPosition.rounded(.down)
-      let drawX = ((screenWidth - creditsImage.naturalSize.width) / 2).rounded(.down)
+      
+      // Draw at natural size - the coordinate system will handle scaling correctly
+      let drawWidth = creditsImage.naturalSize.width
+      let drawHeight = creditsImage.naturalSize.height
+      let drawX = ((screenWidth - drawWidth) / 2).rounded(.down)
 
       // The Image.draw helper auto-flips framebuffer images by using a negative height.
       // We want upright draw here, so pass a rect with negative height to cancel that internal flip.
       let rect = Rect(
         x: drawX,
         y: drawY,
-        width: creditsImage.naturalSize.width,
-        height: -creditsImage.naturalSize.height
+        width: drawWidth,
+        height: -drawHeight
       )
       creditsImage.draw(in: rect)
     }
@@ -126,7 +130,9 @@ final class CreditsScreen: RenderLoop {
 
   private func createCreditsImage() {
     let imageHeight = totalContentHeight * 1.5  // Make it taller to ensure logos fit
-    let imageSize = Size(Engine.viewportSize.width, imageHeight)
+    // Framebuffer should match coordinate space size (DESIGN_RESOLUTION when VIEWPORT_SCALING enabled)
+    let imageWidth = Engine.viewportSize.width
+    let imageSize = Size(imageWidth, imageHeight)
 
     creditsImage = Image(size: imageSize, pixelScale: 1.0, isFlipped: true) {
       // Render all credits content to the offscreen image with flipped coordinates

@@ -55,11 +55,11 @@ final class InventoryView: RenderLoop {
         return (Float(Engine.viewportSize.width) - totalSize.width) * 0.5
       } else {
         // Align to the right side with a comfortable margin
-        let rightMargin: Float = 288
+        let rightMargin: Float = 152
         return Float(Engine.viewportSize.width) - totalSize.width - rightMargin
       }
     }()
-    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 128
+    let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 64
     let gridPosition = Point(x, y)
     slotGrid.setPosition(gridPosition)
   }
@@ -77,9 +77,6 @@ final class InventoryView: RenderLoop {
       // Update item description based on current selection
       updateItemDescription()
     }
-
-    //    // Update slot grid
-    //    slotGrid.update(deltaTime: deltaTime)
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {

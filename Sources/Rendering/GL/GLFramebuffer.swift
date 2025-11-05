@@ -5,6 +5,8 @@ public final class GLFramebuffer {
   private var rbo: GLuint = 0
   private let size: Size
   private let scale: Float
+  
+  public var framebufferSize: Size { size }
 
   public init(size: Size, scale: Float) {
     self.size = size

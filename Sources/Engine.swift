@@ -10,6 +10,8 @@ let DESIGN_RESOLUTION = Size(1280, 800)
 //let DESIGN_RESOLUTION = Size(1920, 1200)
 //let DESIGN_RESOLUTION = Size(1800, 1126)
 
+let VIEWPORT_SCALING = true
+
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
   var demo: String?
@@ -560,8 +562,30 @@ public final class Engine {
 
     activeLoop.update(window: window, deltaTime: deltaTime)
 
-    Self._cachedViewportSize = Size(Float(window.size.width), Float(window.size.height))
-    renderer.beginFrame(windowSize: Size(Float(window.size.width), Float(window.size.height)))
+    let windowSize = Size(Float(window.size.width), Float(window.size.height))
+
+    // When VIEWPORT_SCALING is enabled, UI code uses DESIGN_RESOLUTION coordinates,
+    // but the orthographic matrix uses the full window size so coordinates scale up
+    let coordinateSpaceSize: Size
+    if VIEWPORT_SCALING {
+      // UI code uses DESIGN_RESOLUTION coordinates (via Engine.viewportSize)
+      coordinateSpaceSize = DESIGN_RESOLUTION
+      Self._cachedViewportSize = DESIGN_RESOLUTION
+    } else {
+      coordinateSpaceSize = windowSize
+      Self._cachedViewportSize = windowSize
+    }
+
+    // Pass full window size to renderer for actual GL/Metal viewport
+    renderer.beginFrame(windowSize: windowSize)
+    // Set coordinate space size for orthographic matrix
+    // When VIEWPORT_SCALING is enabled, use DESIGN_RESOLUTION so UI coordinates map correctly
+    // The GL viewport will automatically scale the output to fill the window
+    if let glRenderer = renderer as? GLRenderer {
+      glRenderer.setCoordinateSpaceSize(coordinateSpaceSize)
+    } else if let metalRenderer = renderer as? MTLRenderer {
+      metalRenderer.setCoordinateSpaceSize(coordinateSpaceSize)
+    }
 
     GraphicsContext.withContext(graphicsContext) {
       activeLoop.draw()

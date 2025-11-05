@@ -78,6 +78,7 @@ public struct GLProgram {
     let prelude = """
       \(versionLine)out vec4 FragColor;
       uniform vec3 iResolution;
+      uniform vec2 iWindowSize;
       uniform float iTime;
       uniform float iTimeDelta;
       uniform int iFrame;
@@ -95,7 +96,12 @@ public struct GLProgram {
     let mainBody = """
       void main() {
         vec4 color = vec4(0.0);
-        mainImage(color, gl_FragCoord.xy);
+        // Scale fragCoord from window space to coordinate space (iResolution)
+        vec2 scaledFragCoord = gl_FragCoord.xy;
+        if (iWindowSize.x > 0.0 && iWindowSize.y > 0.0) {
+          scaledFragCoord = gl_FragCoord.xy * iResolution.xy / iWindowSize.xy;
+        }
+        mainImage(color, scaledFragCoord);
         FragColor = color;
       }
       """

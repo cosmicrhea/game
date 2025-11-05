@@ -17,17 +17,16 @@ final class ItemDescriptionView {
   @MainActor func draw() {
     itemCallout.draw()
 
-    let panelWidth: Float = 640
+    let panelWidth: Float = 512
     let panelHeight: Float = 128
-    let marginY: Float = 288
+    let marginY: Float = 96
     let paddingX: Float = 32
     let paddingY: Float = 22
 
     let labelX: Float = Engine.viewportSize.width - panelWidth + paddingX
     let labelY: Float = marginY + panelHeight - paddingY
     let descriptionY = labelY - 32
-    //let wrapWidth = panelWidth - paddingX * 2 - 96  // = 352; 330?
-    let wrapWidth: Float = 333.0  // = 352; 330?
+    let wrapWidth = panelWidth - paddingX * 2 - 96  // = 352; 330?
 
     title.draw(at: Point(labelX, labelY), style: .itemName)
 
