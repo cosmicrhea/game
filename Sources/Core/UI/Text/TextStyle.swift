@@ -46,6 +46,7 @@ extension TextStyle {
     fontName: "ZF2334Squarish-Regular",
     fontSize: 24,
     color: .gray300,
+    lineHeight: 1.2,
     strokeWidth: 1,
     strokeColor: .gray700
   )

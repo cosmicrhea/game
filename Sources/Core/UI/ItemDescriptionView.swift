@@ -21,7 +21,7 @@ final class ItemDescriptionView {
     let panelHeight: Float = 128
     let marginY: Float = 96
     let paddingX: Float = 32
-    let paddingY: Float = 22
+    let paddingY: Float = 20
 
     let labelX: Float = Engine.viewportSize.width - panelWidth + paddingX
     let labelY: Float = marginY + panelHeight - paddingY

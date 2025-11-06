@@ -98,9 +98,6 @@ class MeshInstance: @unchecked Sendable {
   var emissive: vec3 = vec3(0.0, 0.0, 0.0)
   var opacity: Float = 1.0
 
-  // Loading progress callback
-  typealias ProgressCallback = (Float) -> Void
-
   init(scene: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1), sceneIdentifier: String) {
     self.scene = scene
     self.mesh = mesh
@@ -870,7 +867,7 @@ extension Scene {
     return findMeshTransform(mesh: mesh, node: rootNode, parentTransform: mat4(1))
   }
 
-  private func findMeshTransform(mesh: Mesh, node: Node, parentTransform: mat4) -> mat4 {
+  private func findMeshTransform(mesh: Mesh, node: Assimp.Node, parentTransform: mat4) -> mat4 {
     // Get this node's transformation matrix
     let nodeTransform = convertAssimpMatrix(node.transformation)
     let globalTransform = parentTransform * nodeTransform

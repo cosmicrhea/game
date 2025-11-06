@@ -19,6 +19,9 @@ import Jolt
   // Capsule mesh from GLB file
   private var capsuleMeshInstances: [MeshInstance] = []
 
+  // Foreground meshes from scene (nodes with -fg suffix)
+  private var foregroundMeshInstances: [MeshInstance] = []
+
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
   private let capsuleHeightOffset: Float = 1.25
 
@@ -240,6 +243,9 @@ import Jolt
           // Load scene lights
           self.loadSceneLights()
 
+          // Load foreground meshes (nodes with -fg suffix)
+          self.loadForegroundMeshes(scene: scene)
+
           // Spawn at Entry_1 if present
           if let entryNode = scene.rootNode.findNode(named: "Entry_1") {
             let entryWorld = self.calculateNodeWorldTransform(entryNode, scene: scene)
@@ -292,6 +298,49 @@ import Jolt
     if sceneLights.isEmpty {
       print("⚠️ No lights found in scene")
     }
+  }
+
+  /// Load foreground meshes from nodes with -fg suffix (recursively includes subnodes)
+  private func loadForegroundMeshes(scene: Assimp.Scene) {
+    foregroundMeshInstances.removeAll()
+
+    func traverse(_ node: Assimp.Node) {
+      // Check if this node has -fg suffix
+      if let name = node.name, name.hasSuffix("-fg") {
+        // Get all meshes from this node
+        for i in 0..<node.numberOfMeshes {
+          let meshIndex = node.meshes[i]
+          if meshIndex < scene.meshes.count {
+            let mesh = scene.meshes[Int(meshIndex)]
+
+            // Only create instance if mesh has vertices
+            guard mesh.numberOfVertices > 0 else { continue }
+
+            // Get transform matrix for this mesh
+            let transformMatrix = scene.getTransformMatrix(for: mesh)
+
+            // Create MeshInstance (reusing existing init!)
+            let meshInstance = MeshInstance(
+              scene: scene,
+              mesh: mesh,
+              transformMatrix: transformMatrix,
+              sceneIdentifier: scene.filePath
+            )
+
+            foregroundMeshInstances.append(meshInstance)
+            print("✅ Created foreground MeshInstance for node '\(name)' mesh \(i)")
+          }
+        }
+      }
+
+      // Recursively traverse children (even if this node doesn't have -fg, children might)
+      for child in node.children {
+        traverse(child)
+      }
+    }
+
+    traverse(scene.rootNode)
+    print("✅ Loaded \(foregroundMeshInstances.count) foreground mesh instances")
   }
 
   /// Get lighting from scene lights (returns main light and fill light)
@@ -671,7 +720,7 @@ import Jolt
     }
 
     // Create an instance of the script class, passing dialogView to init
-    sceneScript = scriptClass.init(dialogView: dialogView)
+    sceneScript = scriptClass.init(scene: scene!, dialogView: dialogView)
     logger.info("✅ Loaded scene script: \(className)")
   }
 
@@ -943,28 +992,59 @@ import Jolt
       // Use Camera_1 projection if available, otherwise fallback to default
       let projection: mat4
       if let camera1 = camera1 {
-        // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
-        // The prerendered images were rendered with a specific aspect ratio, so we should match it
-        let finalAspect: Float
-        if camera1.aspect > 0 {
-          // Use camera's aspect ratio (this is what the prerendered images were rendered with)
-          finalAspect = camera1.aspect
+        // Check if camera is orthographic (FOV is 0 or orthographicWidth is set)
+        let isOrthographic = camera1.horizontalFOV == 0.0 || camera1.orthographicWidth > 0.0
+
+        if isOrthographic {
+          // Orthographic camera: use orthographicWidth (half width) and aspect ratio
+          let orthoWidth = camera1.orthographicWidth > 0.0 ? camera1.orthographicWidth : 1.0
+
+          // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
+          let finalAspect: Float
+          if camera1.aspect > 0 {
+            finalAspect = camera1.aspect
+          } else {
+            finalAspect = aspectRatio
+          }
+
+          // Calculate orthographic bounds
+          // orthographicWidth is half the horizontal width
+          let left = -orthoWidth
+          let right = orthoWidth
+          // Height = width / aspect, so halfHeight = orthoWidth / aspect
+          let bottom = -orthoWidth / finalAspect
+          let top = orthoWidth / finalAspect
+
+          projection = GLMath.ortho(left, right, bottom, top, camera1.clipPlaneNear, camera1.clipPlaneFar)
+
+          print(
+            "📐 Using orthographic camera: width=\(orthoWidth * 2), aspect=\(finalAspect), near=\(camera1.clipPlaneNear), far=\(camera1.clipPlaneFar)"
+          )
         } else {
-          // Fallback to viewport aspect ratio
-          finalAspect = aspectRatio
-        }
+          // Perspective camera: use existing FOV calculation
+          // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
+          // The prerendered images were rendered with a specific aspect ratio, so we should match it
+          let finalAspect: Float
+          if camera1.aspect > 0 {
+            // Use camera's aspect ratio (this is what the prerendered images were rendered with)
+            finalAspect = camera1.aspect
+          } else {
+            // Fallback to viewport aspect ratio
+            finalAspect = aspectRatio
+          }
 
-        // Convert horizontal FOV to vertical FOV
-        // GLMath.perspective expects vertical FOV (fovy), but Assimp gives us horizontal FOV
-        // Formula: verticalFOV = 2 * atan(tan(horizontalFOV / 2) / aspectRatio)
-        let horizontalFOVHalf = camera1.horizontalFOV / 2.0
-        let verticalFOV = 2.0 * atan(tan(horizontalFOVHalf) / finalAspect)
+          // Convert horizontal FOV to vertical FOV
+          // GLMath.perspective expects vertical FOV (fovy), but Assimp gives us horizontal FOV
+          // Formula: verticalFOV = 2 * atan(tan(horizontalFOV / 2) / aspectRatio)
+          let horizontalFOVHalf = camera1.horizontalFOV / 2.0
+          let verticalFOV = 2.0 * atan(tan(horizontalFOVHalf) / finalAspect)
 
-        projection = GLMath.perspective(verticalFOV, finalAspect, camera1.clipPlaneNear, camera1.clipPlaneFar)
+          projection = GLMath.perspective(verticalFOV, finalAspect, camera1.clipPlaneNear, camera1.clipPlaneFar)
 
-        // Debug: Print aspect ratio mismatch if significant
-        if abs(finalAspect - aspectRatio) > 0.01 {
-          print("⚠️ Aspect ratio mismatch: camera=\(finalAspect), viewport=\(aspectRatio)")
+          // Debug: Print aspect ratio mismatch if significant
+          if abs(finalAspect - aspectRatio) > 0.01 {
+            print("⚠️ Aspect ratio mismatch: camera=\(finalAspect), viewport=\(aspectRatio)")
+          }
         }
       } else {
         projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
@@ -1027,6 +1107,32 @@ import Jolt
             projection: projection,
             view: view,
             modelMatrix: combinedModelMatrix,
+            cameraPosition: cameraPosition,
+            lightDirection: lighting.mainLight.direction,
+            lightColor: lighting.mainLight.color,
+            lightIntensity: lighting.mainLight.intensity,
+            fillLightDirection: lighting.fillLight.direction,
+            fillLightColor: lighting.fillLight.color,
+            fillLightIntensity: lighting.fillLight.intensity,
+            diffuseOnly: false
+          )
+        }
+      }
+
+      // Draw foreground meshes (nodes with -fg suffix)
+      if !foregroundMeshInstances.isEmpty {
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(true)
+        glDepthFunc(GL_LEQUAL)
+
+        let lighting = getSceneLighting()
+        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+
+        for meshInstance in foregroundMeshInstances {
+          meshInstance.draw(
+            projection: projection,
+            view: view,
+            modelMatrix: meshInstance.transformMatrix,
             cameraPosition: cameraPosition,
             lightDirection: lighting.mainLight.direction,
             lightColor: lighting.mainLight.color,
@@ -1102,7 +1208,8 @@ extension MainLoop {
         playerRotation
       ),
 
-      detectedActionName != nil ? "Action: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Action: none",
+      detectedActionName != nil
+        ? "Action: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Action: none",
     ]
 
     let overlay = overlayLines.joined(separator: "\n")

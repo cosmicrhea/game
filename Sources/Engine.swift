@@ -10,7 +10,7 @@ let DESIGN_RESOLUTION = Size(1280, 800)
 //let DESIGN_RESOLUTION = Size(1920, 1200)
 //let DESIGN_RESOLUTION = Size(1800, 1126)
 
-let VIEWPORT_SCALING = true
+let VIEWPORT_SCALING = false
 
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")

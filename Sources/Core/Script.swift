@@ -16,9 +16,11 @@ class Character {
 @MainActor
 class Script: NSObject {
 
+  private(set) var scene: Scene
   private var dialogView: DialogView
 
-  required init(dialogView: DialogView) {
+  required init(scene: Scene, dialogView: DialogView) {
+    self.scene = scene
     self.dialogView = dialogView
     super.init()
   }
