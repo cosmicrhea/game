@@ -41,6 +41,16 @@ public final class ScreenFadeFBO {
     captureCurrentScreen()
   }
 
+  /// Start a fade to black transition (async version)
+  /// - Parameter duration: How long the fade should take (default: 0.3 seconds)
+  public func fadeToBlack(duration: Float = 0.3) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      fadeToBlack(duration: duration) {
+        continuation.resume()
+      }
+    }
+  }
+
   /// Start a fade from black transition
   /// - Parameter duration: How long the fade should take (default: 0.3 seconds)
   /// - Parameter completion: Optional callback when fade completes
@@ -48,6 +58,16 @@ public final class ScreenFadeFBO {
     targetOpacity = 0.0
     animationDuration = duration
     startAnimation(completion: completion)
+  }
+
+  /// Start a fade from black transition (async version)
+  /// - Parameter duration: How long the fade should take (default: 0.3 seconds)
+  public func fadeFromBlack(duration: Float = 0.3) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      fadeFromBlack(duration: duration) {
+        continuation.resume()
+      }
+    }
   }
 
   /// Start a fade to a specific opacity

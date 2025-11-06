@@ -252,6 +252,7 @@ public final class Engine {
       DialogDemo(),
       MapView(),
       ItemView(item: .sigp320),
+      PickupView(item: .catStatue),
       ItemStorageView(),
       TitleScreenStack(),
       MainLoop(),
@@ -562,6 +563,9 @@ public final class Engine {
 
     activeLoop.update(window: window, deltaTime: deltaTime)
 
+    ScreenFade.shared.update(deltaTime: deltaTime)
+    ScreenFadeFBO.shared.update(deltaTime: deltaTime)
+
     let windowSize = Size(Float(window.size.width), Float(window.size.height))
 
     // When VIEWPORT_SCALING is enabled, UI code uses DESIGN_RESOLUTION coordinates,
@@ -589,12 +593,12 @@ public final class Engine {
 
     GraphicsContext.withContext(graphicsContext) {
       activeLoop.draw()
-    }
 
-    // Draw screen fade in UI context so it always appears on top
-    renderer.withUIContext {
-      ScreenFadeFBO.shared.update(deltaTime: deltaTime)
-      ScreenFadeFBO.shared.draw(screenSize: renderer.viewportSize)
+      // Draw screen fade in UI context so it always appears on top
+      renderer.withUIContext {
+        ScreenFade.shared.draw(screenSize: renderer.viewportSize)
+        ScreenFadeFBO.shared.draw(screenSize: renderer.viewportSize)
+      }
     }
 
     renderer.endFrame()

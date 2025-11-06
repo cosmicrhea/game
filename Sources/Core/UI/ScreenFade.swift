@@ -22,6 +22,16 @@ public final class ScreenFade {
     startAnimation(completion: completion)
   }
 
+  /// Start a fade to black transition (async version)
+  /// - Parameter duration: How long the fade should take (default: 0.3 seconds)
+  public func fadeToBlack(duration: Float = 0.3) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      fadeToBlack(duration: duration) {
+        continuation.resume()
+      }
+    }
+  }
+
   /// Start a fade from black transition
   /// - Parameter duration: How long the fade should take (default: 0.3 seconds)
   /// - Parameter completion: Optional callback when fade completes
@@ -29,6 +39,16 @@ public final class ScreenFade {
     targetOpacity = 0.0
     animationDuration = duration
     startAnimation(completion: completion)
+  }
+
+  /// Start a fade from black transition (async version)
+  /// - Parameter duration: How long the fade should take (default: 0.3 seconds)
+  public func fadeFromBlack(duration: Float = 0.3) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      fadeFromBlack(duration: duration) {
+        continuation.resume()
+      }
+    }
   }
 
   /// Start a fade to a specific opacity
@@ -89,18 +109,9 @@ public final class ScreenFade {
   public func draw(screenSize: Size) {
     guard currentOpacity > 0.0 else { return }
 
-    let overlayRect = Rect(origin: .zero, size: screenSize)
-
-    // Use a dark color that gets darker as opacity increases
-    let intensity = 1.0 - currentOpacity  // Invert so 0 opacity = white, 1 opacity = black
-    let overlayColor = Color(red: intensity, green: intensity, blue: intensity, alpha: 1.0)
-
     // Draw a rectangle covering the entire screen
-    if let context = GraphicsContext.current {
-      var path = BezierPath()
-      path.addRect(overlayRect)
-      context.drawPath(path, color: overlayColor)
-    }
+    let overlayRect = Rect(origin: .zero, size: screenSize)
+    overlayRect.fill(with: .black.withAlphaComponent(currentOpacity))
   }
 
   // MARK: - Private

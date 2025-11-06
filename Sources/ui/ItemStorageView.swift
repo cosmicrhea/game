@@ -36,7 +36,7 @@ final class ItemStorageView: RenderLoop {
     // Player inventory grid: same size as InventoryView (4x2)
     playerGrid = SlotGrid(
       columns: 4,
-      rows: 2,
+      rows: 4,
       slotSize: 80.0,
       spacing: 3.0
     )

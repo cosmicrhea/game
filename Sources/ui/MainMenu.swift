@@ -6,7 +6,7 @@
 
   // Tab views
   private let mapView = MapView()
-  private let inventoryView = InventoryView()
+  let inventoryView = InventoryView()
   private let libraryView = LibraryView()
   // Tab management
   private let tabs = MainMenuTabs()

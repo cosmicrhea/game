@@ -27,6 +27,20 @@ public final class SlotGrid {
   /// When in moving mode, the source slot currently selected for moving
   private var movingSourceIndex: Int? = nil
 
+  // MARK: - Placement Support
+  /// Item being placed (when in placement mode)
+  public var placementItem: Item? = nil
+  /// Quantity of item being placed
+  public var placementQuantity: Int = 1
+  /// Blink animation time for placement mode
+  private var placementBlinkTime: Float = 0.0
+  private let placementBlinkSpeed: Float = 2.0  // Blinks per second
+
+  /// True while the grid is in placement mode
+  public var isPlacementModeActive: Bool {
+    return placementItem != nil
+  }
+
   // MARK: - Rendering
   private var slotEffect = GLScreenEffect("Common/Slot")
   private let quantityAnchor: AnchorPoint = .bottomRight
@@ -59,8 +73,23 @@ public final class SlotGrid {
   /// When false, selection/hover highlights are visually suppressed
   public var isFocused: Bool = true
 
+  // MARK: - Placement Callbacks
+  public var onPlacementConfirmed: ((Int, Item, Int) -> Void)?  // slotIndex, item, quantity
+  public var onPlacementCancelled: (() -> Void)?
+
   // MARK: - Slot Data
+  /// Inventory instance - when set, uses inventory.slots instead of slotData
+  public var inventory: Inventory? = nil
+  /// Direct slot data array (used when inventory is nil)
   public var slotData: [SlotData?] = []
+
+  /// Get the effective slot data array (from inventory if set, otherwise slotData)
+  private var effectiveSlotData: [SlotData?] {
+    if let inventory = inventory {
+      return inventory.slots
+    }
+    return slotData
+  }
 
   public init(config: GridConfiguration) {
     self.columns = config.columns
@@ -114,8 +143,13 @@ public final class SlotGrid {
   }
 
   /// Set the slot data array (should match the grid size)
+  /// Note: If inventory is set, this will update inventory.slots instead
   public func setSlotData(_ data: [SlotData?]) {
-    slotData = data
+    if let inventory = inventory {
+      inventory.slots = data
+    } else {
+      slotData = data
+    }
   }
 
   /// Set the currently equipped weapon by item id (or none).
@@ -154,16 +188,38 @@ public final class SlotGrid {
     movingSourceIndex = nil
   }
 
+  /// Set placement mode with an item to place
+  public func setPlacementMode(item: Item, quantity: Int = 1) {
+    placementItem = item
+    placementQuantity = quantity
+    placementBlinkTime = 0.0
+    // Never show menu while placing
+    slotMenu.hide()
+  }
+
+  /// Clear placement mode
+  public func clearPlacementMode() {
+    placementItem = nil
+    placementQuantity = 1
+    placementBlinkTime = 0.0
+  }
+
   /// Get slot data at a specific index
   public func getSlotData(at index: Int) -> SlotData? {
-    guard index >= 0 && index < slotData.count else { return nil }
-    return slotData[index]
+    let data = effectiveSlotData
+    guard index >= 0 && index < data.count else { return nil }
+    return data[index]
   }
 
   /// Set slot data at a specific index
   public func setSlotData(_ data: SlotData?, at index: Int) {
-    guard index >= 0 && index < slotData.count else { return }
-    slotData[index] = data
+    if let inventory = inventory {
+      guard index >= 0 && index < inventory.slots.count else { return }
+      inventory.slots[index] = data
+    } else {
+      guard index >= 0 && index < slotData.count else { return }
+      slotData[index] = data
+    }
   }
 
   /// Get the total size of the grid
@@ -294,6 +350,40 @@ public final class SlotGrid {
 
   /// Handle keyboard input for grid navigation and menu
   public func handleKey(_ key: Keyboard.Key) -> Bool {
+    // While in placement mode, handle navigation and placement confirmation
+    if isPlacementModeActive {
+      switch key {
+      case .w, .up:
+        return moveSelection(direction: .down)
+      case .s, .down:
+        return moveSelection(direction: .up)
+      case .a, .left:
+        return moveSelection(direction: .left)
+      case .d, .right:
+        return moveSelection(direction: .right)
+      case .f, .space, .enter, .numpadEnter:
+        // Try to place item at selected slot
+        if let slotData = getSlotData(at: selectedIndex), slotData.isEmpty {
+          // Slot is empty, place the item
+          if let item = placementItem {
+            UISound.select()
+            onPlacementConfirmed?(selectedIndex, item, placementQuantity)
+          }
+          return true
+        } else {
+          // Slot is occupied, play error sound
+          UISound.error()
+          return true
+        }
+      case .escape:
+        // Cancel placement
+        UISound.cancel()
+        onPlacementCancelled?()
+        return true
+      default:
+        return false
+      }
+    }
     // While in moving mode, handle navigation and move confirmation
     if isMovingModeActive {
       switch key {
@@ -460,7 +550,8 @@ public final class SlotGrid {
 
   /// Compute available actions for a given slot based on its item kind
   private func actionsForSlot(at index: Int) -> [SlotAction] {
-    guard index >= 0 && index < slotData.count, let data = slotData[index], let item = data.item else {
+    let data = effectiveSlotData
+    guard index >= 0 && index < data.count, let slotData = data[index], let item = slotData.item else {
       return []
     }
     switch item.kind {
@@ -482,6 +573,10 @@ public final class SlotGrid {
   /// Update menu animations
   public func update(deltaTime: Float) {
     slotMenu.update(deltaTime: deltaTime)
+    // Update placement blink animation
+    if isPlacementModeActive {
+      placementBlinkTime += deltaTime * placementBlinkSpeed
+    }
   }
 
   // MARK: - Rendering
@@ -515,10 +610,11 @@ public final class SlotGrid {
 
       // Mark equipped slot (weapon) for border tinting (unless it's the moving source)
       let isEquippedSlot: Bool = {
+        let data = effectiveSlotData
         guard let equippedId = equippedWeaponId,
-          i < slotData.count,
-          let data = slotData[i],
-          let item = data.item,
+          i < data.count,
+          let slotData = data[i],
+          let item = slotData.item,
           item.kind == .weapon
         else { return false }
         return item.id == equippedId
@@ -576,7 +672,8 @@ public final class SlotGrid {
       }
 
       // Draw item image if slot has data
-      if i < slotData.count, let slotData = slotData[i], let item = slotData.item, let image = item.image {
+      let data = effectiveSlotData
+      if i < data.count, let slotData = data[i], let item = slotData.item, let image = item.image {
         let imageSize = min(slotSize * 0.8, min(image.naturalSize.width, image.naturalSize.height))
         let imageRect = Rect(
           x: slotPosition.x + (slotSize - imageSize) * 0.5,
@@ -628,6 +725,11 @@ public final class SlotGrid {
 
     // Draw the context menu
     slotMenu.draw()
+
+    // Draw placement item on top of all slots (if in placement mode)
+    if isPlacementModeActive {
+      drawPlacementItem()
+    }
   }
 
   // MARK: - Moving helpers
@@ -637,28 +739,109 @@ public final class SlotGrid {
       print("SlotGrid: Cannot move to same slot")
       return
     }
-    guard sourceIndex >= 0 && sourceIndex < slotData.count else {
-      print("SlotGrid: Invalid source index \(sourceIndex)")
-      return
+
+    if let inventory = inventory {
+      guard sourceIndex >= 0 && sourceIndex < inventory.slots.count else {
+        print("SlotGrid: Invalid source index \(sourceIndex)")
+        return
+      }
+      guard targetIndex >= 0 && targetIndex < inventory.slots.count else {
+        print("SlotGrid: Invalid target index \(targetIndex)")
+        return
+      }
+
+      let sourceData = inventory.slots[sourceIndex]
+      let targetData = inventory.slots[targetIndex]
+
+      print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
+      print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
+      print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+
+      // Swap even if one side is nil (acts as move into empty)
+      inventory.slots[targetIndex] = sourceData
+      inventory.slots[sourceIndex] = targetData
+
+      print("SlotGrid: After move - Source now has: \(inventory.slots[sourceIndex]?.item?.name ?? "nil")")
+      print("SlotGrid: After move - Target now has: \(inventory.slots[targetIndex]?.item?.name ?? "nil")")
+    } else {
+      guard sourceIndex >= 0 && sourceIndex < slotData.count else {
+        print("SlotGrid: Invalid source index \(sourceIndex)")
+        return
+      }
+      guard targetIndex >= 0 && targetIndex < slotData.count else {
+        print("SlotGrid: Invalid target index \(targetIndex)")
+        return
+      }
+
+      let sourceData = slotData[sourceIndex]
+      let targetData = slotData[targetIndex]
+
+      print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
+      print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
+      print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+
+      // Swap even if one side is nil (acts as move into empty)
+      slotData[targetIndex] = sourceData
+      slotData[sourceIndex] = targetData
+
+      print("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
+      print("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
     }
-    guard targetIndex >= 0 && targetIndex < slotData.count else {
-      print("SlotGrid: Invalid target index \(targetIndex)")
-      return
+  }
+
+  /// Draw the blinking placement item at the selected slot
+  private func drawPlacementItem() {
+    guard let item = placementItem else { return }
+    let selectedIndex = selectedIndex
+    let slotPosition = slotPosition(at: selectedIndex)
+
+    // Calculate blink alpha (oscillates between 0.3 and 1.0)
+    let blinkAlpha = 0.3 + (sin(placementBlinkTime * Float.pi * 2.0) * 0.5 + 0.5) * 0.7
+
+    // Draw item image - try to load if nil
+    var image = item.image
+    if image == nil {
+      // Try to load image from alternative path if default path failed
+      image = Image("Items/\(item.id).png")
     }
 
-    let sourceData = slotData[sourceIndex]
-    let targetData = slotData[targetIndex]
+    if let image = image {
+      let imageSize = min(slotSize * 0.8, min(image.naturalSize.width, image.naturalSize.height))
+      let imageRect = Rect(
+        x: slotPosition.x + (slotSize - imageSize) * 0.5,
+        y: slotPosition.y + (slotSize - imageSize) * 0.5,
+        width: imageSize,
+        height: imageSize
+      )
+      image.draw(in: imageRect, tint: Color.white.withAlphaComponent(blinkAlpha))
+    } else {
+      // Draw a placeholder rectangle if image is still nil
+      let placeholderSize = slotSize * 0.6
+      let placeholderRect = Rect(
+        x: slotPosition.x + (slotSize - placeholderSize) * 0.5,
+        y: slotPosition.y + (slotSize - placeholderSize) * 0.5,
+        width: placeholderSize,
+        height: placeholderSize
+      )
+      placeholderRect.fill(with: Color.white.withAlphaComponent(blinkAlpha * 0.5))
+    }
 
-    print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
-    print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
-    print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+    // Draw quantity if applicable
+    if placementQuantity > 1 {
+      let quantityText = "\(placementQuantity)"
+      let fadeWidth: Float = 8 + quantityText.size(with: .slotQuantity).width * 2
+      let fadeOrigin = Point(slotPosition.x + slotSize - fadeWidth - 3, slotPosition.y + 5)
+      let fadeRect = Rect(origin: fadeOrigin, size: Size(fadeWidth, 19))
+      let gradient = Gradient(startingColor: .clear, endingColor: .black.withAlphaComponent(0.8 * blinkAlpha))
+      GraphicsContext.current?.drawLinearGradient(gradient, in: fadeRect, angle: 0)
 
-    // Swap even if one side is nil (acts as move into empty)
-    slotData[targetIndex] = sourceData
-    slotData[sourceIndex] = targetData
-
-    print("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
-    print("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
+      let quantityX = slotPosition.x + slotSize - 9
+      let quantityY = slotPosition.y + 6
+      let fadedStyle = TextStyle.slotQuantity.withColor(
+        TextStyle.slotQuantity.color.withAlphaComponent(blinkAlpha)
+      )
+      quantityText.draw(at: Point(quantityX, quantityY), style: fadedStyle, anchor: .bottomRight)
+    }
   }
 }
 

@@ -8,7 +8,7 @@ import Assimp
 
   // 3D model rendering
   private var meshInstances: [MeshInstance] = []
-  private var camera = ItemInspectionCamera()
+  private var camera: ItemInspectionCamera
   @Editor var light = Light.itemInspection
   @Editor var fillLight = Light.itemInspectionFill
 
@@ -28,6 +28,7 @@ import Assimp
 
   init(item: Item) {
     self.item = item
+    self.camera = ItemInspectionCamera(distance: item.inspectionDistance)
     self.itemDescriptionView.title = item.name
     self.itemDescriptionView.descriptionText = item.description ?? ""
 

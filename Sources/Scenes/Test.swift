@@ -28,9 +28,9 @@
   }
 
   func cat() {
-    say("There's a cat here.")
-    //say("A cat has appeared.")
-    acquire(.catStatue)
+    // await say("There's a cat here.")
+    // await say("A cat has appeared.")
+    Task { await acquire(.catStatue) }
   }
 
 }

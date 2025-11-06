@@ -18,6 +18,7 @@ class Script: NSObject {
 
   private(set) var scene: Scene
   private var dialogView: DialogView
+  var showPickupView: ((Item, Int) async -> Bool)?
 
   required init(scene: Scene, dialogView: DialogView) {
     self.scene = scene
@@ -71,8 +72,14 @@ class Script: NSObject {
   func pause(_ seconds: Float) {}
 
   @discardableResult func acquire(_ item: Item, quantity: Int = 1) async -> Bool {
-    // TODO: show PickupView from here, return whether or not teh item was picked up
-    return false
+    // Show PickupView and wait for result
+    guard let showPickupView = showPickupView else {
+      print("⚠️ Cannot show PickupView: showPickupView callback not set")
+      return false
+    }
+
+    // Show the pickup view and wait for result
+    return await showPickupView(item, quantity)
   }
 
   func acquire(_ document: Document) {}

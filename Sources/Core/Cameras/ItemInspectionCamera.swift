@@ -1,8 +1,5 @@
 // Default inspection camera values
-private let defaultDistance: Float = 0.3  // Closer by default for better inspection
 private let defaultSensitivity: Float = 0.3
-private let minDistance: Float = 0.1  // Can get closer
-private let maxDistance: Float = 0.6  // Don't need to go as far
 
 /// A camera designed for inspecting 3D objects by rotating the model instead of the camera.
 /// This keeps lighting consistent while allowing you to see all sides of the object.
@@ -30,6 +27,11 @@ class ItemInspectionCamera {
 
   // Camera settings
   var mouseSensitivity: Float
+
+  // Distance bounds (calculated from default distance)
+  private let minDistance: Float
+  private let maxDistance: Float
+  private let defaultDistance: Float
 
   // Internal mouse tracking state
   private var lastMouseX: Float = 0
@@ -70,22 +72,27 @@ class ItemInspectionCamera {
   private var resetStartPanOffset: vec3 = vec3(0, 0, 0)
   private var resetTargetYaw: Float = 0.0
   private let resetTargetPitch: Float = 0.0
-  private let resetTargetDistance: Float = defaultDistance
+  private var resetTargetDistance: Float = 0.0
   private let initialTarget: vec3
 
   init(
     target: vec3 = vec3(0.0, 0.0, 0.0),  // Object position
-    distance: Float = defaultDistance,
+    distance: Float = 0.3,
     modelYaw: Float = 90.0,  // Start with model facing camera
     modelPitch: Float = 0.0  // Start with model level
   ) {
     self.target = target
+    self.defaultDistance = distance
+    // Calculate min and max from default distance: min = distance/3, max = distance*2
+    self.minDistance = distance / 3.0
+    self.maxDistance = distance * 2.0
     self.distance = distance
     self.modelYaw = modelYaw
     self.modelPitch = modelPitch
     self.mouseSensitivity = defaultSensitivity
 
     self.resetTargetYaw = modelYaw
+    self.resetTargetDistance = distance
     self.initialTarget = target
 
     // Calculate camera position based on distance

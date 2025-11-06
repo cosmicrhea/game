@@ -93,6 +93,10 @@ import Jolt
   private var mainMenu: MainMenu?
   private var showingMainMenu: Bool = false
 
+  // Pickup view system
+  private var pickupView: PickupView?
+  private var showingPickupView: Bool = false
+
   // Dialog system
   private var dialogView: DialogView?
   // Scene script instance
@@ -495,7 +499,10 @@ import Jolt
   }
 
   func update(window: Window, deltaTime: Float) {
-    if showingMainMenu {
+    if showingPickupView {
+      // Update pickup view
+      pickupView?.update(window: window, deltaTime: deltaTime)
+    } else if showingMainMenu {
       // Update main menu
       mainMenu?.update(window: window, deltaTime: deltaTime)
     } else {
@@ -521,6 +528,12 @@ import Jolt
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    if showingPickupView {
+      // Forward input to pickup view
+      pickupView?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      return
+    }
+
     if showingMainMenu {
       // Handle escape key with nested view support
       if key == .escape {
@@ -646,18 +659,27 @@ import Jolt
   }
 
   func onMouseMove(window: Window, x: Double, y: Double) {
-    if showingMainMenu {
+    if showingPickupView {
+      pickupView?.onMouseMove(window: window, x: x, y: y)
+    } else if showingMainMenu {
       mainMenu?.onMouseMove(window: window, x: x, y: y)
     }
   }
 
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    if showingMainMenu {
+    if showingPickupView {
+      pickupView?.onMouseButton(window: window, button: button, state: state, mods: mods)
+    } else if showingMainMenu {
       mainMenu?.onMouseButton(window: window, button: button, state: state, mods: mods)
     }
   }
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    if showingPickupView {
+      pickupView?.onMouseButtonPressed(window: window, button: button, mods: mods)
+      return
+    }
+
     if showingMainMenu {
       // Handle right-click with nested view support (same as Escape)
       if button == .right {
@@ -698,13 +720,17 @@ import Jolt
   }
 
   func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
-    if showingMainMenu {
+    if showingPickupView {
+      // No-op for pickup view
+    } else if showingMainMenu {
       mainMenu?.onMouseButtonReleased(window: window, button: button, mods: mods)
     }
   }
 
   func onScroll(window: Window, xOffset: Double, yOffset: Double) {
-    if showingMainMenu {
+    if showingPickupView {
+      pickupView?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+    } else if showingMainMenu {
       mainMenu?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
     }
   }
@@ -716,6 +742,68 @@ import Jolt
 
   private func hideMainMenu() {
     showingMainMenu = false
+  }
+
+  private var pickupViewContinuation: CheckedContinuation<Bool, Never>?
+
+  func showPickupView(item: Item, quantity: Int = 1) async -> Bool {
+    // Fade to black
+    await ScreenFade.shared.fadeToBlack(duration: 0.3)
+
+    // Show view (create and attach)
+    pickupView = PickupView(item: item, quantity: quantity)
+
+    // Set up callbacks
+    pickupView?.onItemPlaced = { [weak self] slotIndex, placedItem, placedQuantity in
+      guard let self = self else { return }
+      // Update inventory directly
+      if slotIndex < Inventory.player1.slots.count {
+        Inventory.player1.slots[slotIndex] = SlotData(
+          item: placedItem, quantity: placedQuantity > 1 ? placedQuantity : nil)
+      }
+      // Resume continuation with success
+      self.pickupViewContinuation?.resume(returning: true)
+      self.pickupViewContinuation = nil
+      // Close pickup view with fade
+      Task { await self.hidePickupView() }
+    }
+
+    pickupView?.onCancel = { [weak self] in
+      guard let self = self else { return }
+      // Resume continuation with failure (cancelled)
+      self.pickupViewContinuation?.resume(returning: false)
+      self.pickupViewContinuation = nil
+      // Close pickup view with fade
+      Task { await self.hidePickupView() }
+    }
+
+    // Attach window
+    pickupView?.onAttach(window: Engine.shared.window)
+
+    showingPickupView = true
+
+    // Fade back in
+    await ScreenFade.shared.fadeFromBlack(duration: 0.3)
+
+    // After fade completes, start slide-in animation
+    pickupView?.startSlideInAnimation()
+
+    // Wait for continuation to complete
+    return await withCheckedContinuation { continuation in
+      self.pickupViewContinuation = continuation
+    }
+  }
+
+  private func hidePickupView() async {
+    // Fade to black
+    await ScreenFade.shared.fadeToBlack(duration: 0.3)
+
+    // Hide view
+    showingPickupView = false
+    pickupView = nil
+
+    // Fade back in
+    await ScreenFade.shared.fadeFromBlack(duration: 0.3)
   }
 
   private func loadSceneScript() {
@@ -741,6 +829,12 @@ import Jolt
 
     // Create an instance of the script class, passing dialogView to init
     sceneScript = scriptClass.init(scene: scene, dialogView: dialogView)
+    // Set up pickup view callback
+    sceneScript?.showPickupView = { [weak self] item, quantity in
+      guard let self = self else { return false }
+      // Show pickup view and wait for result
+      return await self.showPickupView(item: item, quantity: quantity)
+    }
     logger.info("✅ Loaded scene script: \(className)")
 
     // Call sceneDidLoad() after initialization
@@ -1068,7 +1162,10 @@ import Jolt
   }
 
   func draw() {
-    if showingMainMenu {
+    if showingPickupView {
+      // Draw pickup view
+      pickupView?.draw()
+    } else if showingMainMenu {
       // Draw main menu
       mainMenu?.draw()
     } else {

@@ -39,8 +39,8 @@ final class InventoryView: RenderLoop {
       self?.handleSlotAction(action, slotIndex: slotIndex)
     }
 
-    // Set up slot data with some sample items
-    setupSlotData()
+    // Set inventory on slot grid
+    slotGrid.inventory = Inventory.player1
 
     // Center the grid on X axis, slightly above center on Y
     recenterGrid()
@@ -210,64 +210,6 @@ final class InventoryView: RenderLoop {
       itemDescriptionView.title = ""
       itemDescriptionView.descriptionText = ""
     }
-  }
-
-  private func setupSlotData() {
-    let totalSlots = slotGrid.columns * slotGrid.rows
-    var slotData: [SlotData?] = Array(repeating: nil, count: totalSlots)
-
-    // Place items with different quantities
-    let itemsWithQuantities: [(Item, Int?)] = [
-      //      (.knife, nil),
-      //      (.glock17, 15),
-      //      (.handgunAmmo, 69),
-      //       (.sigp320, 0),
-      //      (.morphine, nil),
-      //       (.glock18, 17),
-      //      (.metroKey, nil),
-      // (.utilityKey, nil),
-
-      (.morphine, nil),
-      (.knife, nil),
-      (.glock17, 15),
-      (.glock18, 17),
-      (.sigp320, 0),
-      (.fnx45, 15),
-      (.handgunAmmo, 69),
-      (.utilityKey, nil),
-      (.metroKey, nil),
-      (.cryoGloves, nil),
-      (.lighter, nil),
-      (.beretta92, 17),
-      (.remington870, 8),
-      (.spas12, 10),
-      (.mp5sd, 30),
-
-      // (.morphine, nil),
-      // (.knife, nil),
-      // (.glock17, 15),
-      // (.glock18, 17),
-      // (.sigp320, 0),
-      // //      (.beretta92, 17),
-      // (.fnx45, 15),
-      // (.handgunAmmo, 69),
-      // (.utilityKey, nil),
-      // (.metroKey, nil),
-      // //      (.tagKey, nil),
-      // (.cryoGloves, nil),
-      // (.lighter, nil),
-      // //      (.remington870, 8),
-      // //      (.spas12, 10),
-      // //      (.mp5sd, 30),
-    ]
-
-    for (index, (item, quantity)) in itemsWithQuantities.enumerated() {
-      if index < totalSlots {
-        slotData[index] = SlotData(item: item, quantity: quantity)
-      }
-    }
-
-    slotGrid.setSlotData(slotData)
   }
 
   private func handleSlotAction(_ action: SlotAction, slotIndex: Int) {
