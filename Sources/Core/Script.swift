@@ -70,7 +70,11 @@ class Script: NSObject {
 
   func pause(_ seconds: Float) {}
 
-  @discardableResult func acquire(_ item: Item, quantity: Int = 1) -> Bool { false }
+  @discardableResult func acquire(_ item: Item, quantity: Int = 1) async -> Bool {
+    // TODO: show PickupView from here, return whether or not teh item was picked up
+    return false
+  }
+
   func acquire(_ document: Document) {}
 
   func play(sound soundName: String) {}

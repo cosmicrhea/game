@@ -628,11 +628,10 @@ import Jolt
 
       case .l:
         UISound.select()
-        // Cycle through mist debug modes: normal -> mist only -> mist overlay -> normal
+        // Toggle mist visualization
         if let env = prerenderedEnvironment {
-          env.debugMistMode = (env.debugMistMode + 1) % 3
-          let modeNames = ["normal", "mist only", "mist overlay"]
-          print("🌫️ Debug: Mist visualization mode = \(modeNames[env.debugMistMode])")
+          env.showMist.toggle()
+          print("🌫️ Debug: Mist visualization = \(env.showMist ? "ON" : "OFF")")
         }
 
       case .u:

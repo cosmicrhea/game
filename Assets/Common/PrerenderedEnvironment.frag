@@ -9,9 +9,8 @@ uniform float near;
 uniform float far;
 uniform mat4 view_to_clip_matrix;
 
-// Debug mode: 0 = normal, 1 = mist only, 2 = mist overlay
-uniform int debugMistMode;
-uniform float mistOverlayOpacity;
+// Debug mode: true = show mist only, false = show normal albedo
+uniform bool showMist;
 
 void main() {
     // Flip UV Y coordinate to match Godot (UV *= vec2(1, -1) in vertex shader)
@@ -34,14 +33,10 @@ void main() {
     vec3 albedo = texture(albedo_texture, flippedUV).rgb;
     vec3 mist = texture(mist_texture, flippedUV).rgb;
 
-    // Debug visualization modes
-    if (debugMistMode == 1) {
-        // Mist only - show raw mist texture
+    // Debug visualization: show mist or normal albedo
+    if (showMist) {
+        // Show mist only
         FragColor = vec4(mist, 1.0);
-    } else if (debugMistMode == 2) {
-        // Mist overlay - blend mist on top of albedo
-        vec3 overlay = mix(albedo, mist, mistOverlayOpacity);
-        FragColor = vec4(overlay, 1.0);
     } else {
         // Normal mode - just albedo
         FragColor = vec4(albedo, 1.0);

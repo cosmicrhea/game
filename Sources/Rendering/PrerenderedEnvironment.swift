@@ -23,8 +23,7 @@ final class PrerenderedEnvironment {
   @Editor public var nearestNeighborFiltering: Bool = true
 
   // Debug mist visualization
-  @Editor public var debugMistMode: Int = 0  // 0 = normal, 1 = mist only, 2 = mist overlay
-  @Editor(0.0...1.0) public var mistOverlayOpacity: Float = 0.5
+  @Editor public var showMist: Bool = false  // true = show mist only, false = show normal albedo
 
   // Camera selection for editor
   @Editor public var selectedCamera: String = "1" {
@@ -378,9 +377,8 @@ final class PrerenderedEnvironment {
     shader.setFloat("near", value: near)
     shader.setFloat("far", value: far)
     shader.setMat4("view_to_clip_matrix", value: projectionMatrix)
-    shader.setInt("debugMistMode", value: Int32(debugMistMode))
-    shader.setFloat("mistOverlayOpacity", value: mistOverlayOpacity)
-    logger.trace("📐 Set uniforms: near=\(near), far=\(far), debugMistMode=\(debugMistMode)")
+    shader.setBool("showMist", value: showMist)
+    logger.trace("📐 Set uniforms: near=\(near), far=\(far), showMist=\(showMist)")
 
     // Bind textures using the current frame's texture IDs
     glActiveTexture(GL_TEXTURE0)
