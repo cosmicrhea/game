@@ -1,19 +1,25 @@
-import Assimp
-
 @objcMembers class Test: Script {
 
   var catStatue: Node!
 
-  func sceneDidLoad() {
-    catStatue = scene.rootNode.findNode(named: "CatStatue-fg")
+  override func sceneDidLoad() {
+    catStatue = findNode("CatStatue")
     catStatue.isHidden = true
   }
 
   func showCat() {
-    catStatue.isHidden = false
+    if catStatue.isHidden {
+      UISound.select()
+      catStatue.isHidden = false
+      print("showing cat!!!!")
+    }
   }
 
   func stove() {
+    guard catStatue.isHidden else {
+      return cat()
+    }
+
     say([
       "The stove is cold and lifeless.",
       "There's nothing cooking right now.",
@@ -21,9 +27,10 @@ import Assimp
     ])
   }
 
-  func cat() async {
-    say("A cat has appeared.")
-    acquire(.utilityKey)
+  func cat() {
+    say("There's a cat here.")
+    //say("A cat has appeared.")
+    acquire(.catStatue)
   }
 
 }

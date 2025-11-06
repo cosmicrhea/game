@@ -4,19 +4,15 @@ public enum EditorGrouping {
   case grouped
 }
 
-/// Macro to automatically generate getEditableProperties() method from @Editable properties.
+/// Macro to automatically generate getEditableProperties() method from @Editor properties.
 @attached(member, names: named(getEditableProperties))
 @attached(extension, conformances: Editing)
-public macro Editor(_ grouping: EditorGrouping = .none) =
-  #externalMacro(module: "GameMacros", type: "EditorMacro")
-
-/// Macro for generating computed properties that provide options for @Editable String properties
-@attached(accessor)
-public macro EditableOptions() = #externalMacro(module: "GameMacros", type: "EditableOptionsMacro")
+public macro Editable(_ grouping: EditorGrouping = .none) =
+  #externalMacro(module: "GameMacros", type: "EditableMacro")
 
 /// A property wrapper that marks properties as editable in the debug editor.
 @propertyWrapper
-public struct Editable<T> {
+public struct Editor<T> {
   private var value: T
   private let displayName: String
   private let range: ClosedRange<Double>?
@@ -25,7 +21,7 @@ public struct Editable<T> {
   private let variableName: String
 
   public init(
-    wrappedValue: T, displayName: String? = nil, range: ClosedRange<Double>? = nil, variableName: String = ""
+    wrappedValue: T, displayName: String? = nil, _ range: ClosedRange<Double>? = nil, variableName: String = ""
   )
   where T == Float {
     self.value = wrappedValue
@@ -83,7 +79,7 @@ public struct Editable<T> {
     set { value = newValue }
   }
 
-  public var projectedValue: Editable<T> {
+  public var projectedValue: Editor<T> {
     get { self }
     set { self = newValue }
   }
@@ -130,7 +126,7 @@ public struct AnyEditableProperty {
   public let validRange: ClosedRange<Double>?
   public let pickerOptions: [String]?
 
-  public init<T>(_ property: Editable<T>) {
+  public init<T>(_ property: Editor<T>) {
     self.name = property.name
     self.value = property.wrappedValue
     self.setValue = { newValue in

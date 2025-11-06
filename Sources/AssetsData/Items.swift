@@ -122,4 +122,10 @@ extension Item {
     name: "Lighter",
     description: "Simple butane lighter for lighting fires.",
   )
+
+  static let catStatue = Item(
+    id: "cat_statue",
+    name: "Cat Statue",
+    description: "A marble statue of a cat. Cute ^-^"
+  )
 }

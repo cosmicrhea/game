@@ -20,14 +20,14 @@ final class PrerenderedEnvironment {
   public var far: Float = 100.0
 
   // Texture filtering toggle
-  @Editable public var nearestNeighborFiltering: Bool = true
+  @Editor public var nearestNeighborFiltering: Bool = true
 
   // Debug mist visualization
-  @Editable public var debugMistMode: Int = 0  // 0 = normal, 1 = mist only, 2 = mist overlay
-  @Editable(range: 0.0...1.0) public var mistOverlayOpacity: Float = 0.5
+  @Editor public var debugMistMode: Int = 0  // 0 = normal, 1 = mist only, 2 = mist overlay
+  @Editor(0.0...1.0) public var mistOverlayOpacity: Float = 0.5
 
   // Camera selection for editor
-  @Editable public var selectedCamera: String = "1" {
+  @Editor public var selectedCamera: String = "1" {
     didSet {
       if selectedCamera != oldValue {
         try? switchToCamera(selectedCamera)

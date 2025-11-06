@@ -1,6 +1,6 @@
 import Assimp
 
-@Editor final class ItemView: RenderLoop {
+@Editable final class ItemView: RenderLoop {
   private let item: Item
   private let promptList = PromptList(.itemView)
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
@@ -9,8 +9,8 @@ import Assimp
   // 3D model rendering
   private var meshInstances: [MeshInstance] = []
   private var camera = ItemInspectionCamera()
-  @Editable var light = Light.itemInspection
-  @Editable var fillLight = Light.itemInspectionFill
+  @Editor var light = Light.itemInspection
+  @Editor var fillLight = Light.itemInspectionFill
 
   // Loading state
   private let loadingProgress = LoadingProgress()

@@ -64,7 +64,9 @@ final class ModelViewer: RenderLoop {
       self.meshInstances = loaded
       self.loadingProgress.markCompleted()
 
-      if let scene = loaded.first?.scene {
+      if let assimpScene = loaded.first?.scene {
+        // Wrap in our Scene wrapper
+        let scene = Scene(assimpScene)
         currentScene = scene
         currentAnimationNames = scene.animations.enumerated().map { idx, a in
           if let name = a.name, !name.isEmpty { return name }
@@ -311,7 +313,7 @@ final class ModelViewer: RenderLoop {
     return findNodeNameRecursive(node: scene.rootNode, meshIndex: meshIndex)
   }
 
-  private func findNodeNameRecursive(node: Assimp.Node, meshIndex: Int) -> String? {
+  private func findNodeNameRecursive(node: Node, meshIndex: Int) -> String? {
     // Check if this node contains the mesh
     if node.meshes.contains(meshIndex) {
       print("ModelViewer: Found node '\(node.name ?? "unnamed")' for mesh index \(meshIndex)")
@@ -361,10 +363,10 @@ final class ModelViewer: RenderLoop {
     // Draw current animation name below model name
     if !currentAnimationNames.isEmpty {
       let currentAnimationName = currentAnimationNames[safe: currentAnimationIndex] ?? currentAnimationNames[0]
-//      let playStatus = nodeAnimator.playing ? "▶" : "⏸"
-//      let displayText = "\(playStatus) \(currentAnimationName)"
+      //      let playStatus = nodeAnimator.playing ? "▶" : "⏸"
+      //      let displayText = "\(playStatus) \(currentAnimationName)"
       let displayText = "\(currentAnimationName)"
-      
+
       displayText.draw(
         at: Point(centerX, 128),
         style: .itemDescription,

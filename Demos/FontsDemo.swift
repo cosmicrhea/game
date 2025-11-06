@@ -1,6 +1,6 @@
-@Editor final class FontsDemo: RenderLoop {
-  @Editable(range: 16...32) var fontSize: Float = 24
-  @Editable var danish: Bool = false
+@Editable final class FontsDemo: RenderLoop {
+  @Editor(16...32) var fontSize: Float = 24
+  @Editor var danish: Bool = false
 
   private var fontStyles: [(TextStyle, Font.ResolvedFont)] {
     Font.availableFonts

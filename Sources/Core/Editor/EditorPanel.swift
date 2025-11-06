@@ -255,35 +255,9 @@ public final class EditorPanel: OptionsPanel {
     // Check if this is a String property
     guard let stringValue = property.value as? String else { return nil }
 
-    // Try to get dynamic options from the current object
+    // Try to get static options from @Editor if available
     var availableOptions: [String] = [stringValue]  // Default to current value
-
-    // Look for @EditableOptions properties using reflection
-    if let object = currentObject {
-      let optionsPropertyName = "\(property.name)Options"
-      let mirror = Mirror(reflecting: object)
-
-      //print("🔍 Looking for @EditableOptions property: \(optionsPropertyName)")
-      //print("🔍 Available properties: \(mirror.children.map { $0.label ?? "nil" })")
-
-      // Look for @EditableOptions properties
-      if let optionsProperty = mirror.children.first(where: { $0.label == optionsPropertyName }) {
-        // Check if this is an @EditableOptions property by looking at its type
-        if let optionsValue = optionsProperty.value as? [String] {
-          //print("✅ Found @EditableOptions: \(optionsValue)")
-          availableOptions = optionsValue
-        } else {
-          //print("❌ Property \(optionsPropertyName) exists but is not [String]")
-        }
-      } else {
-        //print("❌ No @EditableOptions property found for \(optionsPropertyName)")
-      }
-    }
-
-    // Fallback to static options from @Editable if available
-    if availableOptions.count == 1 && availableOptions[0] == stringValue,
-      let staticOptions = property.pickerOptions, !staticOptions.isEmpty
-    {
+    if let staticOptions = property.pickerOptions, !staticOptions.isEmpty {
       availableOptions = staticOptions
     }
 

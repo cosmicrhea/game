@@ -1,17 +1,17 @@
-@Editor(.grouped)
+@Editable(.grouped)
 class MapView: RenderLoop {
 
   private var mapEffect = GLScreenEffect("Common/MapView")
   private var meshInstances: [MeshInstance] = []
   private let promptList = PromptList(.mapView)
 
-  @Editable(range: 8.0...64.0) var gridCellSize: Float = 32.0
-  @Editable(range: 0.5...3.0) var gridThickness: Float = 1.0
-  @Editable(range: 0.1...3.0) var gridScale: Float = 1.0
-  @Editable var gridOpacity: Float = 0.1
+  @Editor(8.0...64.0) var gridCellSize: Float = 32.0
+  @Editor(0.5...3.0) var gridThickness: Float = 1.0
+  @Editor(0.1...3.0) var gridScale: Float = 1.0
+  @Editor var gridOpacity: Float = 0.1
 
-  @Editable var vignetteStrength: Float = 0.7
-  @Editable var vignetteRadius: Float = 1.0
+  @Editor var vignetteStrength: Float = 0.7
+  @Editor var vignetteRadius: Float = 1.0
 
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid

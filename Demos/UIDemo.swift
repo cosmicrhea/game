@@ -1,5 +1,5 @@
-@Editor final class UIDemo: RenderLoop {
-  @Editable var autohideScrollbars: Bool = true
+@Editable final class UIDemo: RenderLoop {
+  @Editor var autohideScrollbars: Bool = true
 
   private let indicator = ProgressIndicator()
   private let tfBasic = TextField(frame: Rect(x: 20, y: 90, width: 360, height: 36), text: "Hello")

@@ -1,7 +1,7 @@
 /// Demo showcasing SVG loading and rendering capabilities
-@Editor final class SVGDemo: RenderLoop {
+@Editable final class SVGDemo: RenderLoop {
   private var svgData: [(image: Image, name: String)] = []
-  @Editable(range: 16...128) var iconSize: Float = 64.0
+  @Editor(16...128) var iconSize: Float = 64.0
   private let iconSizes: [Float] = [16, 24, 32, 48, 64, 80, 96, 112, 128]
   private var currentSizeIndex: Int = 4  // Start at 64
   private var svgPaths: [String] = []  // Store original paths for reloading

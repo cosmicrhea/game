@@ -11,7 +11,7 @@ extension String {
   }
 }
 
-public struct EditorMacro: MemberMacro, ExtensionMacro {
+public struct EditableMacro: MemberMacro, ExtensionMacro {
   public static func expansion(
     of node: AttributeSyntax,
     providingMembersOf declaration: some DeclGroupSyntax,
@@ -22,17 +22,17 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
       let typeName = declaration.as(ClassDeclSyntax.self)?.name.text ?? declaration.as(StructDeclSyntax.self)?.name.text
         ?? declaration.as(ActorDeclSyntax.self)?.name.text
     else {
-      throw EditorMacroError("@Editor can only be applied to types (classes, structs, actors)")
+      throw EditableMacroError("@Editable can only be applied to types (classes, structs, actors)")
     }
 
     // Extract grouping option from macro arguments
     let grouping = extractGroupingOption(from: node)
 
-    // Find all @Editable properties
+    // Find all @Editor properties
     let editableProperties = findEditableProperties(in: declaration)
 
     guard !editableProperties.isEmpty else {
-      throw EditorMacroError("No @Editable properties found in \(typeName)")
+      throw EditableMacroError("No @Editor properties found in \(typeName)")
     }
 
     // Generate the getEditableProperties method
@@ -53,7 +53,7 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
       declaration.as(ClassDeclSyntax.self) != nil || declaration.as(StructDeclSyntax.self) != nil
         || declaration.as(ActorDeclSyntax.self) != nil
     else {
-      throw EditorMacroError("@Editor can only be applied to types (classes, structs, actors)")
+      throw EditableMacroError("@Editable can only be applied to types (classes, structs, actors)")
     }
 
     // Check if the type already conforms to Editing
@@ -84,7 +84,7 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
         for binding in variableDecl.bindings {
           if let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
             let attribute = variableDecl.attributes.first?.as(AttributeSyntax.self),
-            attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "Editable"
+            attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "Editor"
           {
 
             let propertyName = pattern.identifier.text
@@ -133,8 +133,13 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
   private static func extractRange(from attribute: AttributeSyntax) -> String? {
     if let argumentList = attribute.arguments?.as(LabeledExprListSyntax.self) {
       for arg in argumentList {
-        if let label = arg.label?.text, label == "range" {
-          return arg.expression.description
+        // Support both labeled and unlabeled range arguments
+        if arg.label == nil || arg.label?.text == "range" {
+          // Check if it's a range expression (contains "...")
+          let exprStr = arg.expression.description
+          if exprStr.contains("...") {
+            return exprStr
+          }
         }
       }
     }
@@ -382,7 +387,7 @@ public struct EditorMacro: MemberMacro, ExtensionMacro {
   }
 }
 
-private struct EditorMacroError: Error {
+private struct EditableMacroError: Error {
   let message: String
   init(_ message: String) {
     self.message = message
@@ -396,14 +401,3 @@ private struct EditablePropertyInfo {
   let range: String?
 }
 
-public struct EditableOptionsMacro: AccessorMacro {
-  public static func expansion(
-    of node: AttributeSyntax,
-    providingAccessorsOf declaration: some DeclSyntaxProtocol,
-    in context: some MacroExpansionContext
-  ) throws -> [AccessorDeclSyntax] {
-    // This macro doesn't actually generate accessors - it's just a marker
-    // The EditorPanel will use reflection to find properties with this attribute
-    return []
-  }
-}

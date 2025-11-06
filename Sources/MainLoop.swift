@@ -2,7 +2,7 @@ import Assimp
 import Foundation
 import Jolt
 
-@Editor final class MainLoop: RenderLoop {
+@Editable final class MainLoop: RenderLoop {
   // Scene configuration
   private let sceneName: String = "test"
   //  private let sceneName: String = "radar_office"
@@ -40,6 +40,12 @@ import Jolt
   private var actionBodyNames: [BodyID: String] = [:]
   // Currently detected action body name (updated each frame)
   private var detectedActionName: String?
+  // Mapping from trigger body IDs to their node names
+  private var triggerBodyNames: [BodyID: String] = [:]
+  // Currently active triggers (OrderedSet to avoid duplicates while maintaining order)
+  private var currentTriggers: OrderedSet<String> = []
+  // Previous frame's triggers (to detect new entries)
+  private var previousTriggers: Set<String> = []
   // Sensor body in front of capsule for detecting action triggers
   private var capsuleSensorBodyID: BodyID?
   // Flag to track if physics system is ready for updates
@@ -47,13 +53,13 @@ import Jolt
   var currentProjection: mat4 = mat4(1)  // Accessible by debug renderer implementation
   var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
 
-  @Editable var visualizePhysics: Bool = false
-  @Editable var disableDepth: Bool = false
+  @Editor var visualizePhysics: Bool = false
+  @Editor var disableDepth: Bool = false
 
   // Scene and camera
-  private var scene: Assimp.Scene?
+  private var scene: Scene?
   private var camera1: Assimp.Camera?
-  private var camera1Node: Assimp.Node?
+  private var camera1Node: Node?
   private var camera1WorldTransform: mat4 = mat4(1)
 
   // Scene lights
@@ -111,9 +117,6 @@ import Jolt
 
     // Initialize dialog view
     dialogView = DialogView()
-
-    // Load scene script class dynamically
-    loadSceneScript()
 
     // Initialize prerendered environment
     do {
@@ -199,6 +202,7 @@ import Jolt
         if let loadedScene = scene {
           loadCollisionBodiesIntoPhysics(scene: loadedScene)
           loadActionBodiesIntoPhysics(scene: loadedScene)
+          loadTriggerBodiesIntoPhysics(scene: loadedScene)
           // Optimize broad phase after adding bodies (recommended before first Update)
           physicsSystem?.optimizeBroadPhase()
 
@@ -226,16 +230,22 @@ import Jolt
     Task {
       do {
         let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
-        let scene = try Assimp.Scene(
+        let assimpScene = try Assimp.Scene(
           file: scenePath,
           flags: [.triangulate, .flipUVs, .calcTangentSpace]
         )
+
+        // Wrap in our Scene wrapper
+        let scene = Scene(assimpScene)
 
         print(scene.rootNode)
         scene.cameras.forEach { print($0) }
 
         await MainActor.run {
           self.scene = scene
+
+          // Load scene script class dynamically
+          loadSceneScript()
 
           // Initialize active camera from scene using default name Camera_1
           self.syncActiveCamera(name: "Camera_1")
@@ -301,13 +311,14 @@ import Jolt
   }
 
   /// Load foreground meshes from nodes with -fg suffix (recursively includes subnodes)
-  private func loadForegroundMeshes(scene: Assimp.Scene) {
+  private func loadForegroundMeshes(scene: Scene) {
     foregroundMeshInstances.removeAll()
 
-    func traverse(_ node: Assimp.Node) {
+    func traverse(_ node: Node) {
       // Check if this node has -fg suffix
       if let name = node.name, name.hasSuffix("-fg") {
-        // Get all meshes from this node
+        // Get all meshes from this node (create MeshInstance regardless of isHidden)
+        // Visibility is checked at render time
         for i in 0..<node.numberOfMeshes {
           let meshIndex = node.meshes[i]
           if meshIndex < scene.meshes.count {
@@ -326,6 +337,9 @@ import Jolt
               transformMatrix: transformMatrix,
               sceneIdentifier: scene.filePath
             )
+
+            // Store node reference for checking visibility at render time
+            meshInstance.node = node
 
             foregroundMeshInstances.append(meshInstance)
             print("✅ Created foreground MeshInstance for node '\(name)' mesh \(i)")
@@ -457,9 +471,9 @@ import Jolt
   }
 
   /// Calculate world transform for a node by traversing up the hierarchy
-  private func calculateNodeWorldTransform(_ node: Assimp.Node, scene: Assimp.Scene) -> mat4 {
+  private func calculateNodeWorldTransform(_ node: Node, scene: Scene) -> mat4 {
     var transform = convertAssimpMatrix(node.transformation)
-    var currentNode = node
+    var currentNode = node.assimpNode
 
     while let parent = currentNode.parent {
       let parentTransform = convertAssimpMatrix(parent.transformation)
@@ -706,7 +720,14 @@ import Jolt
   }
 
   private func loadSceneScript() {
-    guard let dialogView = dialogView else { return }
+    guard let scene else {
+      logger.error("⚠️ No scene to load script for")
+      return
+    }
+    guard let dialogView else {
+      logger.error("⚠️ dialogView is nil")
+      return
+    }
 
     // Convert scene name to class name (e.g., "radar_office" -> "RadarOffice", "test" -> "Test")
     let className = sceneNameToClassName(sceneName)
@@ -720,8 +741,11 @@ import Jolt
     }
 
     // Create an instance of the script class, passing dialogView to init
-    sceneScript = scriptClass.init(scene: scene!, dialogView: dialogView)
+    sceneScript = scriptClass.init(scene: scene, dialogView: dialogView)
     logger.info("✅ Loaded scene script: \(className)")
+
+    // Call sceneDidLoad() after initialization
+    sceneScript?.sceneDidLoad()
   }
 
   /// Convert scene name to class name
@@ -751,6 +775,24 @@ import Jolt
     } else {
       // If method not found, log a warning
       logger.warning("⚠️ Scene script does not respond to method: \(methodName)")
+    }
+  }
+
+  private func callTriggerMethod(triggerName: String) {
+    guard let sceneScript = sceneScript else { return }
+
+    // Convert trigger name to method name (e.g., "Door" -> "door")
+    let methodName = triggerName.prefix(1).lowercased() + triggerName.dropFirst()
+
+    // Create selector for method with no parameters using Foundation
+    let selector = Selector(methodName)
+
+    // Check if the method exists and call it
+    if sceneScript.responds(to: selector) {
+      _ = sceneScript.perform(selector)
+    } else {
+      // If method not found, log a warning
+      logger.warning("⚠️ Scene script does not respond to trigger method: \(methodName)")
     }
   }
 
@@ -951,6 +993,51 @@ import Jolt
         }
       }
 
+      // Check for trigger body contacts
+      // Triggers fire immediately when player enters them
+      currentTriggers.removeAll()
+      var newTriggers: Set<String> = []
+
+      // Check character controller contacts for triggers
+      for contact in contacts {
+        if contact.isSensorB, let triggerName = triggerBodyNames[contact.bodyID] {
+          let cleanName = triggerName.replacing(/-trigger$/, with: "")
+          currentTriggers.append(cleanName)
+          newTriggers.insert(cleanName)
+        }
+      }
+
+      // Also check using collision query at player position (character controller position)
+      // Use a sphere shape at the player position to detect triggers
+      //let bodyInterface = physicsSystem.bodyInterface()
+      let triggerCheckRadius: Float = 0.5  // Radius to check around player
+      let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
+      var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
+      let triggerQueryResults = physicsSystem.collideShapeAll(
+        shape: triggerCheckShape,
+        scale: Vec3(x: 1, y: 1, z: 1),
+        baseOffset: &playerBaseOffset
+      )
+
+      // Check for trigger bodies
+      for result in triggerQueryResults {
+        let bodyID = result.bodyID2
+        if let triggerName = triggerBodyNames[bodyID] {
+          let cleanName = triggerName.replacing(/-trigger$/, with: "")
+          currentTriggers.append(cleanName)
+          newTriggers.insert(cleanName)
+        }
+      }
+
+      // Call trigger methods for newly entered triggers
+      let newlyEnteredTriggers = newTriggers.subtracting(previousTriggers)
+      for triggerName in newlyEnteredTriggers {
+        callTriggerMethod(triggerName: triggerName)
+      }
+
+      // Update previous triggers for next frame
+      previousTriggers = newTriggers
+
       // Read position back from character controller
       let characterPos = characterController.position
       playerPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
@@ -1129,6 +1216,9 @@ import Jolt
         let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
 
         for meshInstance in foregroundMeshInstances {
+          // Skip if not visible (node is hidden)
+          guard meshInstance.isVisible() else { continue }
+
           meshInstance.draw(
             projection: projection,
             view: view,
@@ -1210,6 +1300,10 @@ extension MainLoop {
 
       detectedActionName != nil
         ? "Action: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Action: none",
+
+      currentTriggers.isEmpty
+        ? "Triggers: none"
+        : "Triggers: \(currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
     ]
 
     let overlay = overlayLines.joined(separator: "\n")
@@ -1221,8 +1315,8 @@ extension MainLoop {
     )
   }
 
-  private func drawEntryArrows(in scene: Assimp.Scene, projection: mat4, view: mat4) {
-    func traverse(_ node: Assimp.Node) {
+  private func drawEntryArrows(in scene: Scene, projection: mat4, view: mat4) {
+    func traverse(_ node: Node) {
       if let name = node.name, name.hasPrefix("Entry_") {
         let world = calculateNodeWorldTransform(node, scene: scene)
         let origin = vec3(world[3].x, world[3].y, world[3].z)
@@ -1272,14 +1366,14 @@ extension MainLoop {
     }
   }
 
-  private func loadCollisionBodiesIntoPhysics(scene: Assimp.Scene) {
+  private func loadCollisionBodiesIntoPhysics(scene: Scene) {
     guard let physicsSystem = physicsSystem else { return }
     let bodyInterface = physicsSystem.bodyInterface()
 
     // Simple object layer for static collision bodies
     let staticLayer: ObjectLayer = 1
 
-    func traverse(_ node: Assimp.Node) {
+    func traverse(_ node: Node) {
       if let name = node.name, name.contains("-col") {
         let worldTransform = calculateNodeWorldTransform(node, scene: scene)
 
@@ -1328,14 +1422,14 @@ extension MainLoop {
     traverse(scene.rootNode)
   }
 
-  private func loadActionBodiesIntoPhysics(scene: Assimp.Scene) {
+  private func loadActionBodiesIntoPhysics(scene: Scene) {
     guard let physicsSystem = physicsSystem else { return }
     let bodyInterface = physicsSystem.bodyInterface()
 
     // Simple object layer for static action bodies (same as collision bodies)
     let staticLayer: ObjectLayer = 1
 
-    func traverse(_ node: Assimp.Node) {
+    func traverse(_ node: Node) {
       if let name = node.name, name.contains("-action") {
         let worldTransform = calculateNodeWorldTransform(node, scene: scene)
 
@@ -1378,6 +1472,62 @@ extension MainLoop {
               print("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
             } else {
               print("❌ Failed to create action trigger body for node '\(name)'")
+            }
+          }
+        }
+      }
+      for child in node.children { traverse(child) }
+    }
+    traverse(scene.rootNode)
+  }
+
+  private func loadTriggerBodiesIntoPhysics(scene: Scene) {
+    guard let physicsSystem = physicsSystem else { return }
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    // Simple object layer for static trigger bodies (same as collision bodies)
+    let staticLayer: ObjectLayer = 1
+
+    func traverse(_ node: Node) {
+      if let name = node.name, name.contains("-trigger") {
+        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+
+        // Get mesh from this node
+        if node.numberOfMeshes > 0 {
+          let meshIndex = node.meshes[0]
+          if meshIndex < scene.meshes.count {
+            let mesh = scene.meshes[Int(meshIndex)]
+
+            // Extract triangles from mesh and transform them to world space
+            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+
+            guard !triangles.isEmpty else { return }
+
+            // Create mesh shape from triangles (already in world space)
+            let meshShape = MeshShape(triangles: triangles)
+
+            // Position is at origin since triangles are already in world space
+            let position = vec3(0, 0, 0)
+            let rotation = Quat.identity
+
+            // Create body settings - mark as sensor so it doesn't collide but triggers
+            let bodySettings = BodyCreationSettings(
+              shape: meshShape,
+              position: RVec3(x: position.x, y: position.y, z: position.z),
+              rotation: rotation,
+              motionType: .static,
+              objectLayer: staticLayer
+            )
+            bodySettings.isSensor = true  // Make it a sensor/trigger
+
+            // Create and add body to physics system
+            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+            if bodyID != 0 {
+              // Store mapping from body ID to node name
+              triggerBodyNames[bodyID] = name
+              print("✅ Created trigger body ID: \(bodyID) for node '\(name)'")
+            } else {
+              print("❌ Failed to create trigger body for node '\(name)'")
             }
           }
         }
@@ -1488,8 +1638,8 @@ extension MainLoop {
     return Quat(x: q.x * invLength, y: q.y * invLength, z: q.z * invLength, w: q.w * invLength)
   }
 
-  private func drawCollisionBodies(scene: Assimp.Scene, debugRenderer: DebugRenderer) {
-    func traverse(_ node: Assimp.Node) {
+  private func drawCollisionBodies(scene: Scene, debugRenderer: DebugRenderer) {
+    func traverse(_ node: Node) {
       if let name = node.name, name.contains("-col") {
         let worldTransform = calculateNodeWorldTransform(node, scene: scene)
 
@@ -1550,8 +1700,8 @@ extension MainLoop {
       min: Vec3(x: minPoint.x, y: minPoint.y, z: minPoint.z), max: Vec3(x: maxPoint.x, y: maxPoint.y, z: maxPoint.z))
   }
 
-  private func drawEntryArrowsWithJolt(scene: Assimp.Scene, debugRenderer: DebugRenderer) {
-    func traverse(_ node: Assimp.Node) {
+  private func drawEntryArrowsWithJolt(scene: Scene, debugRenderer: DebugRenderer) {
+    func traverse(_ node: Node) {
       if let name = node.name, name.hasPrefix("Entry_") {
         let world = calculateNodeWorldTransform(node, scene: scene)
         let origin = vec3(world[3].x, world[3].y, world[3].z)

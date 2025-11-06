@@ -29,6 +29,34 @@ class Script: NSObject {
 
   var hasAliveEnemies: Bool { false }
 
+  /// Called when the scene script is loaded and initialized
+  /// Override this method in scene-specific script classes to perform initialization
+  func sceneDidLoad() {}
+
+  /// Find a node by name, searching from the root node
+  /// Matches exact names or names with dashed suffixes (e.g., "CatStatue" matches "CatStatue-fg")
+  func findNode(_ name: String) -> Node? {
+    return findNode(named: name, in: scene.rootNode)
+  }
+
+  private func findNode(named name: String, in node: Node) -> Node? {
+    // Check if this node matches (exact match or starts with name followed by dash)
+    if let nodeName = node.name {
+      if nodeName == name || nodeName.hasPrefix("\(name)-") {
+        return node
+      }
+    }
+
+    // Recursively search children
+    for child in node.children {
+      if let found = findNode(named: name, in: child) {
+        return found
+      }
+    }
+
+    return nil
+  }
+
   func loadScene(_ name: String, entry entryName: String? = nil) {}
 
   @MainActor func say(_ string: String) { dialogView.print(chunks: [string]) }

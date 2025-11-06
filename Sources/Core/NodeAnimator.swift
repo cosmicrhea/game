@@ -109,7 +109,7 @@ class NodeAnimator {
   }
 
   private func calculateBoneTransformsRecursive(
-    node: Assimp.Node,
+    node: Node,
     parentTransform: mat4,
     boneTransforms: inout [String: mat4]
   ) {

@@ -57,7 +57,7 @@ struct MeshVertex {
 
 class MeshInstance: @unchecked Sendable {
 
-  let scene: Scene
+  let scene: Assimp.Scene
   let mesh: Mesh
   let transformMatrix: mat4
   private let sceneIdentifier: String
@@ -98,8 +98,12 @@ class MeshInstance: @unchecked Sendable {
   var emissive: vec3 = vec3(0.0, 0.0, 0.0)
   var opacity: Float = 1.0
 
+  // Node reference for checking visibility (optional)
+  weak var node: Node?
+
   init(scene: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1), sceneIdentifier: String) {
-    self.scene = scene
+    // Extract underlying Assimp.Scene for internal storage
+    self.scene = scene.assimpScene
     self.mesh = mesh
     self.transformMatrix = transformMatrix
     self.sceneIdentifier = sceneIdentifier
@@ -247,6 +251,15 @@ class MeshInstance: @unchecked Sendable {
     }
   }
 
+  /// Check if this mesh instance is visible (node is not hidden)
+  func isVisible() -> Bool {
+    guard let node = node else {
+      // If no node reference, assume visible
+      return true
+    }
+    return !node.isHidden
+  }
+
   /// Async initializer that loads scene and textures with progress callbacks
   static func loadAsync(
     path: String,
@@ -255,7 +268,7 @@ class MeshInstance: @unchecked Sendable {
   ) async throws -> [MeshInstance] {
 
     // Load scene with progress
-    let scene = try await withCheckedThrowingContinuation { continuation in
+    let assimpScene = try await withCheckedThrowingContinuation { continuation in
       Task {
         do {
           let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
@@ -274,6 +287,9 @@ class MeshInstance: @unchecked Sendable {
         }
       }
     }
+
+    // Wrap in our Scene wrapper
+    let scene = Scene(assimpScene)
 
     //print(scene.rootNode)
 
@@ -861,7 +877,7 @@ class MeshInstance: @unchecked Sendable {
 
 // MARK: - Scene helpers for transform matrices
 
-extension Scene {
+extension Assimp.Scene {
   /// Get transform matrix for a mesh by finding it in the node hierarchy
   func getTransformMatrix(for mesh: Mesh) -> mat4 {
     return findMeshTransform(mesh: mesh, node: rootNode, parentTransform: mat4(1))
