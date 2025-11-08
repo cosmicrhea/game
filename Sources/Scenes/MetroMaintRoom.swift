@@ -1,6 +1,4 @@
-@objcMembers
-@MainActor
-class MetroMaintenanceRoom: Script {
+@objcMembers class MetroMaintenanceRoom: Script {
 
   func bulletinBoard() {
     say("Various postings for the Metro employees.")

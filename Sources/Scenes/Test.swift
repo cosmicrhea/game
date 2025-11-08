@@ -4,7 +4,7 @@
 
   override func sceneDidLoad() {
     catStatue = findNode("CatStatue")
-    catStatue.isHidden = true
+    //catStatue.isHidden = true
   }
 
   func showCat() {

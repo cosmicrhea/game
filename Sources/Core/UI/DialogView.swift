@@ -60,18 +60,18 @@
   func update(deltaTime: Float) {
     self.deltaTime = deltaTime
 
-    // Check if text just became empty (user dismissed dialog) and resume continuation if needed
-    let isTextEmptyNow = text.isEmpty
-    if isTextEmptyNow && !wasTextEmptyLastFrame {
-      // Text just became empty (user dismissed), resume continuation if one exists
-      if let continuation = completionContinuation {
-        completionContinuation = nil
-        continuation.resume()
-      }
-      // Reset forceMoreIndicator when dialog is dismissed
-      forceMoreIndicator = false
-    }
-    wasTextEmptyLastFrame = isTextEmptyNow
+    // // Check if text just became empty (user dismissed dialog) and resume continuation if needed
+    // let isTextEmptyNow = text.isEmpty
+    // if isTextEmptyNow && !wasTextEmptyLastFrame {
+    //   // Text just became empty (user dismissed), resume continuation if one exists
+    //   if let continuation = completionContinuation {
+    //     completionContinuation = nil
+    //     continuation.resume()
+    //   }
+    //   // Reset forceMoreIndicator when dialog is dismissed
+    //   forceMoreIndicator = false
+    // }
+    // wasTextEmptyLastFrame = isTextEmptyNow
 
     // Update speed multiplier based on held action keys or left mouse button
     updateSpeedMultiplier()
@@ -253,6 +253,22 @@
   var isFinished: Bool {
     guard isCurrentChunkComplete() else { return false }
     return !hasMoreChunks
+  }
+
+  /// Whether the dialog is currently active (showing text)
+  var isActive: Bool {
+    return !text.isEmpty
+  }
+
+  /// Dismiss the dialog (synchronously disables input to prevent frame gap)
+  func dismiss() {
+    text = ""
+    forceMoreIndicator = false
+
+    if let continuation = completionContinuation {
+      completionContinuation = nil
+      continuation.resume()
+    }
   }
 
   /// Display an array of text chunks. Each string will be treated as a separate chunk

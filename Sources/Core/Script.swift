@@ -86,9 +86,11 @@ class Script: NSObject {
   func pause(_ seconds: Float) {}
 
   @discardableResult func acquire(_ item: Item, quantity: Int = 1) async -> Bool {
+    // Input is already disabled by dialogView.dismiss() when dialog finishes
     // Show PickupView and wait for result
-    guard let showPickupView = showPickupView else {
+    guard let showPickupView else {
       print("⚠️ Cannot show PickupView: showPickupView callback not set")
+      Input.player1.isEnabled = true  // Re-enable on error
       return false
     }
 

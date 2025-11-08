@@ -74,6 +74,8 @@ public final class Engine {
   private var deltaTime: Float = 0.0
   private var lastFrame: Float = 0.0
   private var lastTitleUpdateTime: Double = 0.0
+  private var targetFrameTime: Double = 1.0 / 60.0  // Target 60 FPS
+  private var lastFrameTime: Double = 0.0
 
   private init() {}
 
@@ -152,7 +154,10 @@ public final class Engine {
     window.position = .zero
     window.context.makeCurrent()
 
-    // We shouldn’t need this icon thing for release; it’ll be embedded in .app/.exe/etc.
+    // Enable vsync for consistent frame pacing (fixes laggy movement)
+    window.context.setSwapInterval(1)
+
+    // We shouldn't need this icon thing for release; it'll be embedded in .app/.exe/etc.
     window.setIcon(GLFW.Image("UI/AppIcon/icon~masked.webp"))
     window.mouse.setCursor(to: .dot)
     //window.mouse.setCursor(to: .regular)
@@ -552,12 +557,24 @@ public final class Engine {
   }
 
   private func runMainLoop() {
+    lastFrameTime = GLFWSession.currentTime
+
     while !window.shouldClose {
       if let t = scheduleExitAt, GLFWSession.currentTime >= t {
         break
       }
 
       advanceMainLoop()
+
+      // Frame pacing: sleep if we're ahead of target frame time
+      // This ensures consistent frame timing and smooth movement
+      let currentTime = GLFWSession.currentTime
+      let frameTime = currentTime - lastFrameTime
+      if frameTime < targetFrameTime {
+        let sleepTime = targetFrameTime - frameTime
+        Thread.sleep(forTimeInterval: sleepTime)
+      }
+      lastFrameTime = GLFWSession.currentTime
     }
   }
 

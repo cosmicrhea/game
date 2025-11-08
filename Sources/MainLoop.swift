@@ -1,4 +1,5 @@
 import Assimp
+import CJolt
 import Foundation
 import Jolt
 
@@ -53,18 +54,18 @@ import Jolt
   var currentProjection: mat4 = mat4(1)  // Accessible by debug renderer implementation
   var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
 
+  // Query caching - reduces expensive collision queries
+  private var queryFrameCounter: UInt32 = 0  // For caching collision queries
+  private var cachedActionQueryResults: [JPH_CollideShapeResult] = []  // Cached action query results
+  private var cachedTriggerQueryResults: [JPH_CollideShapeResult] = []  // Cached trigger query results
+  private let queryCacheInterval: UInt32 = 2  // Run queries every 2 frames (30fps effective rate)
+
   @Editor var visualizePhysics: Bool = false
   @Editor var disableDepth: Bool = false
 
-  @Editor func shakeScreen() {
-    ScreenShake.shared.shake(.subtle)
-  }
-  @Editor func shakeScreenMore() {
-    ScreenShake.shared.shake(.heavy)
-  }
-  @Editor func shakeScreenVertically() {
-    ScreenShake.shared.shake(.subtle, axis: .vertical)
-  }
+  @Editor func shakeScreen() { ScreenShake.shared.shake(.subtle) }
+  @Editor func shakeScreenMore() { ScreenShake.shared.shake(.heavy) }
+  @Editor func shakeScreenVertically() { ScreenShake.shared.shake(.subtle, axis: .vertical) }
 
   // Scene and camera
   private var scene: Scene?
@@ -100,7 +101,7 @@ import Jolt
   // }
 
   // Main menu system
-  private var mainMenu: MainMenu?
+  private let mainMenu: MainMenu
   private var showingMainMenu: Bool = false
 
   // Pickup view system
@@ -108,7 +109,7 @@ import Jolt
   private var showingPickupView: Bool = false
 
   // Dialog system
-  private var dialogView: DialogView?
+  private let dialogView: DialogView
   // Scene script instance
   private var sceneScript: Script?
 
@@ -119,18 +120,17 @@ import Jolt
   private let boxPosition: vec3 = vec3(3, 0, 3)
 
   init() {
-    setupGameplay()
-  }
+    // Initialize dialog view
+    dialogView = DialogView()
 
-  private func setupGameplay() {
+    // Initialize main menu
+    mainMenu = MainMenu()
+
     // Load scene and find Camera_1
     loadScene()
 
     // Load capsule mesh from GLB file
     loadCapsuleMesh()
-
-    // Initialize dialog view
-    dialogView = DialogView()
 
     // Initialize prerendered environment
     do {
@@ -140,9 +140,6 @@ import Jolt
     } catch {
       print("Failed to initialize PrerenderedEnvironment: \(error)")
     }
-
-    // Initialize main menu
-    mainMenu = MainMenu()
 
     // Initialize Jolt runtime (required before using any Jolt features)
     JoltRuntime.initialize()
@@ -514,11 +511,10 @@ import Jolt
       pickupView?.update(window: window, deltaTime: deltaTime)
     } else if showingMainMenu {
       // Update main menu
-      mainMenu?.update(window: window, deltaTime: deltaTime)
+      mainMenu.update(window: window, deltaTime: deltaTime)
     } else {
-      // Only handle movement if dialog is not active (text is empty)
-      let isDialogActive = dialogView?.text.isEmpty == false
-      if !isDialogActive {
+      // Only handle movement if dialog is not active and input is enabled
+      if !dialogView.isActive && Input.player1.isEnabled {
         // Handle WASD movement
         handleMovement(window.keyboard, deltaTime)
       }
@@ -528,7 +524,7 @@ import Jolt
     }
 
     // Update dialog view
-    dialogView?.update(deltaTime: deltaTime)
+    dialogView.update(deltaTime: deltaTime)
 
     // Update FPS (EMA)
     if deltaTime > 0 {
@@ -538,6 +534,8 @@ import Jolt
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    guard Input.player1.isEnabled else { return }
+
     if showingPickupView {
       // Forward input to pickup view
       pickupView?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
@@ -548,7 +546,7 @@ import Jolt
       // Handle escape key with nested view support
       if key == .escape {
         // If there's a nested view (item/document), let MainMenu handle it first
-        if let mainMenu = mainMenu, mainMenu.hasNestedViewOpen {
+        if mainMenu.hasNestedViewOpen {
           // Forward to main menu, which will forward to the nested view
           mainMenu.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
           return
@@ -567,25 +565,21 @@ import Jolt
       }
 
       // Forward other input to main menu
-      mainMenu?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      mainMenu.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
     } else {
-      // Check if dialog is active (text is not empty)
-      let isDialogActive = dialogView?.text.isEmpty == false
-
       // Handle dialog advancement keys first (these always work)
       switch key {
       case .f, .space, .enter, .numpadEnter:
         // Handle interaction - either advance dialog or interact with action
         // Dialog advancement keys always work, even when dialog is active
-        if let dialogView = dialogView, !dialogView.text.isEmpty {
+        if dialogView.isActive {
           // If dialog is showing, try to advance it
           if dialogView.tryAdvance() {
             // Advanced to next page/chunk
             //UISound.select()
           } else if dialogView.isFinished {
-            // Dialog finished, close it
-            //UISound.select()
-            dialogView.text = ""
+            // Dialog finished, dismiss it (disables input synchronously)
+            dialogView.dismiss()
           }
         } else {
           // No dialog showing, handle interaction with detected action
@@ -598,7 +592,7 @@ import Jolt
       }
 
       // Skip other gameplay keys if dialog is active and not finished
-      guard !isDialogActive else { return }
+      guard !dialogView.isActive else { return }
 
       // Handle other gameplay keys
       switch key {
@@ -669,22 +663,28 @@ import Jolt
   }
 
   func onMouseMove(window: Window, x: Double, y: Double) {
+    guard Input.player1.isEnabled else { return }
+
     if showingPickupView {
       pickupView?.onMouseMove(window: window, x: x, y: y)
     } else if showingMainMenu {
-      mainMenu?.onMouseMove(window: window, x: x, y: y)
+      mainMenu.onMouseMove(window: window, x: x, y: y)
     }
   }
 
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+    guard Input.player1.isEnabled else { return }
+
     if showingPickupView {
       pickupView?.onMouseButton(window: window, button: button, state: state, mods: mods)
     } else if showingMainMenu {
-      mainMenu?.onMouseButton(window: window, button: button, state: state, mods: mods)
+      mainMenu.onMouseButton(window: window, button: button, state: state, mods: mods)
     }
   }
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    guard Input.player1.isEnabled else { return }
+
     if showingPickupView {
       pickupView?.onMouseButtonPressed(window: window, button: button, mods: mods)
       return
@@ -694,7 +694,7 @@ import Jolt
       // Handle right-click with nested view support (same as Escape)
       if button == .right {
         // If there's a nested view (item/document), let MainMenu handle it first
-        if let mainMenu = mainMenu, mainMenu.hasNestedViewOpen {
+        if mainMenu.hasNestedViewOpen {
           // Forward to main menu, which will forward to the nested view
           mainMenu.onMouseButtonPressed(window: window, button: button, mods: mods)
           return
@@ -706,19 +706,19 @@ import Jolt
       }
 
       // Forward other mouse input to main menu
-      mainMenu?.onMouseButtonPressed(window: window, button: button, mods: mods)
+      mainMenu.onMouseButtonPressed(window: window, button: button, mods: mods)
     } else {
       // Handle interaction - either advance dialog or interact with action
       // Dialog advancement always works, even when dialog is active
       if button == .left {
-        if let dialogView = dialogView, !dialogView.text.isEmpty {
+        if dialogView.isActive {
           // If dialog is showing, try to advance it
           if dialogView.tryAdvance() {
             // Advanced to next page/chunk
             UISound.select()
           } else if dialogView.isFinished {
-            // Dialog finished, close it
-            dialogView.text = ""
+            // Dialog finished, dismiss it (disables input synchronously)
+            dialogView.dismiss()
             UISound.select()
           }
         } else {
@@ -730,23 +730,27 @@ import Jolt
   }
 
   func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    guard Input.player1.isEnabled else { return }
+
     if showingPickupView {
       // No-op for pickup view
     } else if showingMainMenu {
-      mainMenu?.onMouseButtonReleased(window: window, button: button, mods: mods)
+      mainMenu.onMouseButtonReleased(window: window, button: button, mods: mods)
     }
   }
 
   func onScroll(window: Window, xOffset: Double, yOffset: Double) {
+    guard Input.player1.isEnabled else { return }
+
     if showingPickupView {
       pickupView?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
     } else if showingMainMenu {
-      mainMenu?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+      mainMenu.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
     }
   }
 
   private func showMainMenu(tab: MainMenuTabs.Tab) {
-    mainMenu?.setActiveTab(tab, animated: false)
+    mainMenu.setActiveTab(tab, animated: false)
     showingMainMenu = true
   }
 
@@ -817,15 +821,14 @@ import Jolt
 
     // Fade back in
     await ScreenFade.shared.fadeFromBlack(duration: 0.3)
+
+    // Re-enable input after fade completes
+    Input.player1.isEnabled = true
   }
 
   private func loadSceneScript() {
     guard let scene else {
       logger.error("⚠️ No scene to load script for")
-      return
-    }
-    guard let dialogView else {
-      logger.error("⚠️ dialogView is nil")
       return
     }
 
@@ -1022,7 +1025,7 @@ import Jolt
       var currentVelocity = characterController.linearVelocity
       let currentYVelocity = currentVelocity.y
 
-      // Set horizontal velocity, preserve vertical
+      // Set horizontal velocity directly (no smoothing - character controller handles it)
       currentVelocity.x = desiredVelocity.x
       currentVelocity.z = desiredVelocity.z
       // Apply gravity if not on ground
@@ -1040,21 +1043,31 @@ import Jolt
 
       // Only update character controller and physics system if ready
       if physicsSystemReady {
+        // Update physics system FIRST (jobSystem is required)
+        // This internally waits for all jobs to complete, so it's synchronous
+        // This ensures the physics world is in a consistent state before character controller updates
+        if let jobSystem {
+          physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: jobSystem)
+        }
+
         // Update character controller (this does the physics movement)
         let characterLayer: ObjectLayer = 2  // Dynamic layer
         characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
 
-        // Update physics system (jobSystem is required)
-        if let jobSystem {
-          physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: jobSystem)
-        }
+        // Read position immediately after character controller update
+        // This gives us the position from the character controller's internal state
+        let characterPos = characterController.position
+        playerPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
       }
 
+      // FIX 3: Cache collision queries - only run every N frames
+      queryFrameCounter += 1
+      let shouldUpdateQueries = (queryFrameCounter % queryCacheInterval) == 0
+
       // Check for action body contacts (sensor bodies)
-      // Query the sensor body to see if it's touching any action bodies
       detectedActionName = nil
 
-      // Also check character controller contacts
+      // Also check character controller contacts (always check these, they're fast)
       let contacts = characterController.activeContacts()
       for contact in contacts {
         if contact.isSensorB, let actionName = actionBodyNames[contact.bodyID] {
@@ -1079,18 +1092,19 @@ import Jolt
         var sensorBody = bodyInterface.body(sensorBodyID, in: physicsSystem)
         sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
 
-        // Query for overlapping action bodies using collision query
-        let sensorShape = SphereShape(radius: 0.5)
-        var baseOffset = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
-        let queryResults = physicsSystem.collideShapeAll(
-          shape: sensorShape,
-          scale: Vec3(x: 1, y: 1, z: 1),
-          baseOffset: &baseOffset
-        )
+        // FIX 3: Only query for overlapping action bodies every N frames
+        if shouldUpdateQueries {
+          let sensorShape = SphereShape(radius: 0.5)
+          var baseOffset = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
+          cachedActionQueryResults = physicsSystem.collideShapeAll(
+            shape: sensorShape,
+            scale: Vec3(x: 1, y: 1, z: 1),
+            baseOffset: &baseOffset
+          )
+        }
 
-        // Check if any of the colliding bodies are action bodies
-        // JPH_CollideShapeResult has bodyID2 field (not bodyID)
-        for result in queryResults {
+        // Check if any of the colliding bodies are action bodies (use cached results)
+        for result in cachedActionQueryResults {
           let bodyID = result.bodyID2
           if let actionName = actionBodyNames[bodyID] {
             detectedActionName = actionName.replacing(/-action$/, with: "")
@@ -1104,7 +1118,7 @@ import Jolt
       currentTriggers.removeAll()
       var newTriggers: Set<String> = []
 
-      // Check character controller contacts for triggers
+      // Check character controller contacts for triggers (always check these, they're fast)
       for contact in contacts {
         if contact.isSensorB, let triggerName = triggerBodyNames[contact.bodyID] {
           let cleanName = triggerName.replacing(/-trigger$/, with: "")
@@ -1113,20 +1127,20 @@ import Jolt
         }
       }
 
-      // Also check using collision query at player position (character controller position)
-      // Use a sphere shape at the player position to detect triggers
-      //let bodyInterface = physicsSystem.bodyInterface()
-      let triggerCheckRadius: Float = 0.5  // Radius to check around player
-      let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
-      var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
-      let triggerQueryResults = physicsSystem.collideShapeAll(
-        shape: triggerCheckShape,
-        scale: Vec3(x: 1, y: 1, z: 1),
-        baseOffset: &playerBaseOffset
-      )
+      // FIX 3: Only check using collision query every N frames
+      if shouldUpdateQueries {
+        let triggerCheckRadius: Float = 0.5  // Radius to check around player
+        let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
+        var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
+        cachedTriggerQueryResults = physicsSystem.collideShapeAll(
+          shape: triggerCheckShape,
+          scale: Vec3(x: 1, y: 1, z: 1),
+          baseOffset: &playerBaseOffset
+        )
+      }
 
-      // Check for trigger bodies
-      for result in triggerQueryResults {
+      // Check for trigger bodies (use cached results)
+      for result in cachedTriggerQueryResults {
         let bodyID = result.bodyID2
         if let triggerName = triggerBodyNames[bodyID] {
           let cleanName = triggerName.replacing(/-trigger$/, with: "")
@@ -1143,10 +1157,6 @@ import Jolt
 
       // Update previous triggers for next frame
       previousTriggers = newTriggers
-
-      // Read position back from character controller
-      let characterPos = characterController.position
-      playerPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
       //    } else {
       //      // Fallback to manual movement if character controller not available
       //      // Check for speed boost (Shift key)
@@ -1180,7 +1190,7 @@ import Jolt
       pickupView?.draw()
     } else if showingMainMenu {
       // Draw main menu
-      mainMenu?.draw()
+      mainMenu.draw()
     } else {
       // Set up 3D rendering
       let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
@@ -1361,6 +1371,12 @@ import Jolt
       //drawEntryArrows(in: loadedScene, projection: projection, view: view)
       //      }
 
+      // Always call nextFrame to maintain consistent timing (even when not visualizing)
+      // This might help with synchronization/timing issues
+      if let debugRenderer = debugRenderer {
+        debugRenderer.nextFrame()
+      }
+
       // Update debug renderer camera and draw if enabled
       if visualizePhysics, let debugRenderer = debugRenderer {
         currentProjection = projection
@@ -1369,9 +1385,6 @@ import Jolt
         // Set camera position for debug renderer (extract from view matrix)
         let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
         debugRenderer.setCameraPosition(RVec3(x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z))
-
-        // Call nextFrame to clear previous frame's geometry
-        debugRenderer.nextFrame()
 
         // Draw all physics bodies using Jolt's drawBodies (draws actual geometry, not just AABBs)
         if let physicsSystem = physicsSystem {
@@ -1391,7 +1404,7 @@ import Jolt
 
       // Draw dialog view (on top of everything)
       GraphicsContext.current?.renderer.withUIContext {
-        dialogView?.draw()
+        dialogView.draw()
       }
     }
   }

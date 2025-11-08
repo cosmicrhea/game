@@ -325,6 +325,11 @@ final class PickupView: RenderLoop {
       return
     }
 
+    // Disable input while sliding in or out
+    if isSlidingIn || isSlidingOut {
+      return
+    }
+
     // Handle item view state
     if viewState == .showingItem {
       switch key {
@@ -371,6 +376,11 @@ final class PickupView: RenderLoop {
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     // Disable input while dismissing
     if isDismissing {
+      return
+    }
+
+    // Disable input while sliding in or out
+    if isSlidingIn || isSlidingOut {
       return
     }
 

@@ -67,6 +67,11 @@ public final class ScreenFade {
     return currentOpacity > 0.0
   }
 
+  /// Check if a fade animation is currently in progress
+  public var isFading: Bool {
+    return isAnimating
+  }
+
   /// Get the current opacity value
   public var opacity: Float {
     return currentOpacity

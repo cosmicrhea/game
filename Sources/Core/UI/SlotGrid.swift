@@ -148,7 +148,7 @@ public final class SlotGrid {
     if let inventory = inventory {
       inventory.slots = data
     } else {
-      slotData = data
+    slotData = data
     }
   }
 
@@ -217,8 +217,8 @@ public final class SlotGrid {
       guard index >= 0 && index < inventory.slots.count else { return }
       inventory.slots[index] = data
     } else {
-      guard index >= 0 && index < slotData.count else { return }
-      slotData[index] = data
+    guard index >= 0 && index < slotData.count else { return }
+    slotData[index] = data
     }
   }
 
@@ -764,28 +764,28 @@ public final class SlotGrid {
       print("SlotGrid: After move - Source now has: \(inventory.slots[sourceIndex]?.item?.name ?? "nil")")
       print("SlotGrid: After move - Target now has: \(inventory.slots[targetIndex]?.item?.name ?? "nil")")
     } else {
-      guard sourceIndex >= 0 && sourceIndex < slotData.count else {
-        print("SlotGrid: Invalid source index \(sourceIndex)")
-        return
-      }
-      guard targetIndex >= 0 && targetIndex < slotData.count else {
-        print("SlotGrid: Invalid target index \(targetIndex)")
-        return
-      }
+    guard sourceIndex >= 0 && sourceIndex < slotData.count else {
+      print("SlotGrid: Invalid source index \(sourceIndex)")
+      return
+    }
+    guard targetIndex >= 0 && targetIndex < slotData.count else {
+      print("SlotGrid: Invalid target index \(targetIndex)")
+      return
+    }
 
-      let sourceData = slotData[sourceIndex]
-      let targetData = slotData[targetIndex]
+    let sourceData = slotData[sourceIndex]
+    let targetData = slotData[targetIndex]
 
-      print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
-      print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
-      print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+    print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
+    print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
+    print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
 
-      // Swap even if one side is nil (acts as move into empty)
-      slotData[targetIndex] = sourceData
-      slotData[sourceIndex] = targetData
+    // Swap even if one side is nil (acts as move into empty)
+    slotData[targetIndex] = sourceData
+    slotData[sourceIndex] = targetData
 
-      print("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
-      print("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
+    print("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
+    print("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
     }
   }
 

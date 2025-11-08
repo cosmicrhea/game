@@ -1,6 +1,4 @@
-@objcMembers
-@MainActor
-class MetroMaintenanceCorridor: Script {
+@objcMembers class MetroMaintenanceCorridor: Script {
 
   func openDoor() {
     say("You open the door to the maintenance corridor.")
