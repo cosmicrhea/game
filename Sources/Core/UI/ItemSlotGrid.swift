@@ -560,19 +560,20 @@ public final class ItemSlotGrid {
     guard index >= 0 && index < data.count, let slotData = data[index], let item = slotData.item else {
       return []
     }
+    let exchangeAction: [SlotAction] = TWO_PLAYER_MODE ? [.exchange] : []
     switch item.kind {
     case .weapon:
       if equippedWeaponId == item.id {
-        return [.unequip, .inspect, .exchange]
+        return [.unequip, .inspect] + exchangeAction
       } else {
-        return [.equip, .inspect, .exchange]
+        return [.equip, .inspect] + exchangeAction
       }
     case .recovery:
-      return [.use, .inspect, .exchange, .discard]
+      return [.use, .inspect] + exchangeAction + [.discard]
     case .key:
-      return [.inspect, .combine, .exchange]
+      return [.inspect, .combine] + exchangeAction
     case .ammo:
-      return [.inspect, .exchange, .discard]
+      return [.inspect] + exchangeAction + [.discard]
     }
   }
 

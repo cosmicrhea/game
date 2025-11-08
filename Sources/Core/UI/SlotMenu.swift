@@ -20,7 +20,7 @@ extension SlotAction {
     case .unequip: return Image("UI/Icons/gun.svg", size: 20)
     case .inspect: return Image("UI/Icons/phosphor-icons/magnifying-glass-bold.svg", size: 20)
     case .combine: return Image("UI/Icons/phosphor-icons/plus-circle-bold.svg", size: 20)
-//    case .exchange: return Image("UI/Icons/phosphor-icons/hand-arrow-up-bold.svg", size: 20)
+    //    case .exchange: return Image("UI/Icons/phosphor-icons/hand-arrow-up-bold.svg", size: 20)
     case .exchange: return Image("UI/Icons/phosphor-icons/arrows-down-up-bold.svg", size: 20)
     case .discard: return Image("UI/Icons/phosphor-icons/trash-bold.svg", size: 20)
     }
@@ -46,12 +46,22 @@ public final class SlotMenu: PopupMenu {
 
   // MARK: - Public Methods
 
+  /// Default available actions for slot menu
+  @usableFromInline
+  static var defaultAvailableActions: [SlotAction] {
+    var actions: [SlotAction] = [.use, .inspect, .combine, .discard]
+    if TWO_PLAYER_MODE {
+      actions.insert(.exchange, at: 3)
+    }
+    return actions
+  }
+
   /// Show the slot menu for a specific slot
   public func showForSlot(
     at position: Point,
     slotIndex: Int,
     slotPosition: Point,
-    availableActions: [SlotAction] = [.use, .inspect, .combine, .exchange, .discard],
+    availableActions: [SlotAction] = SlotMenu.defaultAvailableActions,
     openedWithKeyboard: Bool = false,
     slotSize: Size
   ) {

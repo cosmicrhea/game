@@ -12,6 +12,8 @@ let DESIGN_RESOLUTION = Size(1280, 800)
 
 let VIEWPORT_SCALING = false
 
+let TWO_PLAYER_MODE = false
+
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
   var demo: String?
