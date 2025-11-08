@@ -36,7 +36,8 @@ extension Item {
   static let sigp320 = Item(
     id: "sigp320",
     kind: .weapon,
-    name: "SIG Sauer P320",
+    //name: "SIG Sauer P320",
+    name: "P320",
     description: "Modern striker-fired pistol with a modular design. Uses 9mm ammunition.",
   )
 
@@ -79,6 +80,15 @@ extension Item {
     description: "Submachine gun with a high rate of fire and built-in suppressor.",
   )
 
+  // MARK: - Launchers
+
+  static let m32 = Item(
+    id: "m32",
+    kind: .weapon,
+    name: "M32",
+    description: "A grenade launcher capable of launching several high-explosive grenades.",
+  )
+
   // MARK: - Ammo
 
   static let handgunAmmo = Item(
@@ -86,6 +96,14 @@ extension Item {
     kind: .ammo,
     name: "9mm Ammunition",
     description: "Standard 9 millimeter rounds for handguns.",
+  )
+
+  static let grenadeRounds = Item(
+    id: "grenade_rounds",
+    kind: .ammo,
+    name: "40mm Grenades",
+    description: "High-explosive 40 millimeter rounds for grenade launchers.",
+    inspectionDistance: 0.05
   )
 
   // MARK: - Keys
@@ -101,6 +119,7 @@ extension Item {
     id: "metro_key",
     name: "Metro Key",
     description: "A rusty key attached to a Metro logo keychain.",
+    inspectionDistance: 0.4
   )
 
   static let tagKey = Item(
@@ -127,6 +146,6 @@ extension Item {
     id: "cat_statue",
     name: "Cat Statue",
     description: "A concrete statue of a cat. Cuuute! ^-^",
-    inspectionDistance: 0.6
+    inspectionDistance: 0.4,
   )
 }

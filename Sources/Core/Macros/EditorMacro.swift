@@ -28,15 +28,17 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
     // Extract grouping option from macro arguments
     let grouping = extractGroupingOption(from: node)
 
-    // Find all @Editor properties
-    let editableProperties = findEditableProperties(in: declaration)
+    // Find all @Editor properties and functions
+    let editorProperties = findEditorProperties(in: declaration)
+    let editorFunctions = findEditorFunctions(in: declaration)
 
-    guard !editableProperties.isEmpty else {
-      throw EditableMacroError("No @Editor properties found in \(typeName)")
+    guard !editorProperties.isEmpty || !editorFunctions.isEmpty else {
+      throw EditableMacroError("No @Editor properties or functions found in \(typeName)")
     }
 
     // Generate the getEditableProperties method
-    let method = generateGetEditablePropertiesMethod(properties: editableProperties, grouping: grouping)
+    let method = generateGetEditablePropertiesMethod(
+      properties: editorProperties, functions: editorFunctions, grouping: grouping)
 
     return [DeclSyntax(method)]
   }
@@ -76,8 +78,8 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
     return [extensionDecl]
   }
 
-  private static func findEditableProperties(in declaration: DeclGroupSyntax) -> [EditablePropertyInfo] {
-    var properties: [EditablePropertyInfo] = []
+  private static func findEditorProperties(in declaration: DeclGroupSyntax) -> [EditorPropertyInfo] {
+    var properties: [EditorPropertyInfo] = []
 
     for member in declaration.memberBlock.members {
       if let variableDecl = member.decl.as(VariableDeclSyntax.self) {
@@ -103,7 +105,7 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
             let range = extractRange(from: attribute)
 
             properties.append(
-              EditablePropertyInfo(
+              EditorPropertyInfo(
                 name: propertyName,
                 type: propertyType,
                 displayName: displayName,
@@ -115,6 +117,41 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
     }
 
     return properties
+  }
+
+  private static func findEditorFunctions(in declaration: DeclGroupSyntax) -> [EditorFunctionInfo] {
+    var functions: [EditorFunctionInfo] = []
+
+    for member in declaration.memberBlock.members {
+      if let functionDecl = member.decl.as(FunctionDeclSyntax.self) {
+        // Check if function has @Editor attribute
+        for attribute in functionDecl.attributes {
+          if let attributeSyntax = attribute.as(AttributeSyntax.self),
+            attributeSyntax.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "Editor"
+          {
+            let functionName = functionDecl.name.text
+
+            // Extract display name from attribute arguments
+            let displayName = extractDisplayName(from: attributeSyntax) ?? functionName.titleCased
+
+            // Only support functions with no parameters for now
+            let hasParameters = functionDecl.signature.parameterClause.parameters.count > 0
+            if hasParameters {
+              // Skip functions with parameters for now
+              continue
+            }
+
+            functions.append(
+              EditorFunctionInfo(
+                name: functionName,
+                displayName: displayName
+              ))
+          }
+        }
+      }
+    }
+
+    return functions
   }
 
   private static func extractDisplayName(from attribute: AttributeSyntax) -> String? {
@@ -167,105 +204,126 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
     return false
   }
 
-  private static func generateGetEditablePropertiesMethod(properties: [EditablePropertyInfo], grouping: Bool)
-    -> FunctionDeclSyntax
-  {
+  private static func generateGetEditablePropertiesMethod(
+    properties: [EditorPropertyInfo], functions: [EditorFunctionInfo], grouping: Bool
+  ) -> FunctionDeclSyntax {
     if grouping {
-      return generateGroupedPropertiesMethod(properties: properties)
+      return generateGroupedPropertiesMethod(properties: properties, functions: functions)
     } else {
-      return generateUngroupedPropertiesMethod(properties: properties)
+      return generateUngroupedPropertiesMethod(properties: properties, functions: functions)
     }
   }
 
-  private static func generateUngroupedPropertiesMethod(properties: [EditablePropertyInfo]) -> FunctionDeclSyntax {
-    let items = properties.map { prop in
-      let trimmedType = prop.type.trimmingCharacters(in: .whitespacesAndNewlines)
-      if trimmedType == "Light" {
-        let base = prop.name
-        func floatProp(_ codeName: String, _ display: String, _ valueExpr: String, _ setExpr: String, _ range: String)
-          -> String
-        {
+  private static func generateUngroupedPropertiesMethod(
+    properties: [EditorPropertyInfo], functions: [EditorFunctionInfo]
+  ) -> FunctionDeclSyntax {
+    var items: [String] = []
+
+    // Add properties
+    items.append(
+      contentsOf: properties.map { prop in
+        let trimmedType = prop.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedType == "Light" {
+          let base = prop.name
+          func floatProp(_ codeName: String, _ display: String, _ valueExpr: String, _ setExpr: String, _ range: String)
+            -> String
+          {
+            return """
+              AnyEditorProperty(
+                name: \"\(codeName)\",
+                value: \(valueExpr),
+                setValue: { newValue in
+                  \(setExpr)
+                },
+                displayName: \"\(display)\",
+                validRange: \(range)
+              )
+              """
+          }
+          let pieces = [
+            floatProp(
+              "\(base)_dir_x", "Direction X", "Float(\(base).direction.x)",
+              "self.\(base).direction = vec3(newValue as! Float, self.\(base).direction.y, self.\(base).direction.z)",
+              "-1.0...1.0"),
+            floatProp(
+              "\(base)_dir_y", "Direction Y", "Float(\(base).direction.y)",
+              "self.\(base).direction = vec3(self.\(base).direction.x, newValue as! Float, self.\(base).direction.z)",
+              "-1.0...1.0"),
+            floatProp(
+              "\(base)_dir_z", "Direction Z", "Float(\(base).direction.z)",
+              "self.\(base).direction = vec3(self.\(base).direction.x, self.\(base).direction.y, newValue as! Float)",
+              "-1.0...1.0"),
+            floatProp(
+              "\(base)_pos_x", "Position X", "Float(\(base).position.x)",
+              "self.\(base).position = vec3(newValue as! Float, self.\(base).position.y, self.\(base).position.z)",
+              "-5.0...5.0"),
+            floatProp(
+              "\(base)_pos_y", "Position Y", "Float(\(base).position.y)",
+              "self.\(base).position = vec3(self.\(base).position.x, newValue as! Float, self.\(base).position.z)",
+              "-5.0...5.0"),
+            floatProp(
+              "\(base)_pos_z", "Position Z", "Float(\(base).position.z)",
+              "self.\(base).position = vec3(self.\(base).position.x, self.\(base).position.y, newValue as! Float)",
+              "-5.0...5.0"),
+            floatProp(
+              "\(base)_col_r", "Color R", "Float(\(base).color.x)",
+              "self.\(base).color = vec3(newValue as! Float, self.\(base).color.y, self.\(base).color.z)", "0.0...1.0"),
+            floatProp(
+              "\(base)_col_g", "Color G", "Float(\(base).color.y)",
+              "self.\(base).color = vec3(self.\(base).color.x, newValue as! Float, self.\(base).color.z)", "0.0...1.0"),
+            floatProp(
+              "\(base)_col_b", "Color B", "Float(\(base).color.z)",
+              "self.\(base).color = vec3(self.\(base).color.x, self.\(base).color.y, newValue as! Float)", "0.0...1.0"),
+            floatProp(
+              "\(base)_intensity", "Intensity", "\(base).intensity", "self.\(base).intensity = newValue as! Float",
+              "0.0...10.0"),
+            floatProp(
+              "\(base)_range", "Range", "\(base).range", "self.\(base).range = newValue as! Float", "0.0...20.0"),
+          ].joined(separator: ",\n          ")
           return """
-            AnyEditableProperty(
-              name: \"\(codeName)\",
-              value: \(valueExpr),
+            EditorPropertyGroup(
+              name: \"\(prop.displayName)\",
+              properties: [
+                \(pieces)
+              ]
+            )
+            """
+        } else {
+          // If the property type is Bool, do not emit a numeric range so the panel can render a Switch
+          let range: String? = (trimmedType == "Bool") ? nil : (prop.range ?? "0.0...1.0")
+          return """
+            AnyEditorProperty(
+              name: \"\(prop.name)\",
+              value: \(prop.name),
               setValue: { newValue in
-                \(setExpr)
+                self.\(prop.name) = newValue as! \(prop.type)
               },
-              displayName: \"\(display)\",
-              validRange: \(range)
+              displayName: \"\(prop.displayName)\",
+              validRange: \(range ?? "nil")
             )
             """
         }
-        let pieces = [
-          floatProp(
-            "\(base)_dir_x", "Direction X", "Float(\(base).direction.x)",
-            "self.\(base).direction = vec3(newValue as! Float, self.\(base).direction.y, self.\(base).direction.z)",
-            "-1.0...1.0"),
-          floatProp(
-            "\(base)_dir_y", "Direction Y", "Float(\(base).direction.y)",
-            "self.\(base).direction = vec3(self.\(base).direction.x, newValue as! Float, self.\(base).direction.z)",
-            "-1.0...1.0"),
-          floatProp(
-            "\(base)_dir_z", "Direction Z", "Float(\(base).direction.z)",
-            "self.\(base).direction = vec3(self.\(base).direction.x, self.\(base).direction.y, newValue as! Float)",
-            "-1.0...1.0"),
-          floatProp(
-            "\(base)_pos_x", "Position X", "Float(\(base).position.x)",
-            "self.\(base).position = vec3(newValue as! Float, self.\(base).position.y, self.\(base).position.z)",
-            "-5.0...5.0"),
-          floatProp(
-            "\(base)_pos_y", "Position Y", "Float(\(base).position.y)",
-            "self.\(base).position = vec3(self.\(base).position.x, newValue as! Float, self.\(base).position.z)",
-            "-5.0...5.0"),
-          floatProp(
-            "\(base)_pos_z", "Position Z", "Float(\(base).position.z)",
-            "self.\(base).position = vec3(self.\(base).position.x, self.\(base).position.y, newValue as! Float)",
-            "-5.0...5.0"),
-          floatProp(
-            "\(base)_col_r", "Color R", "Float(\(base).color.x)",
-            "self.\(base).color = vec3(newValue as! Float, self.\(base).color.y, self.\(base).color.z)", "0.0...1.0"),
-          floatProp(
-            "\(base)_col_g", "Color G", "Float(\(base).color.y)",
-            "self.\(base).color = vec3(self.\(base).color.x, newValue as! Float, self.\(base).color.z)", "0.0...1.0"),
-          floatProp(
-            "\(base)_col_b", "Color B", "Float(\(base).color.z)",
-            "self.\(base).color = vec3(self.\(base).color.x, self.\(base).color.y, newValue as! Float)", "0.0...1.0"),
-          floatProp(
-            "\(base)_intensity", "Intensity", "\(base).intensity", "self.\(base).intensity = newValue as! Float",
-            "0.0...10.0"),
-          floatProp("\(base)_range", "Range", "\(base).range", "self.\(base).range = newValue as! Float", "0.0...20.0"),
-        ].joined(separator: ",\n          ")
-        return """
-          EditablePropertyGroup(
-            name: \"\(prop.displayName)\",
-            properties: [
-              \(pieces)
-            ]
-          )
-          """
-      } else {
-        // If the property type is Bool, do not emit a numeric range so the panel can render a Switch
-        let range: String? = (trimmedType == "Bool") ? nil : (prop.range ?? "0.0...1.0")
-        return """
-          AnyEditableProperty(
-            name: \"\(prop.name)\",
-            value: \(prop.name),
-            setValue: { newValue in
-              self.\(prop.name) = newValue as! \(prop.type)
-            },
-            displayName: \"\(prop.displayName)\",
-            validRange: \(range ?? "nil")
-          )
-          """
-      }
-    }.joined(separator: ",\n      ")
+      })
+
+    // Add functions
+    items.append(
+      contentsOf: functions.map { funcInfo in
+        """
+        EditorFunction(
+          name: \"\(funcInfo.name)\",
+          displayName: \"\(funcInfo.displayName)\",
+          action: { self.\(funcInfo.name)() }
+        )
+        """
+      })
+
+    let itemsString = items.joined(separator: ",\n      ")
 
     let functionDecl = try! FunctionDeclSyntax(
       """
       func getEditableProperties() -> [Any] {
         return [
-          \(raw: items)
+          \(raw: itemsString)
         ]
       }
       """)
@@ -273,9 +331,11 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
     return functionDecl
   }
 
-  private static func generateGroupedPropertiesMethod(properties: [EditablePropertyInfo]) -> FunctionDeclSyntax {
+  private static func generateGroupedPropertiesMethod(
+    properties: [EditorPropertyInfo], functions: [EditorFunctionInfo]
+  ) -> FunctionDeclSyntax {
     // Group properties by their prefix (first word) while preserving order
-    var groupedProperties = OrderedDictionary<String, [EditablePropertyInfo]>()
+    var groupedProperties = OrderedDictionary<String, [EditorPropertyInfo]>()
 
     for prop in properties {
       let words = prop.displayName.components(separatedBy: " ")
@@ -297,7 +357,7 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
             -> String
           {
             return """
-              AnyEditableProperty(
+              AnyEditorProperty(
                 name: \"\(codeName)\",
                 value: \(valueExpr),
                 setValue: { newValue in
@@ -355,7 +415,7 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
         let words = prop.displayName.components(separatedBy: " ")
         let displayName = words.count > 1 ? words.dropFirst().joined(separator: " ") : prop.displayName
         return """
-          AnyEditableProperty(
+          AnyEditorProperty(
             name: \"\(prop.name)\",
             value: \(prop.name),
             setValue: { newValue in
@@ -367,7 +427,7 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
           """
       }.joined(separator: ",\n        ")
       return """
-        EditablePropertyGroup(
+        EditorPropertyGroup(
           name: \"\(groupName)\",
           properties: [
             \(sectionProperties)
@@ -375,11 +435,27 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
         )
         """
     }.joined(separator: ",\n      ")
+
+    // Add functions as separate items (not in property groups)
+    var allItems = sections
+    if !functions.isEmpty {
+      let functionItems = functions.map { funcInfo in
+        """
+        EditorFunction(
+          name: \"\(funcInfo.name)\",
+          displayName: \"\(funcInfo.displayName)\",
+          action: { self.\(funcInfo.name)() }
+        )
+        """
+      }.joined(separator: ",\n      ")
+      allItems += ",\n      \(functionItems)"
+    }
+
     let functionDecl = try! FunctionDeclSyntax(
       """
       func getEditableProperties() -> [Any] {
         return [
-          \(raw: sections)
+          \(raw: allItems)
         ]
       }
       """)
@@ -394,10 +470,36 @@ private struct EditableMacroError: Error {
   }
 }
 
-private struct EditablePropertyInfo {
+private struct EditorPropertyInfo {
   let name: String
   let type: String
   let displayName: String
   let range: String?
 }
 
+private struct EditorFunctionInfo {
+  let name: String
+  let displayName: String
+}
+
+/// Peer macro for @Editor on functions - just marks the function, doesn't generate anything
+/// This allows @Editor to be used on functions (as an attribute macro) while also being a property wrapper for properties
+/// Swift will use the property wrapper for properties and this macro for functions
+public struct EditorFunctionMacro: PeerMacro {
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingPeersOf declaration: some DeclSyntaxProtocol,
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    // Only expand for functions - properties will use the property wrapper
+    guard declaration.as(FunctionDeclSyntax.self) != nil else {
+      // If it's not a function, this macro shouldn't be used - let the property wrapper handle it
+      // Return empty to allow the property wrapper to take over
+      return []
+    }
+
+    // This macro doesn't generate anything - it's just a marker
+    // The EditableMacro will find functions with this attribute
+    return []
+  }
+}

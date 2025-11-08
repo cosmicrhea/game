@@ -25,9 +25,63 @@ public protocol AltClickable: AnyObject {
 /// Base panel for options pages. Handles layout, focus, and input dispatch.
 @MainActor
 public class OptionsPanel: Screen {
+  /// A button row control that triggers an action when clicked or when action keys are pressed.
+  private final class ButtonRow: OptionsControl {
+    var frame: Rect
+    var isFocused: Bool = false
+    var action: () -> Void
+
+    init(frame: Rect = .zero, action: @escaping () -> Void) {
+      self.frame = frame
+      self.action = action
+    }
+
+    func draw() {
+      // Button rows don't draw anything - they're just interactive labels
+      // The label is drawn by the OptionsPanel
+    }
+
+    @discardableResult
+    func handleKey(_ key: Keyboard.Key) -> Bool {
+      guard isFocused else { return false }
+      switch key {
+      case .f, .space, .enter, .numpadEnter:
+        action()
+        UISound.select()
+        return true
+      default:
+        return false
+      }
+    }
+
+    @discardableResult
+    func handleMouseDown(at position: Point) -> Bool {
+      guard frame.contains(position) else { return false }
+      action()
+      UISound.select()
+      return true
+    }
+
+    func handleMouseMove(at position: Point) {}
+    func handleMouseUp() {}
+  }
+
   struct Row {
     let label: String
     let control: OptionsControl
+
+    /// Convenience initializer for button rows that trigger an action.
+    @MainActor
+    init(button label: String, action: @escaping () -> Void) {
+      self.label = label
+      self.control = ButtonRow(action: action)
+    }
+
+    /// Standard initializer for rows with a control.
+    init(label: String, control: OptionsControl) {
+      self.label = label
+      self.control = control
+    }
   }
 
   // Layout configuration
@@ -114,6 +168,14 @@ public class OptionsPanel: Screen {
       if rowRects.indices.contains(i), rowRects[i].contains(p), let sw = row.control as? Switch {
         focusedIndex = i
         sw.isOn.toggle()
+        UISound.select()
+        return
+      }
+      // If the click lands anywhere inside the row rect and the control is a ButtonRow,
+      // trigger the action even if the click is on the label area.
+      if rowRects.indices.contains(i), rowRects[i].contains(p), let buttonRow = row.control as? ButtonRow {
+        focusedIndex = i
+        buttonRow.action()
         UISound.select()
         return
       }

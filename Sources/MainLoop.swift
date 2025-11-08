@@ -56,6 +56,16 @@ import Jolt
   @Editor var visualizePhysics: Bool = false
   @Editor var disableDepth: Bool = false
 
+  @Editor func shakeScreen() {
+    ScreenShake.shared.shake(.subtle)
+  }
+  @Editor func shakeScreenMore() {
+    ScreenShake.shared.shake(.heavy)
+  }
+  @Editor func shakeScreenVertically() {
+    ScreenShake.shared.shake(.subtle, axis: .vertical)
+  }
+
   // Scene and camera
   private var scene: Scene?
   private var camera1: Assimp.Camera?
@@ -785,6 +795,9 @@ import Jolt
     // Fade back in
     await ScreenFade.shared.fadeFromBlack(duration: 0.3)
 
+    // Play gong sound when showing pickup view
+    UISound.woosh()
+
     // After fade completes, start slide-in animation
     pickupView?.startSlideInAnimation()
 
@@ -1246,7 +1259,7 @@ import Jolt
       // Get view matrix from camera node's world transform
       // In glTF/Assimp, the camera node's transform IS the camera-to-world transform
       // To get the view matrix (world-to-camera), we simply invert it
-      let view: mat4
+      var view: mat4
       let cameraWorld: mat4
       // Check if camera world transform is valid (not identity)
       if camera1WorldTransform != mat4(1) {
@@ -1258,6 +1271,18 @@ import Jolt
         // Fallback: use identity view matrix if camera not available
         cameraWorld = mat4(1)
         view = mat4(1)
+      }
+
+      // Apply screen shake offset to view matrix
+      let shakeOffset = ScreenShake.shared.offset
+      if shakeOffset.x != 0.0 || shakeOffset.y != 0.0 {
+        // Translate view matrix by shake offset
+        // Convert screen space offset to world space (approximate using viewport size)
+        // Scale factor determines how much world space movement corresponds to screen pixels
+        let viewportSize = Engine.viewportSize
+        let worldOffsetX = shakeOffset.x / viewportSize.width * 10.0  // Scale factor
+        let worldOffsetY = shakeOffset.y / viewportSize.height * 10.0  // Scale factor
+        view = GLMath.translate(view, vec3(worldOffsetX, worldOffsetY, 0.0))
       }
 
       // Do not clear depth; we rely on PrerenderedEnvironment writing correct depth

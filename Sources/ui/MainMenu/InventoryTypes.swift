@@ -16,8 +16,13 @@ public struct Item: Sendable {
   public let inspectionDistance: Float
 
   public init(
-    id: String, kind: ItemKind = .key, name: String, image: Image? = nil, description: String? = nil,
-    modelPath: String? = nil, inspectionDistance: Float = 0.3
+    id: String,
+    kind: ItemKind = .key,
+    name: String,
+    image: Image? = nil,
+    description: String? = nil,
+    modelPath: String? = nil,
+    inspectionDistance: Float = 0.23
   ) {
     self.id = id
     self.kind = kind
@@ -55,7 +60,7 @@ public struct SlotData: Sendable {
   }
 }
 
-/// Inventory container - a box for an array of slots
+/// A box for an array of slots.
 @MainActor
 public final class Inventory {
   public var slots: [SlotData?]
@@ -70,14 +75,16 @@ public final class Inventory {
   public static var player1: Inventory {
     if _player1 == nil {
       _player1 = Inventory(slots: [
-        SlotData(item: .knife, quantity: nil),
-        SlotData(item: .glock17, quantity: 15),
+        SlotData(item: .sigp320, quantity: 17),
         SlotData(item: .handgunAmmo, quantity: 69),
-        SlotData(item: .sigp320, quantity: 0),
+        SlotData(item: .knife, quantity: nil),
         SlotData(item: .morphine, quantity: nil),
-        SlotData(item: .glock18, quantity: 17),
         SlotData(item: .metroKey, quantity: nil),
-        SlotData(item: .utilityKey, quantity: nil),
+//        SlotData(item: .m32, quantity: 6),
+//        SlotData(item: .grenadeRounds, quantity: 9),
+        SlotData(item: nil, quantity: nil),
+        SlotData(item: nil, quantity: nil),
+
         SlotData(item: nil, quantity: nil),
         SlotData(item: nil, quantity: nil),
         SlotData(item: nil, quantity: nil),
@@ -86,6 +93,24 @@ public final class Inventory {
         SlotData(item: nil, quantity: nil),
         SlotData(item: nil, quantity: nil),
         SlotData(item: nil, quantity: nil),
+        SlotData(item: nil, quantity: nil),
+
+//        SlotData(item: .knife, quantity: nil),
+//        SlotData(item: .glock17, quantity: 15),
+//        SlotData(item: .handgunAmmo, quantity: 69),
+//        SlotData(item: .sigp320, quantity: 0),
+//        SlotData(item: .morphine, quantity: nil),
+//        SlotData(item: .glock18, quantity: 17),
+//        SlotData(item: .metroKey, quantity: nil),
+//        SlotData(item: .utilityKey, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
+//        SlotData(item: nil, quantity: nil),
 
         //        SlotData(item: .morphine, quantity: nil),
         //        SlotData(item: .knife, quantity: nil),

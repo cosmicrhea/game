@@ -17,20 +17,21 @@
 
   func stove() {
     guard catStatue.isHidden else {
-      return cat()
+      Task { await cat() }
+      return
     }
 
     say([
       "The stove is cold and lifeless.",
       "There's nothing cooking right now.",
-      "It looks like it hasn't been used in a while.",
+      "It looks like it hasn't been used in a while."
     ])
   }
 
-  func cat() {
-    // await say("There's a cat here.")
+  func cat() async {
     // await say("A cat has appeared.")
-    Task { await acquire(.catStatue) }
+    await say("There's a cat here.", more: true)
+    await acquire(.catStatue)
   }
 
 }

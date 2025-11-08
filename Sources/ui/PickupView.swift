@@ -52,14 +52,27 @@ final class PickupView: RenderLoop {
   }
   private let itemFramebufferScale: Float = 1.0
 
+  // Framebuffer for slot grid rendering (for fade effect)
+  private var gridFramebufferID: UInt64? = nil
+  private var gridFramebufferSize: Size {
+    return Engine.viewportSize
+  }
+  private let gridFramebufferScale: Float = 1.0
+
   // Sliding animation configuration
   private var slidingBehavior: SlidingBehavior = .slideInAndOut
   private var isSlidingIn: Bool = false
   private var isSlidingOut: Bool = false
   private var slideTimer: Float = 0.0
   private let slideDuration: Float = 0.5  // 500ms
-  private let slideEasing: Easing = .easeOutCubic
+  private let slideInEasing: Easing = .easeOutCubic
+  private let slideOutEasing: Easing = .easeInCubic
   private var itemSlideOffset: Float = 0.0  // Y offset for sliding animation
+
+  // Grid fade animation
+  private var gridOpacity: Float = 0.0
+  private var isFadingInGrid: Bool = false
+  private let gridFadeDuration: Float = 0.25  // Half of slide-out duration (fades in from 50% to 100%)
 
   init(item: Item, quantity: Int = 1, slidingBehavior: SlidingBehavior = .slideInAndOut) {
     self.slidingBehavior = slidingBehavior
@@ -104,9 +117,10 @@ final class PickupView: RenderLoop {
     // Center the grid on X axis, slightly above center on Y
     recenterGrid()
 
-    // Create framebuffer for 3D item rendering (will be created with viewport size)
+    // Create framebuffers for 3D item and slot grid rendering
     if let renderer = Engine.shared.renderer {
       itemFramebufferID = renderer.createFramebuffer(size: itemFramebufferSize, scale: itemFramebufferScale)
+      gridFramebufferID = renderer.createFramebuffer(size: gridFramebufferSize, scale: gridFramebufferScale)
     }
 
     // Start async loading if model is available
@@ -224,7 +238,7 @@ final class PickupView: RenderLoop {
     if isSlidingIn {
       slideTimer += deltaTime
       let progress = min(slideTimer / slideDuration, 1.0)
-      let easedProgress = slideEasing.apply(progress)
+      let easedProgress = slideInEasing.apply(progress)
       // Slide item up from below screen (positive Y) to on-screen (Y=0)
       // Framebuffer uses ortho(0, W, H, 0) where Y=0 is bottom, Y=H is top
       // So positive Y offset moves down (below screen), Y=0 is on-screen at bottom
@@ -241,7 +255,7 @@ final class PickupView: RenderLoop {
     if isSlidingOut {
       slideTimer += deltaTime
       let progress = min(slideTimer / slideDuration, 1.0)
-      let easedProgress = slideEasing.apply(progress)
+      let easedProgress = slideOutEasing.apply(progress)
       // Slide item down from on-screen (Y=0) to below screen (positive Y)
       let endOffset = Float(Engine.viewportSize.height)
       itemSlideOffset = 0.0 + (endOffset - 0.0) * easedProgress
@@ -250,7 +264,9 @@ final class PickupView: RenderLoop {
       if progress >= 0.5 && viewState == .showingItem {
         viewState = .showingGrid
         promptList = PromptList(.confirmCancel)
-        UISound.select()
+        // Start fading in the grid
+        isFadingInGrid = true
+        gridOpacity = 0.0
       }
 
       if progress >= 1.0 {
@@ -258,6 +274,26 @@ final class PickupView: RenderLoop {
         isSlidingOut = false
         itemSlideOffset = endOffset  // Fully off-screen below
       }
+    }
+
+    // Handle grid fade-in animation
+    if isFadingInGrid {
+      // Calculate fade progress from 50% to 100% of slide-out animation
+      let fadeStartProgress: Float = 0.5
+      let slideProgress = slideTimer / slideDuration
+      let fadeRange = 1.0 - fadeStartProgress
+      let fadeProgress = max(0.0, (slideProgress - fadeStartProgress) / fadeRange)
+      let clampedProgress = min(fadeProgress, 1.0)
+      let easedProgress = slideOutEasing.apply(clampedProgress)
+      gridOpacity = easedProgress
+
+      if fadeProgress >= 1.0 {
+        isFadingInGrid = false
+        gridOpacity = 1.0
+      }
+    } else if viewState == .showingGrid {
+      // Keep grid at full opacity when not fading
+      gridOpacity = 1.0
     }
 
     if viewState == .showingGrid {
@@ -414,8 +450,8 @@ final class PickupView: RenderLoop {
         drawItemFramebuffer()
       }
 
-      // Draw the slot grid (this now draws the blinking placement item)
-      slotGrid.draw()
+      // Render slot grid to framebuffer, then draw with opacity
+      drawGridWithFade()
     }
 
     // Draw item description
@@ -548,11 +584,44 @@ final class PickupView: RenderLoop {
     renderer.drawFramebuffer(framebufferID, in: screenRect, transform: nil, alpha: 1.0)
   }
 
-  /// Clean up framebuffer (call before dismissing)
+  /// Draw the slot grid with fade effect (renders to framebuffer, then draws with opacity)
+  private func drawGridWithFade() {
+    guard let renderer = Engine.shared.renderer, let framebufferID = gridFramebufferID else {
+      // Fallback: draw directly if framebuffer not available
+      slotGrid.draw()
+      return
+    }
+
+    // Render slot grid to framebuffer
+    renderer.beginFramebuffer(framebufferID)
+    renderer.setClearColor(.clear)
+
+    // Draw the slot grid (this now draws the blinking placement item)
+    slotGrid.draw()
+
+    renderer.endFramebuffer()
+
+    // Draw the framebuffer with opacity
+    let screenRect = Rect(
+      x: 0,
+      y: 0,
+      width: Float(Engine.viewportSize.width),
+      height: Float(Engine.viewportSize.height)
+    )
+    renderer.drawFramebuffer(framebufferID, in: screenRect, transform: nil, alpha: gridOpacity)
+  }
+
+  /// Clean up framebuffers (call before dismissing)
   private func cleanupFramebuffer() {
-    if let renderer = Engine.shared.renderer, let framebufferID = itemFramebufferID {
-      renderer.destroyFramebuffer(framebufferID)
-      itemFramebufferID = nil
+    if let renderer = Engine.shared.renderer {
+      if let framebufferID = itemFramebufferID {
+        renderer.destroyFramebuffer(framebufferID)
+        itemFramebufferID = nil
+      }
+      if let framebufferID = gridFramebufferID {
+        renderer.destroyFramebuffer(framebufferID)
+        gridFramebufferID = nil
+      }
     }
   }
 }

@@ -496,13 +496,18 @@ public final class Engine {
   }
 
   private func updateWindowTitle() {
-    let tex = GLStats.textureCount
-    let bufs = GLStats.bufferCount
-    let memMB = Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
-    window.title = String(
+    var title = String(
       format: "GL textures: %d | GL buffers: %d | Memory: %.1f MB",
-      tex, bufs, memMB
+      GLStats.textureCount,
+      GLStats.bufferCount,
+      Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
     )
+
+    #if DEBUG
+      title += " | Debug Build"
+    #endif
+
+    window.title = title
   }
 
   private func renderEditorWindow() {
@@ -565,6 +570,7 @@ public final class Engine {
 
     ScreenFade.shared.update(deltaTime: deltaTime)
     ScreenFadeFBO.shared.update(deltaTime: deltaTime)
+    ScreenShake.shared.update(deltaTime: deltaTime)
 
     let windowSize = Size(Float(window.size.width), Float(window.size.height))
 

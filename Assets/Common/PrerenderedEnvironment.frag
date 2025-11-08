@@ -12,9 +12,16 @@ uniform mat4 view_to_clip_matrix;
 // Debug mode: true = show mist only, false = show normal albedo
 uniform bool showMist;
 
+// Screen shake offset in UV space (normalized 0-1)
+uniform vec2 shakeOffset;
+
 void main() {
     // Flip UV Y coordinate to match Godot (UV *= vec2(1, -1) in vertex shader)
     vec2 flippedUV = vec2(vUV.x, 1.0 - vUV.y);
+    
+    // Apply screen shake offset to UV coordinates
+    // Note: shakeOffset is in UV space (0-1), so we can directly add it
+    flippedUV += shakeOffset;
 
     // Sample mist texture (negated like Godot: -texture(mist_texture, UV).x)
     float depth = -texture(mist_texture, flippedUV).r;

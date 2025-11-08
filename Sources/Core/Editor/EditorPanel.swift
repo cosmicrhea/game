@@ -1,8 +1,9 @@
 import Foundation
 
 public final class EditorPanel: OptionsPanel {
-  private var editableProperties: [AnyEditableProperty] = []
-  private var propertyGroups: [EditablePropertyGroup] = []
+  private var editorProperties: [AnyEditorProperty] = []
+  private var propertyGroups: [EditorPropertyGroup] = []
+  private var editorFunctions: [EditorFunction] = []
   private var sliders: [Slider] = []
   private var switches: [Switch] = []
   private var pickers: [Picker] = []
@@ -102,12 +103,15 @@ public final class EditorPanel: OptionsPanel {
     currentObject = object
     let properties = object.getEditableProperties()
 
+    // Extract functions separately
+    editorFunctions = properties.compactMap { $0 as? EditorFunction }
+
     // Check if we have grouped properties
-    if properties.first is EditablePropertyGroup {
-      propertyGroups = properties.compactMap { $0 as? EditablePropertyGroup }
-      editableProperties = []
+    if properties.first is EditorPropertyGroup {
+      propertyGroups = properties.compactMap { $0 as? EditorPropertyGroup }
+      editorProperties = []
     } else {
-      editableProperties = properties.compactMap { $0 as? AnyEditableProperty }
+      editorProperties = properties.compactMap { $0 as? AnyEditorProperty }
       propertyGroups = []
     }
 
@@ -117,7 +121,7 @@ public final class EditorPanel: OptionsPanel {
   /// Show a fallback message for non-editable objects
   public func showNoEditorMessage() {
     currentObject = nil
-    editableProperties = []
+    editorProperties = []
     propertyGroups = []
     sliders.removeAll()
     noEditorMessage = "No Editor"
@@ -197,7 +201,7 @@ public final class EditorPanel: OptionsPanel {
       }
     } else {
       // Handle ungrouped properties
-      for property in editableProperties {
+      for property in editorProperties {
         if let slider = createSliderForProperty(property) {
           sliders.append(slider)
           rows.append(Row(label: property.displayName, control: slider))
@@ -210,10 +214,16 @@ public final class EditorPanel: OptionsPanel {
         }
       }
     }
+
+    // Add function buttons at the end
+    for editorFunction in editorFunctions {
+      rows.append(Row(button: editorFunction.displayName, action: editorFunction.action))
+    }
+
     setRows(rows)
   }
 
-  private func createSliderForProperty(_ property: AnyEditableProperty) -> Slider? {
+  private func createSliderForProperty(_ property: AnyEditorProperty) -> Slider? {
     // Only create sliders for Float properties with valid ranges
     guard let range = property.validRange,
       let floatValue = property.value as? Float
@@ -242,7 +252,7 @@ public final class EditorPanel: OptionsPanel {
     return slider
   }
 
-  private func createSwitchForProperty(_ property: AnyEditableProperty) -> Switch? {
+  private func createSwitchForProperty(_ property: AnyEditorProperty) -> Switch? {
     guard property.validRange == nil, let boolValue = property.value as? Bool else { return nil }
     let sw = Switch(frame: .zero, isOn: boolValue)
     sw.onToggle = { newValue in
@@ -251,7 +261,7 @@ public final class EditorPanel: OptionsPanel {
     return sw
   }
 
-  private func createPickerForProperty(_ property: AnyEditableProperty) -> Picker? {
+  private func createPickerForProperty(_ property: AnyEditorProperty) -> Picker? {
     // Check if this is a String property
     guard let stringValue = property.value as? String else { return nil }
 
@@ -281,12 +291,12 @@ public final class EditorPanel: OptionsPanel {
     guard let object = currentObject else { return }
 
     let properties = object.getEditableProperties()
-    let currentProperties: [AnyEditableProperty]
+    let currentProperties: [AnyEditorProperty]
 
-    if properties.first is EditablePropertyGroup {
+    if properties.first is EditorPropertyGroup {
       currentProperties = propertyGroups.flatMap { $0.properties }
     } else {
-      currentProperties = editableProperties
+      currentProperties = editorProperties
     }
 
     var sliderIndex = 0

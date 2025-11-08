@@ -63,6 +63,20 @@ class Script: NSObject {
   @MainActor func say(_ string: String) { dialogView.print(chunks: [string]) }
   @MainActor func say(_ strings: [String]) { dialogView.print(chunks: strings) }
 
+  /// Async version of say() that waits until the dialog is finished
+  /// - Parameter string: The text to display
+  /// - Parameter more: If true, forces the more indicator to show even if there are no more chunks
+  @MainActor func say(_ string: String, more: Bool = false) async {
+    await dialogView.print(chunks: [string], forceMore: more)
+  }
+
+  /// Async version of say() that waits until the dialog is finished
+  /// - Parameter strings: Array of text chunks to display
+  /// - Parameter more: If true, forces the more indicator to show even if there are no more chunks
+  @MainActor func say(_ strings: [String], more: Bool = false) async {
+    await dialogView.print(chunks: strings, forceMore: more)
+  }
+
   func ask(_ string: String, options: [String]) -> String { options[0] }
 
   func confirm(_ string: String, _ optionA: String, _ optionB: String = "Cancel") -> Bool {
@@ -91,6 +105,14 @@ class Script: NSObject {
 
   func fadeOut() {}
   func fadeIn() {}
+
+  /// Shake the screen with the specified intensity
+  /// - Parameters:
+  ///   - intensity: The intensity of the shake (.subtle or .heavy)
+  ///   - axis: Optional axis to limit shake to (.horizontal or .vertical). If nil, shakes on both axes.
+  func shakeScreen(_ intensity: ScreenShake.Intensity, axis: Axis? = nil) {
+    ScreenShake.shared.shake(intensity, axis: axis)
+  }
 
   func openStorage() {}
 

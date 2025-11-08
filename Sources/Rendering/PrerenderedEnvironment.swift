@@ -355,6 +355,7 @@ final class PrerenderedEnvironment {
     }
   }
 
+  @MainActor
   func render(projectionMatrix: mat4) {
     guard totalFrames > 0 else {
       logger.error("❌ No frames loaded, cannot render")
@@ -373,12 +374,21 @@ final class PrerenderedEnvironment {
     let currentAlbedoImage = albedoImages[currentFrame]
     let currentMistImage = mistImages[currentFrame]
 
+    // Get screen shake offset and convert to UV space
+    let shakeOffset = ScreenShake.shared.offset
+    let viewportSize = Engine.viewportSize
+    // Convert screen space offset (pixels) to UV space (0-1 normalized)
+    let uvOffsetX = shakeOffset.x / viewportSize.width
+    let uvOffsetY = shakeOffset.y / viewportSize.height
+
     // Set uniforms
     shader.setFloat("near", value: near)
     shader.setFloat("far", value: far)
     shader.setMat4("view_to_clip_matrix", value: projectionMatrix)
     shader.setBool("showMist", value: showMist)
-    logger.trace("📐 Set uniforms: near=\(near), far=\(far), showMist=\(showMist)")
+    shader.setVec2("shakeOffset", value: (uvOffsetX, uvOffsetY))
+    logger.trace(
+      "📐 Set uniforms: near=\(near), far=\(far), showMist=\(showMist), shakeOffset=(\(uvOffsetX), \(uvOffsetY))")
 
     // Bind textures using the current frame's texture IDs
     glActiveTexture(GL_TEXTURE0)

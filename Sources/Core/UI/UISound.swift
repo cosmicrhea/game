@@ -17,6 +17,8 @@ extension UISound {
   static func error() { play("UR/error") }
 
   static func shutter() { play("shutter") }
+  //static func gong() { play("gong") }
+  static func woosh() { play("woosh") }
 
   // static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
   static func navigate() { play("Minimalist10", volume: 0.8) }
@@ -28,7 +30,7 @@ extension UISound {
 @MainActor enum UISound {
   static var volume: Float = Config.current.uiVolume
 
-//  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
+  //  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
   private nonisolated(unsafe) static var lastPlayedSounds: [String: String] = [:]
 
   static func play(_ soundName: String, volume: Float = 1) {
@@ -41,29 +43,28 @@ extension UISound {
     sound.volume = volume * Self.volume
     sound.play()
 
-//    var sound = sounds[soundName]
-//    if sound == nil {
-//      sound = try! Sound(contentsOfFile: file, spatial: false)
-//      sounds[soundName] = sound
-//    }
+    //    var sound = sounds[soundName]
+    //    if sound == nil {
+    //      sound = try! Sound(contentsOfFile: file, spatial: false)
+    //      sounds[soundName] = sound
+    //    }
 
-//    do {
-//      let sound = try Sound.play(path, spatial: false)
-//      sound.volume = volume
-//    } catch {
-//      logger.error("failed to play \(soundName): \(error)")
-//    }
+    //    do {
+    //      let sound = try Sound.play(path, spatial: false)
+    //      sound.volume = volume
+    //    } catch {
+    //      logger.error("failed to play \(soundName): \(error)")
+    //    }
 
-
-//    let sound =
-//    engine.playSound(contentsOfFile: path, spatial: false)
-//    sound.volume = volume * Self.volume
+    //    let sound =
+    //    engine.playSound(contentsOfFile: path, spatial: false)
+    //    sound.volume = volume * Self.volume
 
     // guard let sound else { return }
-//    let sound = try! Sound.play(path, spatial: false)
-//    sound.volume = volume * Self.volume
-//    let sound = try! Sound(contentsOfFile: file, spatial: false)
-//    sound.play()
+    //    let sound = try! Sound.play(path, spatial: false)
+    //    sound.volume = volume * Self.volume
+    //    let sound = try! Sound(contentsOfFile: file, spatial: false)
+    //    sound.play()
   }
 
   static func play(_ soundNames: [String]) {

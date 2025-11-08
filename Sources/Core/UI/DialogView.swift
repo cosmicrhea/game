@@ -48,10 +48,30 @@
   private var currentStringChunkIndex: Int = 0  // Which string chunk we're on (in chunk mode)
   private var currentPageIndex: Int = 0  // Which 2-line page within the current chunk we're on
 
+  // Async completion support
+  private var completionContinuation: CheckedContinuation<Void, Never>?
+  private var wasTextEmptyLastFrame: Bool = false
+
+  // Force more indicator to show even if there are no more chunks
+  private var forceMoreIndicator: Bool = false
+
   init() {}
 
   func update(deltaTime: Float) {
     self.deltaTime = deltaTime
+
+    // Check if text just became empty (user dismissed dialog) and resume continuation if needed
+    let isTextEmptyNow = text.isEmpty
+    if isTextEmptyNow && !wasTextEmptyLastFrame {
+      // Text just became empty (user dismissed), resume continuation if one exists
+      if let continuation = completionContinuation {
+        completionContinuation = nil
+        continuation.resume()
+      }
+      // Reset forceMoreIndicator when dialog is dismissed
+      forceMoreIndicator = false
+    }
+    wasTextEmptyLastFrame = isTextEmptyNow
 
     // Update speed multiplier based on held action keys or left mouse button
     updateSpeedMultiplier()
@@ -157,8 +177,9 @@
       anchor: .bottomLeft
     )
 
-    // Draw caret indicator if there's more chunks to show AND current chunk is complete
-    let shouldShowCaret = hasMoreChunks && isCurrentChunkComplete()
+    // Draw caret indicator if there's more chunks to show AND current chunk is complete,
+    // or if forceMoreIndicator is set
+    let shouldShowCaret = (hasMoreChunks || forceMoreIndicator) && isCurrentChunkComplete()
     if shouldShowCaret {
       // Reset animation if caret just became visible
       if !wasCaretVisibleLastFrame {
@@ -237,9 +258,11 @@
   /// Display an array of text chunks. Each string will be treated as a separate chunk
   /// and will show a "more" indicator when complete (even if it doesn't wrap).
   /// - Parameter chunks: Array of strings, each treated as a chunk
-  func print(chunks: [String]) {
+  /// - Parameter forceMore: If true, forces the more indicator to show even if there are no more chunks
+  func print(chunks: [String], forceMore: Bool = false) {
     guard !chunks.isEmpty else {
       self.text = ""
+      forceMoreIndicator = false
       return
     }
 
@@ -247,17 +270,86 @@
     self.chunks = chunks
     currentStringChunkIndex = 0
     currentPageIndex = 0
+    self.forceMoreIndicator = forceMore
 
     // Set text to first chunk
     self.text = chunks[0]
   }
 
+  /// Async version of print() that waits until the dialog is finished
+  /// - Parameter chunks: Array of strings, each treated as a chunk
+  /// - Parameter forceMore: If true, forces the more indicator to show even if there are no more chunks
+  func print(chunks: [String], forceMore: Bool = false) async {
+    // Cancel any existing continuation
+    if let continuation = completionContinuation {
+      completionContinuation = nil
+      continuation.resume()
+    }
+
+    // Set up the dialog (call the synchronous version)
+    guard !chunks.isEmpty else {
+      self.text = ""
+      forceMoreIndicator = false
+      return
+    }
+
+    isChunkMode = true
+    self.chunks = chunks
+    currentStringChunkIndex = 0
+    currentPageIndex = 0
+    self.forceMoreIndicator = forceMore
+
+    // Set text to first chunk
+    wasTextEmptyLastFrame = text.isEmpty
+    self.text = chunks[0]
+
+    // Wait for completion (until text becomes empty - user dismisses dialog)
+    await withCheckedContinuation { continuation in
+      completionContinuation = continuation
+      // Check if already empty (shouldn't happen for non-empty chunks, but handle it)
+      if text.isEmpty {
+        completionContinuation = nil
+        continuation.resume()
+      }
+    }
+  }
+
   /// Display a single text string (legacy mode)
   /// - Parameter text: The text to display
-  func show(_ text: String) {
+  /// - Parameter forceMore: If true, forces the more indicator to show even if there are no more chunks
+  func show(_ text: String, forceMore: Bool = false) {
     isChunkMode = false
     chunks = []
+    self.forceMoreIndicator = forceMore
     self.text = text
+  }
+
+  /// Async version of show() that waits until the dialog is finished
+  /// - Parameter text: The text to display
+  /// - Parameter forceMore: If true, forces the more indicator to show even if there are no more chunks
+  func show(_ text: String, forceMore: Bool = false) async {
+    // Cancel any existing continuation
+    if let continuation = completionContinuation {
+      completionContinuation = nil
+      continuation.resume()
+    }
+
+    // Set up the dialog (call the synchronous version)
+    isChunkMode = false
+    chunks = []
+    self.forceMoreIndicator = forceMore
+    wasTextEmptyLastFrame = self.text.isEmpty
+    self.text = text
+
+    // Wait for completion (until text becomes empty - user dismisses dialog)
+    await withCheckedContinuation { continuation in
+      completionContinuation = continuation
+      // Check if already empty (shouldn't happen for non-empty text, but handle it)
+      if text.isEmpty {
+        completionContinuation = nil
+        continuation.resume()
+      }
+    }
   }
 
   // MARK: - Private Methods

@@ -10,6 +10,16 @@ public enum EditorGrouping {
 public macro Editable(_ grouping: EditorGrouping = .none) =
   #externalMacro(module: "GameMacros", type: "EditableMacro")
 
+/// Attribute macro for marking functions as callable from the editor.
+/// This works alongside the @Editor property wrapper - Swift will choose the correct one based on context.
+/// For properties: @Editor(8.0...64.0) uses the property wrapper
+/// For functions: @Editor uses this attribute macro
+/// The macro signature matches the property wrapper's init to allow Swift to distinguish them.
+@attached(peer)
+public macro Editor(_ range: ClosedRange<Double>? = nil, displayName: String? = nil) = 
+  #externalMacro(module: "GameMacros", type: "EditorFunctionMacro")
+
+
 /// A property wrapper that marks properties as editable in the debug editor.
 @propertyWrapper
 public struct Editor<T> {
@@ -100,25 +110,25 @@ public struct Editor<T> {
   }
 }
 
-/// Protocol for objects that can provide editable properties.
+/// Protocol for objects that can provide editor properties.
 @MainActor
 public protocol Editing: AnyObject {
   func getEditableProperties() -> [Any]
 }
 
-/// A group of related editable properties.
-public struct EditablePropertyGroup {
+/// A group of related editor properties.
+public struct EditorPropertyGroup {
   public let name: String
-  public let properties: [AnyEditableProperty]
+  public let properties: [AnyEditorProperty]
 
-  public init(name: String, properties: [AnyEditableProperty]) {
+  public init(name: String, properties: [AnyEditorProperty]) {
     self.name = name
     self.properties = properties
   }
 }
 
-/// Type-erased wrapper for editable properties that can actually modify the original values.
-public struct AnyEditableProperty {
+/// Type-erased wrapper for editor properties that can actually modify the original values.
+public struct AnyEditorProperty {
   public let name: String
   public let value: Any
   public let setValue: (Any) -> Void
@@ -153,5 +163,18 @@ public struct AnyEditableProperty {
     self.displayName = displayName
     self.validRange = validRange
     self.pickerOptions = pickerOptions
+  }
+}
+
+/// Represents an editor function that can be called from the editor.
+public struct EditorFunction {
+  public let name: String
+  public let displayName: String
+  public let action: () -> Void
+
+  public init(name: String, displayName: String, action: @escaping () -> Void) {
+    self.name = name
+    self.displayName = displayName
+    self.action = action
   }
 }

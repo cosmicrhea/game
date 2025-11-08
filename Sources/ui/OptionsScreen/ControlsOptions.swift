@@ -9,6 +9,12 @@ final class ControlsOptionsPanel: OptionsPanel {
     super.init()
 
     setRows([
+      Row(
+        button: "Key Bindings",
+        action: {
+          // TODO: Open key bindings screen
+          print("Key Bindings clicked")
+        }),
       Row(label: "Run Type", control: runTypePicker),
       Row(label: "Crouch Type", control: crouchTypePicker),
       Row(label: "Cursor Lock", control: cursorLockPicker),
