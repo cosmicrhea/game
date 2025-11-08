@@ -24,6 +24,11 @@ uniform float uEquippedStroke; // 0.0 disabled, 1.0 enabled
 uniform vec3 uEquippedStrokeColor;
 uniform float uEquippedStrokeWidth; // pixels (e.g., 4.0-5.0)
 
+// Equipped inner glow (radial glow from center)
+uniform float uEquippedGlow; // 0.0 disabled, 1.0 enabled
+uniform vec3 uEquippedGlowColor;
+uniform float uEquippedGlowStrength; // 0..1
+
 // Colors
 uniform vec3 uPanelColor;
 uniform vec3 uBorderColor;
@@ -132,18 +137,34 @@ void main() {
   // Combine colors
   vec3 finalColor = mix(panelColor, borderColor, borderMask);
 
-  // Equipped inner stroke (inside the inner border edge)
+  // Equipped inner glow (ring around the inner edge, inside the slot)
+  if (uEquippedGlow > 0.0) {
+    // Calculate distance to the slot edge
+    float edgeDist = roundedBoxSDF(uv - center, halfSize, uCornerRadius);
+    // Create an inner edge ring - draw just inside the border
+    // Use a smaller size to draw inside the slot
+    float innerOffset = uEquippedGlowStrength * 3.0; // Offset from edge in pixels
+    float innerRadius = max(0.0, uCornerRadius - innerOffset);
+    vec2 innerHalfSize = max(halfSize - vec2(innerOffset), vec2(1.0));
+    float innerEdgeDist = roundedBoxSDF(uv - center, innerHalfSize, innerRadius);
+    // Create a ring mask - band around the inner edge
+    float ringWidth = 2.0; // Width of the inner edge ring
+    float glowMask = smoothstep(ringWidth, 0.0, abs(innerEdgeDist));
+    // Only apply inside the slot (where edgeDist < 0)
+    glowMask *= step(edgeDist, 0.0);
+    // Apply the glow
+    finalColor = mix(finalColor, uEquippedGlowColor,
+                     clamp(glowMask * uEquippedGlow, 0.0, 1.0));
+  }
+
+  // Equipped stroke (drawn exactly on the edge)
   if (uEquippedStroke > 0.0) {
-    float innerRadius = max(0.0, uCornerRadius - uBorderThickness);
-    vec2 innerHalfSize = max(halfSize - vec2(uBorderThickness), vec2(1.0));
-    float innerEdgeDist =
-        roundedBoxSDF(uv - center, innerHalfSize, innerRadius);
-    // Band of width uEquippedStrokeWidth centered on the inner edge (inside the
-    // panel)
-    float strokeMask =
-        smoothstep(uEquippedStrokeWidth, 0.0, abs(innerEdgeDist));
-    // Constrain strictly to panel interior
-    strokeMask *= panelMask;
+    // Calculate distance to the slot edge
+    float edgeDist = roundedBoxSDF(uv - center, halfSize, uCornerRadius);
+    // Draw exactly on the edge - centered on the edge (half inside, half outside)
+    // The stroke will be half inside and half outside the slot
+    float strokeMask = smoothstep(uEquippedStrokeWidth * 0.5, 0.0, abs(edgeDist));
+    // Make it more prominent by using full strength
     finalColor = mix(finalColor, uEquippedStrokeColor,
                      clamp(strokeMask * uEquippedStroke, 0.0, 1.0));
   }

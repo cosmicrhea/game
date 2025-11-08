@@ -280,6 +280,9 @@ public final class DocumentSlotGrid {
 
       // Draw the slot
       slotEffect.draw { shader in
+        // Drive subtle pulse for selected slot
+        let pulses: Float = (i == selectedIndex) ? 1.0 : 0.0
+        shader.setFloat("uPulse", value: pulses)
         shader.setVec2("uPanelSize", value: (slotSize, slotSize))
         shader.setVec2("uPanelCenter", value: (centerPosition.x, centerPosition.y))
         shader.setFloat("uBorderThickness", value: borderThickness)
