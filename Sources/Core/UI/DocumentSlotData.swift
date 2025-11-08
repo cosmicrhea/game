@@ -1,4 +1,4 @@
-/// Represents the data for a single slot containing a document in a SlotGrid
+/// Represents the data for a single slot containing a document in a DocumentSlotGrid
 public struct DocumentSlotData: Sendable {
   public let document: Document?
   public let isDiscovered: Bool

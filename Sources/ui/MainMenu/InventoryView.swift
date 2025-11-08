@@ -1,6 +1,6 @@
 final class InventoryView: RenderLoop {
   private let promptList = PromptList(.inventory)
-  private var slotGrid: SlotGrid
+  private var slotGrid: ItemSlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
   private let healthCallout = Callout(style: .healthDisplay)
   internal let healthDisplay = HealthDisplay()
@@ -27,7 +27,7 @@ final class InventoryView: RenderLoop {
   }
 
   init() {
-    slotGrid = SlotGrid(
+    slotGrid = ItemSlotGrid(
       columns: 4,
       rows: 4,
       slotSize: 80.0,
@@ -100,7 +100,7 @@ final class InventoryView: RenderLoop {
       return
     }
 
-    // Let SlotGrid handle all input (including menu)
+    // Let ItemSlotGrid handle all input (including menu)
     if slotGrid.handleKey(key) {
       return
     }

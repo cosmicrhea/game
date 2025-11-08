@@ -2,7 +2,7 @@
 @MainActor
 final class SlotGridDemo: RenderLoop {
   private let promptList = PromptList(.menu)
-  private var slotGrid: SlotGrid
+  private var slotGrid: ItemSlotGrid
 
   // Grid configuration
   private var gridColumns = 4
@@ -35,7 +35,7 @@ final class SlotGridDemo: RenderLoop {
   private var lastMouseY: Double = 0
 
   init() {
-    slotGrid = SlotGrid(
+    slotGrid = ItemSlotGrid(
       columns: gridColumns,
       rows: gridRows,
       slotSize: slotSize,
@@ -55,7 +55,7 @@ final class SlotGridDemo: RenderLoop {
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    // Let SlotGrid handle all input (including menu)
+    // Let ItemSlotGrid handle all input (including menu)
     if slotGrid.handleKey(key) {
       return
     }
@@ -63,11 +63,11 @@ final class SlotGridDemo: RenderLoop {
     switch key {
     case .equal:
       spacing += 1
-      slotGrid = SlotGrid(columns: gridColumns, rows: gridRows, slotSize: slotSize, spacing: spacing)
+      slotGrid = ItemSlotGrid(columns: gridColumns, rows: gridRows, slotSize: slotSize, spacing: spacing)
       recenterGrid()
     case .minus:
       spacing = max(0, spacing - 1)
-      slotGrid = SlotGrid(columns: gridColumns, rows: gridRows, slotSize: slotSize, spacing: spacing)
+      slotGrid = ItemSlotGrid(columns: gridColumns, rows: gridRows, slotSize: slotSize, spacing: spacing)
       recenterGrid()
     case .q:
       cornerRadius += 1
@@ -92,7 +92,7 @@ final class SlotGridDemo: RenderLoop {
       spacing = 2.0
       cornerRadius = 12.0
       radialGradientStrength = 0.3
-      slotGrid = SlotGrid(
+      slotGrid = ItemSlotGrid(
         columns: gridColumns, rows: gridRows, slotSize: slotSize, spacing: spacing, cornerRadius: cornerRadius,
         radialGradientStrength: radialGradientStrength)
       recenterGrid()

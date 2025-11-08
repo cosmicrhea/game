@@ -11,8 +11,8 @@ final class ItemStorageView: RenderLoop {
   public var showingItem: Bool { isShowingItem }
 
   // MARK: - Grids
-  private let playerGrid: SlotGrid
-  private let storageGrid: SlotGrid
+  private let playerGrid: ItemSlotGrid
+  private let storageGrid: ItemSlotGrid
 
   // MARK: - State
   private enum GridId { case player, storage }
@@ -34,7 +34,7 @@ final class ItemStorageView: RenderLoop {
 
   init() {
     // Player inventory grid: same size as InventoryView (4x2)
-    playerGrid = SlotGrid(
+    playerGrid = ItemSlotGrid(
       columns: 4,
       rows: 4,
       slotSize: 80.0,
@@ -44,7 +44,7 @@ final class ItemStorageView: RenderLoop {
     playerGrid.showMenuOnSelection = false
 
     // Storage grid: larger than inventory view
-    storageGrid = SlotGrid(
+    storageGrid = ItemSlotGrid(
       columns: 6,
       rows: 4,
       slotSize: 80.0,
@@ -366,7 +366,7 @@ final class ItemStorageView: RenderLoop {
   }
 
   private func performCrossGridSwap(
-    sourceGrid: SlotGrid, sourceIndex: Int, targetGrid: SlotGrid, targetIndex: Int, keepMoving: Bool = true
+    sourceGrid: ItemSlotGrid, sourceIndex: Int, targetGrid: ItemSlotGrid, targetIndex: Int, keepMoving: Bool = true
   ) {
     let sourceData = sourceGrid.getSlotData(at: sourceIndex)
     let targetData = targetGrid.getSlotData(at: targetIndex)
@@ -404,7 +404,7 @@ final class ItemStorageView: RenderLoop {
     }
   }
 
-  private func performSameGridSwap(grid: SlotGrid, sourceIndex: Int, targetIndex: Int) {
+  private func performSameGridSwap(grid: ItemSlotGrid, sourceIndex: Int, targetIndex: Int) {
     guard sourceIndex != targetIndex else { return }
     let sourceData = grid.getSlotData(at: sourceIndex)
     let targetData = grid.getSlotData(at: targetIndex)
@@ -481,7 +481,7 @@ final class ItemStorageView: RenderLoop {
       }
     }()
 
-    let data: SlotData? = {
+    let data: ItemSlotData? = {
       switch focusedGrid {
       case .player: return playerGrid.getSlotData(at: selectedIndex)
       case .storage: return storageGrid.getSlotData(at: selectedIndex)
@@ -546,7 +546,7 @@ final class ItemStorageView: RenderLoop {
 
   private func setupPlayerSlots() {
     let totalSlots = playerGrid.columns * playerGrid.rows
-    var data: [SlotData?] = Array(repeating: nil, count: totalSlots)
+    var data: [ItemSlotData?] = Array(repeating: nil, count: totalSlots)
     let items: [(Item, Int?)] = [
       (.knife, nil),
       (.glock17, 15),
@@ -558,14 +558,14 @@ final class ItemStorageView: RenderLoop {
       (.knife, nil),
     ]
     for (i, pair) in items.enumerated() where i < totalSlots {
-      data[i] = SlotData(item: pair.0, quantity: pair.1)
+      data[i] = ItemSlotData(item: pair.0, quantity: pair.1)
     }
     playerGrid.setSlotData(data)
   }
 
   private func setupStorageSlots() {
     let totalSlots = storageGrid.columns * storageGrid.rows
-    var data: [SlotData?] = Array(repeating: nil, count: totalSlots)
+    var data: [ItemSlotData?] = Array(repeating: nil, count: totalSlots)
     let items: [(Item, Int?)] = [
       (.handgunAmmo, 99),
       (.morphine, nil),
@@ -575,7 +575,7 @@ final class ItemStorageView: RenderLoop {
       (.morphine, nil),
     ]
     for (i, pair) in items.enumerated() where i < totalSlots {
-      data[i] = SlotData(item: pair.0, quantity: pair.1)
+      data[i] = ItemSlotData(item: pair.0, quantity: pair.1)
     }
     storageGrid.setSlotData(data)
   }

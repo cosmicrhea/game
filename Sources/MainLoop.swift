@@ -772,7 +772,7 @@ import Jolt
       guard let self = self else { return }
       // Update inventory directly
       if slotIndex < Inventory.player1.slots.count {
-        Inventory.player1.slots[slotIndex] = SlotData(
+        Inventory.player1.slots[slotIndex] = ItemSlotData(
           item: placedItem, quantity: placedQuantity > 1 ? placedQuantity : nil)
       }
       // Resume continuation with success

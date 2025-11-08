@@ -7,7 +7,7 @@ final class PickupView: RenderLoop {
   }
 
   private var promptList = PromptList(.continue)
-  private var slotGrid: SlotGrid
+  private var slotGrid: ItemSlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
 
   // Mouse tracking
@@ -80,7 +80,7 @@ final class PickupView: RenderLoop {
     self.pickedUpQuantity = quantity
     self.camera = ItemInspectionCamera(distance: item.inspectionDistance)
 
-    slotGrid = SlotGrid(
+    slotGrid = ItemSlotGrid(
       columns: 4,
       rows: 4,
       slotSize: 80.0,
@@ -350,7 +350,7 @@ final class PickupView: RenderLoop {
     }
 
     // Handle grid view state
-    // Let SlotGrid handle navigation and placement (placement mode handles F/space/enter/escape)
+    // Let ItemSlotGrid handle navigation and placement (placement mode handles F/space/enter/escape)
     if slotGrid.handleKey(key) {
       return
     }

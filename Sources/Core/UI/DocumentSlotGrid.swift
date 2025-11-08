@@ -1,4 +1,4 @@
-/// A specialized SlotGrid for displaying documents
+/// A specialized grid for displaying documents (similar to ItemSlotGrid but for documents)
 @MainActor
 public final class DocumentSlotGrid {
   // MARK: - Configuration

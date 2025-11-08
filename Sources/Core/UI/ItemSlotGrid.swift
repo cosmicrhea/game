@@ -1,6 +1,6 @@
 /// A grid of slots with configurable spacing and layout
 @MainActor
-public final class SlotGrid {
+public final class ItemSlotGrid {
   // MARK: - Configuration
   public var columns: Int
   public var rows: Int
@@ -81,10 +81,10 @@ public final class SlotGrid {
   /// Inventory instance - when set, uses inventory.slots instead of slotData
   public var inventory: Inventory? = nil
   /// Direct slot data array (used when inventory is nil)
-  public var slotData: [SlotData?] = []
+  public var slotData: [ItemSlotData?] = []
 
   /// Get the effective slot data array (from inventory if set, otherwise slotData)
-  private var effectiveSlotData: [SlotData?] {
+  private var effectiveSlotData: [ItemSlotData?] {
     if let inventory = inventory {
       return inventory.slots
     }
@@ -144,7 +144,7 @@ public final class SlotGrid {
 
   /// Set the slot data array (should match the grid size)
   /// Note: If inventory is set, this will update inventory.slots instead
-  public func setSlotData(_ data: [SlotData?]) {
+  public func setSlotData(_ data: [ItemSlotData?]) {
     if let inventory = inventory {
       inventory.slots = data
     } else {
@@ -205,14 +205,14 @@ public final class SlotGrid {
   }
 
   /// Get slot data at a specific index
-  public func getSlotData(at index: Int) -> SlotData? {
+  public func getSlotData(at index: Int) -> ItemSlotData? {
     let data = effectiveSlotData
     guard index >= 0 && index < data.count else { return nil }
     return data[index]
   }
 
   /// Set slot data at a specific index
-  public func setSlotData(_ data: SlotData?, at index: Int) {
+  public func setSlotData(_ data: ItemSlotData?, at index: Int) {
     if let inventory = inventory {
       guard index >= 0 && index < inventory.slots.count else { return }
       inventory.slots[index] = data

@@ -1,6 +1,6 @@
 final class LibraryView: RenderLoop {
   private let promptList = PromptList(.library)
-  private var documentSlotGrid: DocumentSlotGrid
+  private var slotGrid: DocumentSlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
   private let itemDescriptionView = ItemDescriptionView()
 
@@ -41,7 +41,7 @@ final class LibraryView: RenderLoop {
   ]
 
   init() {
-    documentSlotGrid = DocumentSlotGrid(
+    slotGrid = DocumentSlotGrid(
       columns: 4,
       rows: 4,
       slotSize: 80.0,
@@ -49,7 +49,7 @@ final class LibraryView: RenderLoop {
       selectionWraps: true
     )
 
-    documentSlotGrid.onDocumentSelected = { [weak self] document in
+    slotGrid.onDocumentSelected = { [weak self] document in
       self?.handleDocumentSelection(document)
     }
 
@@ -62,7 +62,7 @@ final class LibraryView: RenderLoop {
 
   /// Recalculate and set the grid position based on layout preference
   private func recenterGrid() {
-    let totalSize = documentSlotGrid.totalSize
+    let totalSize = slotGrid.totalSize
     let isCentered = Config.current.centeredLayout
     let x: Float = {
       if isCentered {
@@ -74,7 +74,7 @@ final class LibraryView: RenderLoop {
     }()
     let y: Float = (Float(Engine.viewportSize.height) - totalSize.height) * 0.5 + 64
     let gridPosition = Point(x, y)
-    documentSlotGrid.setPosition(gridPosition)
+    slotGrid.setPosition(gridPosition)
   }
 
   func update(deltaTime: Float) {
@@ -105,7 +105,7 @@ final class LibraryView: RenderLoop {
     }
 
     // Let DocumentSlotGrid handle all input
-    if documentSlotGrid.handleKey(key) {
+    if slotGrid.handleKey(key) {
       return
     }
 
@@ -129,7 +129,7 @@ final class LibraryView: RenderLoop {
 
     // Flip Y coordinate to match screen coordinates (top-left origin)
     let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
-    documentSlotGrid.handleMouseMove(at: mousePosition)
+    slotGrid.handleMouseMove(at: mousePosition)
   }
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
@@ -142,7 +142,7 @@ final class LibraryView: RenderLoop {
     let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
     if button == .left {
-      _ = documentSlotGrid.handleMouseClick(at: mousePosition)
+      _ = slotGrid.handleMouseClick(at: mousePosition)
     }
   }
 
@@ -163,7 +163,7 @@ final class LibraryView: RenderLoop {
       }
 
       // Draw the document slot grid
-      documentSlotGrid.draw()
+      slotGrid.draw()
 
       // Draw the prompt list
       promptList.draw()
@@ -176,7 +176,7 @@ final class LibraryView: RenderLoop {
   // MARK: - Private Methods
 
   private func setupSlotData() {
-    let totalSlots = documentSlotGrid.columns * documentSlotGrid.rows
+    let totalSlots = slotGrid.columns * slotGrid.rows
     var slotData: [DocumentSlotData?] = Array(repeating: nil, count: totalSlots)
 
     // Place documents with discovery status
@@ -187,7 +187,7 @@ final class LibraryView: RenderLoop {
       }
     }
 
-    documentSlotGrid.setSlotData(slotData)
+    slotGrid.setSlotData(slotData)
   }
 
   private func handleDocumentSelection(_ document: Document?) {
@@ -220,8 +220,8 @@ final class LibraryView: RenderLoop {
   }
 
   private func updateDocumentLabel() {
-    let selectedIndex = documentSlotGrid.selectedIndex
-    if let slotData = documentSlotGrid.getSlotData(at: selectedIndex), let document = slotData.document {
+    let selectedIndex = slotGrid.selectedIndex
+    if let slotData = slotGrid.getSlotData(at: selectedIndex), let document = slotData.document {
       currentDocumentName = document.displayName ?? "Unknown Document"
     } else {
       currentDocumentName = ""
