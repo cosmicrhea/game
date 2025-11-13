@@ -25,7 +25,8 @@ class MapView: RenderLoop {
   }
   private var borderLineMeshes: [BorderLineData] = []
   // Store border segments for door alignment (start, end points in world space)
-  private var borderSegments: [(start: vec3, end: vec3)] = []
+  // Each segment tracks which floor mesh instance indices it belongs to
+  private var borderSegments: [(start: vec3, end: vec3, floorIndices: Set<Int>)] = []
 
   // Area (room) data for labels
   private var areaData: [(node: Node, floorNode: Node?, boundingBox: (min: vec3, max: vec3))] = []
@@ -34,6 +35,8 @@ class MapView: RenderLoop {
   private var doorToAreas: [Int: [Int]] = [:]
   // Adjusted transforms for doors (aligned to walls)
   private var doorAdjustedTransforms: [Int: mat4] = [:]
+  // Map floor mesh instance index to area index
+  private var floorIndexToAreaIndex: [Int: Int] = [:]
 
   // Room visibility mask for debugging (binary: each bit represents a room)
   private var roomVisibilityMask: UInt = 0  // 0 = all visible, or use bitmask
@@ -68,6 +71,9 @@ class MapView: RenderLoop {
   private var resetStartPan: vec2 = vec2(0, 0)
   private var resetStartZoom: Float = 0.8
 
+  // Debug text toggle
+  private var showDebugText: Bool = false
+
   @Editor(8.0...64.0) var gridCellSize: Float = 32.0
   @Editor(0.5...3.0) var gridThickness: Float = 1.0
   @Editor(0.1...3.0) var gridScale: Float = 1.0
@@ -98,7 +104,7 @@ class MapView: RenderLoop {
     do {
       mapShaderProgram = try GLProgram("Common/mapMesh", "Common/mapMesh")
     } catch {
-      print("Failed to load map shader: \(error)")
+      // Failed to load map shader
     }
 
     Task {
@@ -112,7 +118,7 @@ class MapView: RenderLoop {
           self.scene = Scene(assimpScene)
         }
       } catch {
-        print("Failed to load scene: \(error)")
+        // Failed to load scene
       }
     }
   }
@@ -120,23 +126,14 @@ class MapView: RenderLoop {
   private func setupMapRendering() {
     guard let scene = scene else { return }
 
-    // DEBUG: Print all metadata keys from all nodes
-    printAllMetadataKeys(in: scene.rootNode, indent: 0)
-
     // Find and set up Camera_0 (debug/orthographic camera)
     if let cameraNode = scene.rootNode.findNode(named: "Camera_0") {
       debugCameraNode = cameraNode
       debugCameraWorldTransform = calculateNodeWorldTransform(cameraNode, in: scene)
-      print("✅ Found Camera_0 node")
     }
 
     if let camera = scene.cameras.first(where: { $0.name == "Camera_0" }) {
       debugCamera = camera
-      print(
-        "✅ Found Camera_0: orthoWidth=\(camera.orthographicWidth), aspect=\(camera.aspect), near=\(camera.clipPlaneNear), far=\(camera.clipPlaneFar)"
-      )
-    } else {
-      print("⚠️ Camera_0 not found in scene cameras")
     }
 
     // Find floor nodes (children of room nodes)
@@ -168,6 +165,16 @@ class MapView: RenderLoop {
     // Create mesh instances for floors
     for node in floorNodes {
       let worldTransform = calculateNodeWorldTransform(node, in: scene)
+
+      // Find which area this floor belongs to
+      var areaIndex: Int? = nil
+      for (idx, (_, floorNode, _)) in areaData.enumerated() {
+        if floorNode === node {
+          areaIndex = idx
+          break
+        }
+      }
+
       for meshIndex in node.meshes {
         guard meshIndex < scene.meshes.count else { continue }
         let mesh = scene.meshes[Int(meshIndex)]
@@ -180,8 +187,15 @@ class MapView: RenderLoop {
           sceneIdentifier: scene.filePath
         )
         meshInstance.node = node
+        let floorIndex = floorMeshInstances.count
         floorMeshInstances.append(meshInstance)
-        if let border = createBorderLineMesh(from: meshInstance) {
+
+        // Map floor index to area index
+        if let areaIndex = areaIndex {
+          floorIndexToAreaIndex[floorIndex] = areaIndex
+        }
+
+        if let border = createBorderLineMesh(from: meshInstance, floorIndex: floorIndex) {
           borderLineMeshes.append(border)
         }
       }
@@ -209,6 +223,9 @@ class MapView: RenderLoop {
     // Merge overlapping wall segments (where two rooms share a wall)
     if enableWallMerging {
       mergeOverlappingWallSegments()
+    } else {
+      // Even without merging, regenerate meshes to respect visibility
+      regenerateBorderLineMeshes()
     }
 
     // Calculate door-to-area relationships
@@ -235,7 +252,9 @@ class MapView: RenderLoop {
     }
 
     // Helper to check if two segments are the same (or reversed)
-    func segmentsAreSame(_ seg1: (start: vec3, end: vec3), _ seg2: (start: vec3, end: vec3)) -> Bool {
+    func segmentsAreSame(
+      _ seg1: (start: vec3, end: vec3, floorIndices: Set<Int>), _ seg2: (start: vec3, end: vec3, floorIndices: Set<Int>)
+    ) -> Bool {
       // Check if they're the same direction
       if pointsAreClose(seg1.start, seg2.start) && pointsAreClose(seg1.end, seg2.end) {
         return true
@@ -247,30 +266,37 @@ class MapView: RenderLoop {
       return false
     }
 
-    // Build list of unique segments
-    var uniqueSegments: [(start: vec3, end: vec3)] = []
+    // Build list of unique segments, merging floor indices when segments overlap
+    var uniqueSegments: [(start: vec3, end: vec3, floorIndices: Set<Int>)] = []
     var processedIndices = Set<Int>()
 
     for (i, segment) in borderSegments.enumerated() {
       if processedIndices.contains(i) { continue }
 
       // Check if this segment matches any already in uniqueSegments
-      var isDuplicate = false
-      for uniqueSegment in uniqueSegments {
+      var merged = false
+      for (uniqueIndex, uniqueSegment) in uniqueSegments.enumerated() {
         if segmentsAreSame(segment, uniqueSegment) {
-          isDuplicate = true
+          // Merge floor indices
+          uniqueSegments[uniqueIndex].floorIndices.formUnion(segment.floorIndices)
+          processedIndices.insert(i)
+          merged = true
           break
         }
       }
 
-      if !isDuplicate {
+      if !merged {
         uniqueSegments.append(segment)
         processedIndices.insert(i)
 
-        // Also mark any other segments that match this one
+        // Also mark any other segments that match this one and merge their floor indices
         for (j, otherSegment) in borderSegments.enumerated() {
           if j != i && !processedIndices.contains(j) {
             if segmentsAreSame(segment, otherSegment) {
+              // Update the unique segment with merged floor indices
+              if let lastIndex = uniqueSegments.indices.last {
+                uniqueSegments[lastIndex].floorIndices.formUnion(otherSegment.floorIndices)
+              }
               processedIndices.insert(j)
             }
           }
@@ -278,11 +304,8 @@ class MapView: RenderLoop {
       }
     }
 
-    let originalCount = borderSegments.count
     // Replace border segments with deduplicated list
     borderSegments = uniqueSegments
-
-    print("Merged overlapping walls: \(uniqueSegments.count) unique segments (was \(originalCount))")
 
     // Regenerate border line meshes from merged segments
     regenerateBorderLineMeshes()
@@ -310,6 +333,16 @@ class MapView: RenderLoop {
     var vertexIndex: UInt32 = 0
 
     for segment in borderSegments {
+      // Check if this segment should be visible based on its floor indices' areas
+      let isVisible = segment.floorIndices.contains { floorIndex in
+        if let areaIndex = floorIndexToAreaIndex[floorIndex] {
+          return isRoomVisible(index: areaIndex)
+        }
+        return true  // If no area mapping, show it
+      }
+
+      guard isVisible else { continue }
+
       let start = segment.start
       let end = segment.end
 
@@ -439,7 +472,7 @@ class MapView: RenderLoop {
 
         if distance < minDistance {
           minDistance = distance
-          nearestSegment = segment
+          nearestSegment = (start: segment.start, end: segment.end)
           nearestPointOnSegment = projectedPoint
         }
       }
@@ -450,18 +483,6 @@ class MapView: RenderLoop {
       let segDir = segment.end - segment.start
       let segLength = length(segDir)
       guard segLength > 0.001 else { continue }
-
-      let segDirNormalized = segDir / segLength
-
-      // Calculate door's current size (approximate from bounding box)
-      let doorSize = vec3(
-        doorBounds.max.x - doorBounds.min.x,
-        doorBounds.max.y - doorBounds.min.y,
-        doorBounds.max.z - doorBounds.min.z
-      )
-
-      // Determine door's depth (smallest dimension is usually depth)
-      let doorDepth = min(doorSize.x, doorSize.z)
 
       // Move door so its center aligns with the wall edge
       // The door should be positioned so it's flush with the wall
@@ -521,17 +542,10 @@ class MapView: RenderLoop {
         doorToAreas[doorIndex] = connectedAreas
       }
     }
-
-    // Debug output
-    print("Door-to-area relationships:")
-    for (doorIndex, areas) in doorToAreas.sorted(by: { $0.key < $1.key }) {
-      let areaNames = areas.map { "Area \($0 + 1)" }.joined(separator: ", ")
-      print("  Door \(doorIndex + 1) connects to: \(areaNames)")
-    }
   }
 
   /// Create thick border line mesh (quads/triangles) from a floor mesh
-  private func createBorderLineMesh(from floor: MeshInstance) -> BorderLineData? {
+  private func createBorderLineMesh(from floor: MeshInstance, floorIndex: Int) -> BorderLineData? {
     let mesh = floor.mesh
     let transform = floor.transformMatrix
     let lineWidth: Float = 0.1  // World units - thick border
@@ -596,7 +610,7 @@ class MapView: RenderLoop {
 
     // Store segments in class-level array for door alignment
     for (start, end) in localBorderSegments {
-      borderSegments.append((start: start, end: end))
+      borderSegments.append((start: start, end: end, floorIndices: [floorIndex]))
     }
 
     // Convert line segments to thick quad geometry
@@ -854,9 +868,15 @@ class MapView: RenderLoop {
     case .semicolon:
       // Cycle forward through room visibility combinations
       cycleRoomVisibility(forward: true)
+      UISound.select()
     case .apostrophe:
       // Cycle backward through room visibility combinations
       cycleRoomVisibility(forward: false)
+      UISound.select()
+    case .backspace:
+      // Toggle debug text
+      showDebugText.toggle()
+      UISound.select()
     default:
       break
     }
@@ -893,14 +913,8 @@ class MapView: RenderLoop {
       roomVisibilityMode = .binary(roomVisibilityMask)
     }
 
-    // Debug output
-    let visibleAreas = (0..<areaCount).compactMap { index in
-      (roomVisibilityMask & (1 << index)) != 0 ? index + 1 : nil
-    }
-    let binaryString = String(roomVisibilityMask, radix: 2)
-    let paddedBinary = String(repeating: "0", count: max(0, areaCount - binaryString.count)) + binaryString
-    print("Area visibility: mask=\(paddedBinary) (decimal: \(roomVisibilityMask)/\(maxCombinations-1))")
-    print("  Visible areas: \(visibleAreas.isEmpty ? "none" : visibleAreas.map(String.init).joined(separator: ", "))")
+    // Regenerate border meshes to reflect new visibility
+    regenerateBorderLineMeshes()
   }
 
   func onScroll(window: Window, xOffset: Double, yOffset: Double) {
@@ -1057,6 +1071,11 @@ class MapView: RenderLoop {
 
     // Draw room labels on top
     drawRoomLabels(context: context, scene: scene)
+
+    // Draw debug text if enabled
+    if showDebugText {
+      drawDebugText(context: context)
+    }
 
     // Draw prompt list last
     promptList.draw()
@@ -1312,7 +1331,7 @@ class MapView: RenderLoop {
 
     // Draw area labels
     var areaNumber = 1
-    for (index, (node, floorNode, boundingBox)) in areaData.enumerated() {
+    for (index, (_, floorNode, boundingBox)) in areaData.enumerated() {
       // Check area visibility mask
       if !isRoomVisible(index: index) {
         areaNumber += 1  // Still increment to keep numbering consistent
@@ -1336,13 +1355,23 @@ class MapView: RenderLoop {
       // Note: We flip the sign to match the map's coordinate system
       let screenY = centerY + ndcY * (viewportSize.height / 2.0)
 
-      // Get label from Floor node's metadata if available, otherwise use default
+      // Get label from Floor node's metadata or name, otherwise use default
       let labelText: String
-      if let floorNode = floorNode,
-        let metadata = floorNode.metadata?.metadata["label"],
-        case .string(let labelString) = metadata
-      {
-        labelText = labelString
+      if let floorNode = floorNode {
+        // First try metadata
+        if let metadata = floorNode.metadata?.metadata["label"],
+          case .string(let labelString) = metadata
+        {
+          labelText = labelString
+        }
+        // Then try extracting from node name using regex: "Floor (Label Text)"
+        else if let nodeName = floorNode.name,
+          let match = nodeName.firstMatch(of: /Floor\s*\(([^)]+)\)/)
+        {
+          labelText = String(match.1)
+        } else {
+          labelText = "Room \(areaNumber)"
+        }
       } else {
         labelText = "Room \(areaNumber)"
       }
@@ -1354,6 +1383,26 @@ class MapView: RenderLoop {
       )
       areaNumber += 1
     }
+  }
+
+  private func drawDebugText(context: GraphicsContext) {
+    // Calculate current font size (same as in drawRoomLabels)
+    let currentFontSize = 48.0 * cameraZoom
+
+    // Build debug text lines (matching MainLoop style)
+    let overlayLines = [
+      String(format: "Zoom: %.2f", cameraZoom),
+      String(format: "Pan: %.2f, %.2f", cameraPan.x, cameraPan.y),
+      String(format: "Font Size: %.1f", currentFontSize),
+    ]
+
+    let overlay = overlayLines.joined(separator: "\n")
+
+    overlay.draw(
+      at: Point(20, Engine.viewportSize.height - 20),
+      style: .itemDescription.withMonospacedDigits(true),
+      anchor: .topLeft
+    )
   }
 
   // MARK: - Helper Functions
@@ -1490,40 +1539,6 @@ class MapView: RenderLoop {
     }
 
     return (min: minBounds, max: maxBounds)
-  }
-
-  /// DEBUG: Recursively print all metadata keys from all nodes in the scene
-  private func printAllMetadataKeys(in node: Node, indent: Int) {
-    let indentStr = String(repeating: "  ", count: indent)
-    let nodeName = node.name ?? "<unnamed>"
-
-    if let metadata = node.metadata {
-      print("\(indentStr)Node: \(nodeName)")
-      printMetadataKeys(metadata: metadata, indent: indent + 1)
-    } else {
-      print("\(indentStr)Node: \(nodeName) (no metadata)")
-    }
-
-    // Recursively process children
-    for child in node.children {
-      printAllMetadataKeys(in: child, indent: indent)
-    }
-  }
-
-  /// DEBUG: Recursively print all keys in a metadata structure
-  private func printMetadataKeys(metadata: Assimp.SceneMetadata, indent: Int) {
-    let indentStr = String(repeating: "  ", count: indent)
-
-    // Print all top-level keys
-    for (index, key) in metadata.keys.enumerated() {
-      let value = metadata.values[index]
-      print("\(indentStr)Key: '\(key)'")
-
-      // If the value is nested metadata, recurse
-      if case .metadata(let nestedMetadata) = value {
-        printMetadataKeys(metadata: nestedMetadata, indent: indent + 1)
-      }
-    }
   }
 
 }
