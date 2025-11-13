@@ -30,6 +30,8 @@ class MapView: RenderLoop {
 
   // Area (room) data for labels
   private var areaData: [(node: Node, floorNode: Node?, boundingBox: (min: vec3, max: vec3))] = []
+  // Map marker data (nodes named "MapMarker (Something)")
+  private var mapMarkers: [(node: Node, position: vec3)] = []
 
   // Door-to-area relationships: maps door index to array of area indices it connects
   private var doorToAreas: [Int: [Int]] = [:]
@@ -37,6 +39,8 @@ class MapView: RenderLoop {
   private var doorAdjustedTransforms: [Int: mat4] = [:]
   // Map floor mesh instance index to area index
   private var floorIndexToAreaIndex: [Int: Int] = [:]
+  // Marker-to-area relationships: maps marker index to array of area indices it belongs to
+  private var markerToAreas: [Int: [Int]] = [:]
 
   // Room visibility mask for debugging (binary: each bit represents a room)
   private var roomVisibilityMask: UInt = 0  // 0 = all visible, or use bitmask
@@ -233,6 +237,12 @@ class MapView: RenderLoop {
 
     // Align doors to walls
     alignDoorsToWalls()
+
+    // Find map marker nodes
+    findMapMarkers(in: scene)
+
+    // Calculate marker-to-area relationships
+    calculateMarkerToAreaRelationships()
 
     // Calculate and store base scene bounds for camera
     calculateBaseSceneBounds()
@@ -540,6 +550,41 @@ class MapView: RenderLoop {
       // Store relationship (even if empty - door might not connect to any area)
       if !connectedAreas.isEmpty {
         doorToAreas[doorIndex] = connectedAreas
+      }
+    }
+  }
+
+  /// Calculate which areas (rooms) each marker belongs to based on spatial proximity
+  private func calculateMarkerToAreaRelationships() {
+    markerToAreas.removeAll()
+
+    // For each marker, find which areas it is within or near
+    for (markerIndex, (_, position)) in mapMarkers.enumerated() {
+      var associatedAreas: [Int] = []
+
+      // Check each area
+      for (areaIndex, (_, _, areaBounds)) in areaData.enumerated() {
+        // Check if marker is within or very close to area (within threshold)
+        let threshold: Float = 0.25  // 0.25 world units threshold for "near"
+
+        // Expand area bounds by threshold
+        let expandedAreaMin = areaBounds.min - vec3(threshold, threshold, threshold)
+        let expandedAreaMax = areaBounds.max + vec3(threshold, threshold, threshold)
+
+        // Check if marker position is within expanded area bounds
+        let isWithin =
+          position.x >= expandedAreaMin.x && position.x <= expandedAreaMax.x
+          && position.y >= expandedAreaMin.y && position.y <= expandedAreaMax.y
+          && position.z >= expandedAreaMin.z && position.z <= expandedAreaMax.z
+
+        if isWithin {
+          associatedAreas.append(areaIndex)
+        }
+      }
+
+      // Store relationship (even if empty - marker might not belong to any area)
+      if !associatedAreas.isEmpty {
+        markerToAreas[markerIndex] = associatedAreas
       }
     }
   }
@@ -1072,6 +1117,9 @@ class MapView: RenderLoop {
     // Draw room labels on top
     drawRoomLabels(context: context, scene: scene)
 
+    // Draw map markers
+    //drawMapMarkers(context: context, scene: scene)
+
     // Draw debug text if enabled
     if showDebugText {
       drawDebugText(context: context)
@@ -1385,6 +1433,95 @@ class MapView: RenderLoop {
     }
   }
 
+  private func drawMapMarkers(context: GraphicsContext, scene: Scene) {
+    guard !mapMarkers.isEmpty else { return }
+
+    // Use Camera_0 projection if available, otherwise fall back (same as drawRoomLabels)
+    let projection: mat4
+    var view: mat4
+
+    if let camera = debugCamera, camera.orthographicWidth > 0 {
+      let orthoWidth = camera.orthographicWidth
+      let finalAspect = camera.aspect > 0 ? camera.aspect : (context.size.width / context.size.height)
+      let zoomedWidth = orthoWidth / cameraZoom
+      let left = -zoomedWidth
+      let right = zoomedWidth
+      let bottom = -zoomedWidth / finalAspect
+      let top = zoomedWidth / finalAspect
+      projection = GLMath.ortho(left, right, bottom, top, camera.clipPlaneNear, camera.clipPlaneFar)
+
+      if debugCameraWorldTransform != mat4(1) {
+        view = inverse(debugCameraWorldTransform)
+        let rightVector = vec3(
+          debugCameraWorldTransform[0].x, debugCameraWorldTransform[0].y, debugCameraWorldTransform[0].z)
+        let upVector = vec3(
+          debugCameraWorldTransform[1].x, debugCameraWorldTransform[1].y, debugCameraWorldTransform[1].z)
+        let panInWorldSpace = rightVector * cameraPan.x + upVector * (-cameraPan.y)
+        view = GLMath.translate(view, -panInWorldSpace)
+      } else {
+        view = mat4(1)
+      }
+    } else {
+      guard let bounds = baseSceneBounds else { return }
+      let sceneWidth = bounds.maxX - bounds.minX
+      let sceneDepth = bounds.maxZ - bounds.minZ
+      let sceneCenterX = (bounds.minX + bounds.maxX) * 0.5
+      let sceneCenterZ = (bounds.minZ + bounds.maxZ) * 0.5
+      let zoomedWidth = sceneWidth / cameraZoom
+      let zoomedDepth = sceneDepth / cameraZoom
+      let panX = sceneCenterX + cameraPan.x
+      let panZ = sceneCenterZ + cameraPan.y
+      let padding: Float = 5.0
+      let left = panX - zoomedWidth * 0.5 - padding
+      let right = panX + zoomedWidth * 0.5 + padding
+      let bottom = panZ - zoomedDepth * 0.5 - padding
+      let top = panZ + zoomedDepth * 0.5 + padding
+      projection = GLMath.ortho(left, right, bottom, top, -100.0, 100.0)
+      let cameraPos = vec3(panX, 50.0, panZ)
+      view = GLMath.lookAt(cameraPos, vec3(panX, 0, panZ), vec3(0, 1, 0))
+    }
+
+    let viewportSize = context.size
+    let centerX = viewportSize.width / 2.0
+    let centerY = viewportSize.height / 2.0
+
+    // Load marker icon (once, outside loop)
+    let iconSize: Float = 36.0  // Larger icon
+    let markerIcon = Image(
+      "UI/Icons/phosphor-icons/warning-diamond-bold.svg",
+      size: Size(iconSize, iconSize)
+    )
+    // Use same color as area labels (.gray300)
+    let markerColor = Color.gray300
+
+    // Draw each marker
+    for (markerIndex, (_, position)) in mapMarkers.enumerated() {
+      // Check if marker should be visible based on associated areas
+      if !isMarkerVisible(markerIndex: markerIndex) {
+        continue
+      }
+
+      let worldPos = vec4(position.x, position.y, position.z, 1.0)
+
+      // Transform to clip space
+      let clipPos = projection * view * worldPos
+
+      // Convert from clip space [-1, 1] to screen space [0, width/height]
+      let ndcX = clipPos.x / clipPos.w
+      let ndcY = clipPos.y / clipPos.w
+      let screenX = centerX + ndcX * (viewportSize.width / 2.0)
+      let screenY = centerY + ndcY * (viewportSize.height / 2.0)
+
+      // Draw icon centered at marker position (offset by half icon size)
+      markerIcon.draw(
+        at: Point(screenX - iconSize / 2.0, screenY - iconSize / 2.0),
+        size: Size(iconSize, iconSize),
+        tint: markerColor,
+        context: context
+      )
+    }
+  }
+
   private func drawDebugText(context: GraphicsContext) {
     // Calculate current font size (same as in drawRoomLabels)
     let currentFontSize = 48.0 * cameraZoom
@@ -1403,6 +1540,20 @@ class MapView: RenderLoop {
       style: .itemDescription.withMonospacedDigits(true),
       anchor: .topLeft
     )
+  }
+
+  /// Find map marker nodes (named "MapMarker (Something)")
+  private func findMapMarkers(in scene: Scene) {
+    mapMarkers.removeAll()
+
+    let markerNodes = findNodesContaining(keywords: ["MapMarker"], in: scene.rootNode)
+
+    for node in markerNodes {
+      let worldTransform = calculateNodeWorldTransform(node, in: scene)
+      // Get position from transform matrix (translation component)
+      let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
+      mapMarkers.append((node: node, position: position))
+    }
   }
 
   // MARK: - Helper Functions
@@ -1428,6 +1579,19 @@ class MapView: RenderLoop {
     // This way, if you're viewing area A, you see doors that connect to area A,
     // even if the other connected area (B) is hidden
     return connectedAreas.contains { areaIndex in
+      isRoomVisible(index: areaIndex)
+    }
+  }
+
+  /// Check if a marker should be visible based on its associated areas
+  private func isMarkerVisible(markerIndex: Int) -> Bool {
+    // If marker has no associated areas, always show it
+    guard let associatedAreas = markerToAreas[markerIndex], !associatedAreas.isEmpty else {
+      return true
+    }
+
+    // Marker is visible if ANY of its associated areas are visible
+    return associatedAreas.contains { areaIndex in
       isRoomVisible(index: areaIndex)
     }
   }

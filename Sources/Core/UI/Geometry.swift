@@ -9,6 +9,15 @@ public struct Point: Equatable, Hashable, Sendable, CustomStringConvertible {
   /// - Parameters:
   ///   - x: The x-coordinate.
   ///   - y: The y-coordinate.
+  public init(x: Float, y: Float) {
+    self.x = x
+    self.y = y
+  }
+
+  /// Creates a new point with the specified coordinates.
+  /// - Parameters:
+  ///   - x: The x-coordinate.
+  ///   - y: The y-coordinate.
   public init(_ x: Float, _ y: Float) {
     self.x = x
     self.y = y
@@ -61,6 +70,15 @@ public struct Size: Equatable, Hashable, Sendable, CustomStringConvertible {
   public var width: Float
   /// The height of the size.
   public var height: Float
+
+  /// Creates a new size with the specified dimensions.
+  /// - Parameters:
+  ///   - width: The width.
+  ///   - height: The height.
+  public init(width: Float, height: Float) {
+    self.width = width
+    self.height = height
+  }
 
   /// Creates a new size with the specified dimensions.
   /// - Parameters:
