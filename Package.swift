@@ -6,7 +6,7 @@ import PackageDescription
 import class Foundation.ProcessInfo
 
 let env = ProcessInfo.processInfo.environment
-let useLocal = env["USER"] == "fa"
+let useLocalDependencies = env["USER"] == "fa"
 
 let package = Package(
   name: "Game",
@@ -148,10 +148,10 @@ let package = Package(
 
 extension Package.Dependency {
   static func package(_ name: String, branch: String = "main") -> Package.Dependency {
-    if useLocal {
+    if useLocalDependencies {
       .package(path: "../glass-deps/\(name)")
     } else {
-      .package(url: "https://github.com/cosmicrhea-game/\(name).git", branch: branch)
+      .package(url: "https://github.com/cosmicrhea-game/\(name)", branch: branch)
     }
   }
 }
