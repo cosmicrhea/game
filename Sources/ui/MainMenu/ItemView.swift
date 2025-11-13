@@ -61,7 +61,7 @@ import Assimp
         self.loadingProgress.markCompleted()
       }
     } catch {
-      print("Failed to load model: \(error)")
+      logger.error("Failed to load model: \(error)")
       await MainActor.run {
         self.loadingProgress.markCompleted()
       }
@@ -224,23 +224,23 @@ import Assimp
 
   private func adjustMainLightIntensity(_ delta: Float) {
     light.intensity = max(0.0, min(10.0, light.intensity + delta))
-    print("Main light intensity: \(light.intensity)")
+    logger.trace("Main light intensity: \(light.intensity)")
   }
 
   private func adjustFillLightIntensity(_ delta: Float) {
     fillLight.intensity = max(0.0, min(5.0, fillLight.intensity + delta))
-    print("Fill light intensity: \(fillLight.intensity)")
+    logger.trace("Fill light intensity: \(fillLight.intensity)")
   }
 
   private func adjustAmbientLight(_ delta: Float) {
     // We'll need to pass this to the shader - for now just print
-    print("Ambient light adjustment: \(delta)")
+    logger.trace("Ambient light adjustment: \(delta)")
   }
 
   private func resetLights() {
     light = Light.itemInspection
     fillLight = Light.itemInspectionFill
-    print("Lights reset to defaults")
+    logger.trace("Lights reset to defaults")
   }
 
   private func drawLightControlsHelp() {

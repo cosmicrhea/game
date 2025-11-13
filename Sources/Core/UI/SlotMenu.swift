@@ -7,6 +7,8 @@ public enum SlotAction: String, CaseIterable {
   case combine
   case exchange
   case discard
+  case store  // Store item from grid to storage
+  case retrieve  // Retrieve item from storage to grid
 }
 
 extension SlotAction {
@@ -20,9 +22,11 @@ extension SlotAction {
     case .unequip: return Image("UI/Icons/gun.svg", size: 20)
     case .inspect: return Image("UI/Icons/phosphor-icons/magnifying-glass-bold.svg", size: 20)
     case .combine: return Image("UI/Icons/phosphor-icons/plus-circle-bold.svg", size: 20)
-    //    case .exchange: return Image("UI/Icons/phosphor-icons/hand-arrow-up-bold.svg", size: 20)
+    // case .exchange: return Image("UI/Icons/phosphor-icons/hand-arrow-up-bold.svg", size: 20)
     case .exchange: return Image("UI/Icons/phosphor-icons/arrows-down-up-bold.svg", size: 20)
     case .discard: return Image("UI/Icons/phosphor-icons/trash-bold.svg", size: 20)
+    case .store: return Image("UI/Icons/phosphor-icons/arrows-left-right-bold.svg", size: 20)
+    case .retrieve: return Image("UI/Icons/phosphor-icons/arrows-left-right-bold.svg", size: 20)
     }
   }
 

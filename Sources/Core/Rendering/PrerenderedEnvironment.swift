@@ -10,6 +10,9 @@ final class PrerenderedEnvironment {
   private var albedoImages: [Image] = []
   private var mistImages: [Image] = []
 
+  // Cache images per camera to avoid reloading when switching
+  private var cameraImageCache: [String: (albedoImages: [Image], mistImages: [Image], totalFrames: Int)] = [:]
+
   // Fullscreen quad rendering
   private var vao: GLuint = 0
   private var vbo: GLuint = 0
@@ -108,7 +111,8 @@ final class PrerenderedEnvironment {
     let contents = try fileManager.contentsOfDirectory(atPath: sceneDirectory)
 
     // Find all unique camera names by looking at frame files
-    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", etc.)
+    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", "0_hallway_1.png", etc.)
+    // Camera names can contain underscores, so we use the first underscore to separate frame number from camera name
     var cameraNames: Set<String> = []
 
     for filename in contents {
@@ -118,10 +122,11 @@ final class PrerenderedEnvironment {
       // Must end with ".png"
       guard filename.hasSuffix(".png") else { continue }
 
-      // Extract camera name by finding the last underscore before .png
-      if let lastUnderscoreIndex = filename.lastIndex(of: "_") {
+      // Extract camera name by finding the first underscore (separates frame number from camera name)
+      if let firstUnderscoreIndex = filename.firstIndex(of: "_") {
+        // Everything after the first underscore, minus ".png"
         let cameraName = String(
-          filename[filename.index(after: lastUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -4)])
+          filename[filename.index(after: firstUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -4)])
         cameraNames.insert(cameraName)
       }
     }
@@ -137,6 +142,20 @@ final class PrerenderedEnvironment {
 
   /// Discover and load all frames for the current camera
   private func discoverAndLoadFrames() throws {
+    let cameraName = currentCameraName
+
+    // Check cache first
+    if let cached = cameraImageCache[cameraName] {
+      logger.trace("📦 Using cached images for camera '\(cameraName)' (\(cached.totalFrames) frames)")
+      albedoImages = cached.albedoImages
+      mistImages = cached.mistImages
+      totalFrames = cached.totalFrames
+      return
+    }
+
+    // Not cached, need to load
+    logger.trace("📥 Loading images for camera '\(cameraName)' (not cached)")
+
     // Find all frame files matching the pattern "frameNumber_cameraName.png"
     let fileManager = FileManager.default
     guard let resourcePath = Bundle.game.resourcePath else {
@@ -149,58 +168,82 @@ final class PrerenderedEnvironment {
     let contents = try fileManager.contentsOfDirectory(atPath: sceneDirectory)
 
     // Filter for albedo frames (not mist frames which start with 'm_')
-    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", etc.)
-    // We want files that match exactly: [number]_[cameraName].png
+    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", "0_hallway_1.png", etc.)
+    // Camera names can contain underscores, so we use the first underscore to separate frame number from camera name
     let albedoFrames = contents.filter { filename in
       // Must not start with 'm_' (mist files)
       guard !filename.hasPrefix("m_") else { return false }
 
-      // Must end with "_\(currentCameraName).png"
-      guard filename.hasSuffix("_\(currentCameraName).png") else { return false }
+      // Must end with ".png"
+      guard filename.hasSuffix(".png") else { return false }
 
-      // Extract the part before "_\(currentCameraName).png" to check if it's just a number
-      let suffix = "_\(currentCameraName).png"
-      let prefix = String(filename.dropLast(suffix.count))
+      // Find the first underscore (separates frame number from camera name)
+      guard let firstUnderscoreIndex = filename.firstIndex(of: "_") else { return false }
 
-      // Check if the prefix is just a number (no additional text)
-      return prefix.allSatisfy { $0.isNumber }
+      // Extract camera name (everything after first underscore, minus ".png")
+      let frameCameraName = String(
+        filename[filename.index(after: firstUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -4)])
+
+      // Check if this matches the current camera name
+      guard frameCameraName == cameraName else { return false }
+
+      // Extract the frame number part (before first underscore) and check if it's just a number
+      let frameNumberPart = String(filename[..<firstUnderscoreIndex])
+      return frameNumberPart.allSatisfy { $0.isNumber }
     }.sorted(using: .localizedStandard)
 
-    logger.trace("🎬 Found \(albedoFrames.count) frames for camera '\(currentCameraName)': \(albedoFrames)")
+    logger.trace("🎬 Found \(albedoFrames.count) frames for camera '\(cameraName)': \(albedoFrames)")
 
     guard !albedoFrames.isEmpty else {
       throw NSError(
         domain: "PrerenderedEnvironment", code: 2,
         userInfo: [
-          NSLocalizedDescriptionKey: "No frames found for camera '\(currentCameraName)' in scene '\(scenePath)'"
+          NSLocalizedDescriptionKey: "No frames found for camera '\(cameraName)' in scene '\(scenePath)'"
         ])
     }
 
-    totalFrames = albedoFrames.count
-    logger.trace("🎬 Found \(totalFrames) frames: \(albedoFrames)")
+    let frameCount = albedoFrames.count
+    logger.trace("🎬 Found \(frameCount) frames: \(albedoFrames)")
 
     // Clear old frames before loading new ones
     albedoImages.removeAll()
     mistImages.removeAll()
 
     // Load all frames
-    albedoImages.reserveCapacity(totalFrames)
-    mistImages.reserveCapacity(totalFrames)
+    albedoImages.reserveCapacity(frameCount)
+    mistImages.reserveCapacity(frameCount)
+
+    let filterMode = nearestNeighborFiltering ? GL_NEAREST : GL_LINEAR
 
     for frameFilename in albedoFrames {
       // Load albedo frame
       let albedoPath = "\(scenePath)/\(frameFilename)"
       let albedoImage = Image(albedoPath)
+      // Apply texture filtering
+      glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
       albedoImages.append(albedoImage)
 
       // Load corresponding mist frame
       let mistFilename = "m_\(frameFilename)"
       let mistPath = "\(scenePath)/\(mistFilename)"
       let mistImage = Image(mistPath)
+      // Apply texture filtering
+      glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
       mistImages.append(mistImage)
 
       logger.trace("📸 Loaded frame: \(frameFilename) -> albedo: \(albedoImage.textureID), mist: \(mistImage.textureID)")
     }
+
+    glBindTexture(GL_TEXTURE_2D, 0)
+
+    // Cache the loaded images
+    totalFrames = frameCount
+    cameraImageCache[cameraName] = (albedoImages: albedoImages, mistImages: mistImages, totalFrames: frameCount)
+    logger.trace("💾 Cached images for camera '\(cameraName)' (\(frameCount) frames)")
   }
 
   private func setupFullscreenQuad() {
@@ -243,24 +286,31 @@ final class PrerenderedEnvironment {
   /// Update texture filtering based on the nearestNeighborFiltering toggle
   private func updateTextureFiltering() {
     let filterMode = nearestNeighborFiltering ? GL_NEAREST : GL_LINEAR
+    var totalTexturesUpdated = 0
 
-    // Update all albedo texture filtering
-    for albedoImage in albedoImages {
-      glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
-    }
+    // Update all cached images (not just current camera)
+    for (_, cached) in cameraImageCache {
+      // Update albedo textures
+      for albedoImage in cached.albedoImages {
+        glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+        totalTexturesUpdated += 1
+      }
 
-    // Update all mist texture filtering
-    for mistImage in mistImages {
-      glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+      // Update mist textures
+      for mistImage in cached.mistImages {
+        glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
+        totalTexturesUpdated += 1
+      }
     }
 
     glBindTexture(GL_TEXTURE_2D, 0)
     logger.trace(
-      "🔧 Updated texture filtering to: \(nearestNeighborFiltering ? "NEAREST" : "LINEAR") for \(totalFrames) frames")
+      "🔧 Updated texture filtering to: \(nearestNeighborFiltering ? "NEAREST" : "LINEAR") for \(totalTexturesUpdated) textures across \(cameraImageCache.count) cameras"
+    )
   }
 
   /// Toggle between nearest neighbor and linear filtering

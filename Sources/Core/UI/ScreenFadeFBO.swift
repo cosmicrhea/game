@@ -183,7 +183,7 @@ public final class ScreenFadeFBO {
   private func setupFBO(width: Int, height: Int) {
     // Validate dimensions
     if width <= 0 || height <= 0 {
-      print("ERROR: Invalid FBO dimensions: \(width)x\(height)")
+      logger.error("ERROR: Invalid FBO dimensions: \(width)x\(height)")
       return
     }
 
@@ -215,7 +215,7 @@ public final class ScreenFadeFBO {
     // Check FBO status
     let status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
     if status != GL_FRAMEBUFFER_COMPLETE {
-      print("ERROR: FBO not complete: \(status)")
+      logger.error("ERROR: FBO not complete: \(status)")
       cleanup()
       return
     }
@@ -224,7 +224,7 @@ public final class ScreenFadeFBO {
     do {
       fadeShader = try GLProgram("Common/Passthrough", "Effects/fade")
     } catch {
-      print("ERROR: Failed to create fade shader: \(error)")
+      logger.error("ERROR: Failed to create fade shader: \(error)")
     }
 
     isInitialized = true

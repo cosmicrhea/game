@@ -1,10 +1,10 @@
-//@preconcurrency import Miniaudio
-
-#if os(macOS)
-  import class AppKit.NSSound
+#if USE_MINIAUDIO
+  import Miniaudio
 #endif
 
-//private let engine = try! AudioEngine()
+#if os(macOS) && !USE_MINIAUDIO
+  import class AppKit.NSSound
+#endif
 
 extension UISound {
   static func select() { play("RE_SELECT02") }
@@ -22,6 +22,7 @@ extension UISound {
 
   // static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
   static func navigate() { play("Minimalist10", volume: 0.8) }
+  static func scroll() { play("UR/scroll", volume: 0.5) }
   // static func navigate() { play("UR/scroll") }
 
   static func pageTurn() { play(["page_1", "page_2", "page_3"]) }
@@ -30,41 +31,40 @@ extension UISound {
 @MainActor enum UISound {
   static var volume: Float = Config.current.uiVolume
 
-  //  private nonisolated(unsafe) static var sounds: [String: Sound] = [:]
   private nonisolated(unsafe) static var lastPlayedSounds: [String: String] = [:]
 
   static func play(_ soundName: String, volume: Float = 1) {
+    guard !Self.volume.isZero else { return }
+
     guard let path = Bundle.game.path(forResource: "UI/Sounds/\(soundName)", ofType: "wav") else {
-      logger.error("failed to load \(soundName)")
+      logger.error("cannot find \(soundName)")
       return
     }
 
-    let sound = NSSound(contentsOfFile: path, byReference: true)!
-    sound.volume = volume * Self.volume
-    sound.play()
+    #if USE_MINIAUDIO
+      print("using miniaudio")
+      // Use miniaudio - Sound class already caches data sources internally
+      do {
+        let sound = try Sound(contentsOfFile: path, spatial: false)
+        sound.volume = volume * Self.volume
+        _ = sound.play()
+      } catch {
+        logger.error("failed to play \(soundName): \(error)")
+      }
+    #else
+      // Use NSSound (macOS) or fallback
+      #if os(macOS)
+        guard let sound = NSSound(contentsOfFile: path, byReference: true) else {
+          logger.error("failed to load \(soundName)")
+          return
+        }
 
-    //    var sound = sounds[soundName]
-    //    if sound == nil {
-    //      sound = try! Sound(contentsOfFile: file, spatial: false)
-    //      sounds[soundName] = sound
-    //    }
-
-    //    do {
-    //      let sound = try Sound.play(path, spatial: false)
-    //      sound.volume = volume
-    //    } catch {
-    //      logger.error("failed to play \(soundName): \(error)")
-    //    }
-
-    //    let sound =
-    //    engine.playSound(contentsOfFile: path, spatial: false)
-    //    sound.volume = volume * Self.volume
-
-    // guard let sound else { return }
-    //    let sound = try! Sound.play(path, spatial: false)
-    //    sound.volume = volume * Self.volume
-    //    let sound = try! Sound(contentsOfFile: file, spatial: false)
-    //    sound.play()
+        sound.volume = volume * Self.volume
+        sound.play()
+      #else
+        logger.warning("UISound not supported on this platform without USE_MINIAUDIO")
+      #endif
+    #endif
   }
 
   static func play(_ soundNames: [String]) {

@@ -1,5 +1,34 @@
 import Foundation
 
+/// Decorative section header control that draws a title line
+final class EditorSectionHeader: OptionsControl {
+  var frame: Rect = .zero
+  var isFocused: Bool = false
+  var isFocusable: Bool { false }
+  private let title: String
+  private let titleStyle: TextStyle
+
+  init(title: String) {
+    self.title = title
+    // Use item name style for section headers
+    self.titleStyle = TextStyle.itemName
+  }
+
+  func draw() {
+    // Bottom-align the title so extra height adds margin above the header
+    title.draw(at: Point(frame.origin.x, frame.origin.y + 8), style: titleStyle, anchor: .bottomLeft)
+    // Thin separator line across near the bottom
+    let lineY = frame.origin.y + 6
+    let lineRect = Rect(x: frame.origin.x, y: lineY, width: frame.size.width, height: 1)
+    lineRect.fill(with: Color(1, 1, 1, 0.05))
+  }
+
+  func handleKey(_ key: Keyboard.Key) -> Bool { return false }
+  func handleMouseDown(at position: Point) -> Bool { return false }
+  func handleMouseMove(at position: Point) {}
+  func handleMouseUp() {}
+}
+
 public final class EditorPanel: OptionsPanel {
   private var editorProperties: [AnyEditorProperty] = []
   private var propertyGroups: [EditorPropertyGroup] = []
@@ -45,7 +74,7 @@ public final class EditorPanel: OptionsPanel {
 
     // Compute per-row heights (variable): section headers are taller if not first row
     let rowHeights: [Float] = rows.enumerated().map { (i, row) in
-      if row.control is SectionHeader, i != 0 {
+      if row.control is EditorSectionHeader, i != 0 {
         return rowHeight + extraHeaderTopMargin
       } else {
         return rowHeight
@@ -62,7 +91,7 @@ public final class EditorPanel: OptionsPanel {
     }
 
     for (i, r) in rowRects.enumerated() where rows.indices.contains(i) {
-      if rows[i].control is SectionHeader {
+      if rows[i].control is EditorSectionHeader {
         rows[i].control.frame = Rect(x: r.origin.x, y: r.origin.y, width: r.size.width, height: r.size.height)
         continue
       }
@@ -148,32 +177,6 @@ public final class EditorPanel: OptionsPanel {
     for sw in switches { sw.update(deltaTime: deltaTime) }
   }
 
-  /// Decorative section header control that draws a title line
-  private final class SectionHeader: OptionsControl {
-    var frame: Rect = .zero
-    var isFocused: Bool = false
-    var isFocusable: Bool { false }
-    private let title: String
-    private let titleStyle: TextStyle
-    init(title: String) {
-      self.title = title
-      // Use item name style for section headers
-      self.titleStyle = TextStyle.itemName
-    }
-    func draw() {
-      // Bottom-align the title so extra height adds margin above the header
-      title.draw(at: Point(frame.origin.x, frame.origin.y + 8), style: titleStyle, anchor: .bottomLeft)
-      // Thin separator line across near the bottom
-      let lineY = frame.origin.y + 6
-      let lineRect = Rect(x: frame.origin.x, y: lineY, width: frame.size.width, height: 1)
-      lineRect.fill(with: Color(1, 1, 1, 0.05))
-    }
-    func handleKey(_ key: Keyboard.Key) -> Bool { return false }
-    func handleMouseDown(at position: Point) -> Bool { return false }
-    func handleMouseMove(at position: Point) {}
-    func handleMouseUp() {}
-  }
-
   private func generateControls() {
     sliders.removeAll()
     switches.removeAll()
@@ -184,7 +187,7 @@ public final class EditorPanel: OptionsPanel {
       // Handle grouped properties with section headers
       for group in propertyGroups {
         // Section header row
-        let headerControl = SectionHeader(title: group.name)
+        let headerControl = EditorSectionHeader(title: group.name)
         rows.append(Row(label: "", control: headerControl))
         for property in group.properties {
           if let slider = createSliderForProperty(property) {

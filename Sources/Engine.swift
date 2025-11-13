@@ -37,10 +37,10 @@ extension Bundle {
 }
 
 @main
+@objc
 @MainActor
-public final class Engine {
-  public static let shared = Engine()
-  public static func main() { shared.run() }
+public final class Engine: NSObject {
+  @objc public static let shared = Engine()
 
   // TODO: learn about Swift concurrency and how to use it correctly
   private nonisolated(unsafe) static var _cachedViewportSize: Size = DESIGN_RESOLUTION
@@ -79,9 +79,13 @@ public final class Engine {
   private var targetFrameTime: Double = 1.0 / 60.0  // Target 60 FPS
   private var lastFrameTime: Double = 0.0
 
-  private init() {}
+  //private init() {}
 
-  private func run() {
+  public static func main() {
+    shared.run()
+  }
+
+  @objc public func run() {
     #if DEBUG
       print("|ω･)ﾉ♡☆ (debug)")
     #else
@@ -256,18 +260,19 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      DialogDemo(),
-      MapView(),
-      ItemView(item: .sigp320),
-      PickupView(item: .catStatue),
-      ItemStorageView(),
-      TitleScreenStack(),
-      MainLoop(),
-      MainMenu(),
-      UIDemo(),
-      DocumentDemo(),
-      //ModelViewer(),
-      CreditsScreen(),
+      // DialogDemo(),
+      MapView()
+      // ItemView(item: .sigp320),
+      // PickupView(item: .catStatue),
+      // ItemStorageView(),
+      // TitleScreenStack(),
+      // MainLoop(),
+      // MainMenu(),
+      // UIDemo(),
+      // DocumentDemo(),
+      // MovieDemo(),
+      // //ModelViewer(),
+      // CreditsScreen(),
 
       // // InventoryView(),
       // GradientDemo(),

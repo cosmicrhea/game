@@ -31,6 +31,7 @@ uniform float uEquippedGlowStrength; // 0..1
 
 // Colors
 uniform vec3 uPanelColor;
+uniform float uPanelAlpha; // Panel alpha multiplier (0.0-1.0), defaults to 1.0
 uniform vec3 uBorderColor;
 uniform vec3 uBorderHighlight;
 uniform vec3 uBorderShadow;
@@ -180,8 +181,8 @@ void main() {
   vignette = mix(0.9, 1.0, vignette);
   finalColor *= vignette;
 
-  // Apply panel mask
-  float alpha = panelMask;
+  // Apply panel mask with alpha multiplier
+  float alpha = panelMask * uPanelAlpha;
 
   FragColor = vec4(finalColor, alpha);
 }

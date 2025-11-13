@@ -294,6 +294,7 @@ public final class DocumentSlotGrid {
         // Set colors
         shader.setVec3(
           "uPanelColor", value: (x: currentSlotColor.red, y: currentSlotColor.green, z: currentSlotColor.blue))
+        shader.setFloat("uPanelAlpha", value: currentSlotColor.alpha)
         shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
         shader.setVec3(
           "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))

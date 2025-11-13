@@ -16,8 +16,26 @@ public final class ItemSlotGrid {
   public private(set) var hoveredIndex: Int? = nil
 
   // MARK: - Equipment State
-  /// Item id of the currently equipped weapon, if any
-  public private(set) var equippedWeaponId: String? = nil
+  /// Slot index of the currently equipped weapon, if any
+  /// When inventory is set, reads/writes from inventory.equippedWeaponIndex
+  /// Otherwise uses local equippedWeaponIndexStorage
+  public var equippedWeaponIndex: Int? {
+    get {
+      if let inventory = inventory {
+        return inventory.equippedWeaponIndex
+      }
+      return equippedWeaponIndexStorage
+    }
+    set {
+      if let inventory = inventory {
+        inventory.equippedWeaponIndex = newValue
+      } else {
+        equippedWeaponIndexStorage = newValue
+      }
+    }
+  }
+  /// Local storage for equipped weapon index when inventory is nil
+  private var equippedWeaponIndexStorage: Int? = nil
 
   // MARK: - Moving Support
   /// Enable interactive moving/swapping of slot contents
@@ -26,6 +44,11 @@ public final class ItemSlotGrid {
   public private(set) var isMovingModeActive: Bool = false
   /// When in moving mode, the source slot currently selected for moving
   private var movingSourceIndex: Int? = nil
+
+  // MARK: - Highlighting Support
+  /// Slot index to highlight (for take out/retrieve modes, etc.)
+  /// This provides visual highlighting similar to move mode but without activating move mode
+  public var highlightedSlotIndex: Int? = nil
 
   // MARK: - Placement Support
   /// Item being placed (when in placement mode)
@@ -66,6 +89,8 @@ public final class ItemSlotGrid {
   // MARK: - Context Menu
   public var slotMenu: SlotMenu
   public var onSlotAction: ((SlotAction, Int) -> Void)?
+  /// Custom actions provider - if set, this overrides the default actionsForSlot logic
+  public var customActionsProvider: ((Int) -> [SlotAction])? = nil
 
   // MARK: - Selection Callback (alternative to menu)
   public var onSlotSelected: ((Int) -> Void)?
@@ -152,9 +177,29 @@ public final class ItemSlotGrid {
     }
   }
 
-  /// Set the currently equipped weapon by item id (or none).
-  public func setEquippedWeaponId(_ itemId: String?) {
-    equippedWeaponId = itemId
+  /// Set the currently equipped weapon by slot index (or none).
+  public func setEquippedWeaponIndex(_ slotIndex: Int?) {
+    if let inventory = inventory {
+      inventory.equippedWeaponIndex = slotIndex
+    } else {
+      equippedWeaponIndexStorage = slotIndex
+    }
+  }
+
+  /// Get the currently equipped weapon item, if any
+  public func getEquippedWeapon() -> Item? {
+    guard let index = equippedWeaponIndex,
+      let slotData = getSlotData(at: index),
+      let item = slotData.item,
+      item.kind.isWeapon
+    else { return nil }
+    return item
+  }
+
+  /// Get equipped weapon slot data
+  public func getEquippedWeaponSlotData() -> ItemSlotData? {
+    guard let index = equippedWeaponIndex else { return nil }
+    return getSlotData(at: index)
   }
 
   /// Enable/disable moving mode (no-op if `allowsMoving` is false).
@@ -174,9 +219,9 @@ public final class ItemSlotGrid {
       // When entering move mode, the currently selected item becomes the source
       if let data = getSlotData(at: selectedIndex), data.item != nil {
         movingSourceIndex = selectedIndex
-        print("SlotGrid: Entered move mode with item \(data.item!.name) at slot \(selectedIndex)")
+        logger.trace("SlotGrid: Entered move mode with item \(data.item!.name) at slot \(selectedIndex)")
       } else {
-        print("SlotGrid: Entered move mode but no item in selected slot \(selectedIndex)")
+        logger.trace("SlotGrid: Entered move mode but no item in selected slot \(selectedIndex)")
       }
     } else {
       movingSourceIndex = nil
@@ -398,7 +443,7 @@ public final class ItemSlotGrid {
       case .f, .space, .enter, .numpadEnter:
         // Confirm move to current selection
         if let sourceIndex = movingSourceIndex {
-          print("SlotGrid: Confirming move from \(sourceIndex) to \(selectedIndex)")
+          logger.trace("SlotGrid: Confirming move from \(sourceIndex) to \(selectedIndex)")
           performMove(from: sourceIndex, to: selectedIndex)
           cancelPendingMove()
           setMovingModeActive(false)  // Exit move mode after successful move
@@ -464,15 +509,15 @@ public final class ItemSlotGrid {
   public func handleMouseClick(at position: Point) -> Bool {
     // Moving mode takes precedence over context menu behavior
     if isMovingModeActive {
-      print("SlotGrid: In moving mode, clicked at position \(position)")
+      logger.trace("SlotGrid: In moving mode, clicked at position \(position)")
       guard let clickedIndex = slotIndex(at: position) else {
-        print("SlotGrid: No slot at clicked position")
+        logger.trace("SlotGrid: No slot at clicked position")
         return false
       }
-      print("SlotGrid: Clicked slot index: \(clickedIndex)")
+      logger.trace("SlotGrid: Clicked slot index: \(clickedIndex)")
 
       if let sourceIndex = movingSourceIndex {
-        print("SlotGrid: Moving from source \(sourceIndex) to target \(clickedIndex)")
+        logger.trace("SlotGrid: Moving from source \(sourceIndex) to target \(clickedIndex)")
         // Perform move/swap to the target index
         performMove(from: sourceIndex, to: clickedIndex)
         setSelected(clickedIndex)
@@ -483,13 +528,13 @@ public final class ItemSlotGrid {
       } else {
         // Pick up from clicked slot only if it contains an item
         if let data = getSlotData(at: clickedIndex), data.item != nil {
-          print("SlotGrid: Picking up item \(data.item!.name) from slot \(clickedIndex)")
+          logger.trace("SlotGrid: Picking up item \(data.item!.name) from slot \(clickedIndex)")
           movingSourceIndex = clickedIndex
           setSelected(clickedIndex)
           UISound.select()
           return true
         }
-        print("SlotGrid: No item in slot \(clickedIndex) to pick up")
+        logger.trace("SlotGrid: No item in slot \(clickedIndex) to pick up")
         return false
       }
     } else if slotMenu.isVisible {
@@ -531,10 +576,21 @@ public final class ItemSlotGrid {
 
   /// Show menu for a specific slot
   private func showMenuForSlot(_ slotIndex: Int, at position: Point, openedWithKeyboard: Bool = false) {
-    // Check if slot is empty - if so, play error sound and don't show menu
-    guard let slotData = getSlotData(at: slotIndex), !slotData.isEmpty else {
+    // Get available actions (custom provider or default)
+    let availableActions = customActionsProvider?(slotIndex) ?? actionsForSlot(at: slotIndex)
+
+    // If no actions available (e.g., empty slot with no custom provider), don't show menu
+    guard !availableActions.isEmpty else {
       UISound.error()
       return
+    }
+
+    // Check if slot is empty - if so, play error sound and don't show menu (unless custom provider handles it)
+    if customActionsProvider == nil {
+      guard let slotData = getSlotData(at: slotIndex), !slotData.isEmpty else {
+        UISound.error()
+        return
+      }
     }
 
     let slotPosition = slotPosition(at: slotIndex)
@@ -542,7 +598,6 @@ public final class ItemSlotGrid {
       slotPosition.x + slotSize * 0.5,
       slotPosition.y + slotSize * 0.5
     )
-    let availableActions = actionsForSlot(at: slotIndex)
     slotMenu.showForSlot(
       at: slotCenter,
       slotIndex: slotIndex,
@@ -563,7 +618,7 @@ public final class ItemSlotGrid {
     let exchangeAction: [SlotAction] = TWO_PLAYER_MODE ? [.exchange] : []
     switch item.kind {
     case .weapon:
-      if equippedWeaponId == item.id {
+      if equippedWeaponIndex == index {
         return [.unequip, .inspect] + exchangeAction
       } else {
         return [.equip, .inspect] + exchangeAction
@@ -608,6 +663,15 @@ public final class ItemSlotGrid {
           slotColor.blue + amberTintStrength * 0.15,
           slotColor.alpha
         )
+      } else if let highlightedIndex = highlightedSlotIndex, i == highlightedIndex {
+        // Apply amber tint to highlighted slot (for take out/retrieve modes)
+        let amberTintStrength: Float = 0.6
+        currentSlotColor = Color(
+          slotColor.red + amberTintStrength * 0.3,
+          slotColor.green + amberTintStrength * 0.24,
+          slotColor.blue + amberTintStrength * 0.15,
+          slotColor.alpha
+        )
       } else if isFocused && i == selectedIndex {
         // Use active color when menu is open, selected color otherwise
         currentSlotColor = slotMenu.isVisible ? Color.slotActive : selectedSlotColor
@@ -617,17 +681,17 @@ public final class ItemSlotGrid {
 
       // Mark equipped slot (weapon) for border tinting (unless it's the moving source)
       let isEquippedSlot: Bool = {
-        let data = effectiveSlotData
-        guard let equippedId = equippedWeaponId,
-          i < data.count,
-          let slotData = data[i],
+        guard let equippedIndex = equippedWeaponIndex,
+          equippedIndex == i,
+          let slotData = getSlotData(at: i),
           let item = slotData.item,
-          item.kind == .weapon
+          item.kind.isWeapon
         else { return false }
-        return item.id == equippedId
+        return true
       }()
       let isSource = isMovingModeActive && ((movingSourceIndex ?? -1) == i)
-      let applyEquippedBorderTint = isEquippedSlot && !isSource
+      let isHighlighted = highlightedSlotIndex == i
+      let applyEquippedBorderTint = isEquippedSlot && !isSource && !isHighlighted
 
       // Apply tint if specified
       if let tint = tint {
@@ -645,7 +709,8 @@ public final class ItemSlotGrid {
         let pulses: Float = {
           let isSelected = isFocused && (i == selectedIndex)
           let isMoving = isSource
-          return (isSelected || isMoving) ? 1.0 : 0.0
+          let isHighlighted = highlightedSlotIndex == i
+          return (isSelected || isMoving || isHighlighted) ? 1.0 : 0.0
         }()
         shader.setFloat("uPulse", value: pulses)
         if applyEquippedBorderTint {
@@ -679,6 +744,7 @@ public final class ItemSlotGrid {
         // Set colors
         shader.setVec3(
           "uPanelColor", value: (x: currentSlotColor.red, y: currentSlotColor.green, z: currentSlotColor.blue))
+        shader.setFloat("uPanelAlpha", value: currentSlotColor.alpha)
         shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
         shader.setVec3(
           "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))
@@ -750,56 +816,70 @@ public final class ItemSlotGrid {
 
   private func performMove(from sourceIndex: Int, to targetIndex: Int) {
     guard sourceIndex != targetIndex else {
-      print("SlotGrid: Cannot move to same slot")
+      logger.trace("SlotGrid: Cannot move to same slot")
       return
     }
 
     if let inventory = inventory {
       guard sourceIndex >= 0 && sourceIndex < inventory.slots.count else {
-        print("SlotGrid: Invalid source index \(sourceIndex)")
+        logger.warning("SlotGrid: Invalid source index \(sourceIndex)")
         return
       }
       guard targetIndex >= 0 && targetIndex < inventory.slots.count else {
-        print("SlotGrid: Invalid target index \(targetIndex)")
+        logger.warning("SlotGrid: Invalid target index \(targetIndex)")
         return
       }
 
       let sourceData = inventory.slots[sourceIndex]
       let targetData = inventory.slots[targetIndex]
 
-      print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
-      print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
-      print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
+      logger.trace("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
 
       // Swap even if one side is nil (acts as move into empty)
       inventory.slots[targetIndex] = sourceData
       inventory.slots[sourceIndex] = targetData
 
-      print("SlotGrid: After move - Source now has: \(inventory.slots[sourceIndex]?.item?.name ?? "nil")")
-      print("SlotGrid: After move - Target now has: \(inventory.slots[targetIndex]?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Source now has: \(inventory.slots[sourceIndex]?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Target now has: \(inventory.slots[targetIndex]?.item?.name ?? "nil")")
+
+      // Update equipped weapon index if it was moved
+      if equippedWeaponIndex == sourceIndex {
+        equippedWeaponIndex = targetIndex
+      } else if equippedWeaponIndex == targetIndex {
+        equippedWeaponIndex = sourceIndex
+      }
     } else {
       guard sourceIndex >= 0 && sourceIndex < slotData.count else {
-        print("SlotGrid: Invalid source index \(sourceIndex)")
+        logger.warning("SlotGrid: Invalid source index \(sourceIndex)")
         return
       }
       guard targetIndex >= 0 && targetIndex < slotData.count else {
-        print("SlotGrid: Invalid target index \(targetIndex)")
+        logger.warning("SlotGrid: Invalid target index \(targetIndex)")
         return
       }
 
       let sourceData = slotData[sourceIndex]
       let targetData = slotData[targetIndex]
 
-      print("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
-      print("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
-      print("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
+      logger.trace("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
 
       // Swap even if one side is nil (acts as move into empty)
       slotData[targetIndex] = sourceData
       slotData[sourceIndex] = targetData
 
-      print("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
-      print("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
+
+      // Update equipped weapon index if it was moved
+      if equippedWeaponIndex == sourceIndex {
+        equippedWeaponIndex = targetIndex
+      } else if equippedWeaponIndex == targetIndex {
+        equippedWeaponIndex = sourceIndex
+      }
     }
   }
 

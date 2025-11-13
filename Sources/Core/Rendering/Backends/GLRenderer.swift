@@ -7,7 +7,6 @@ public final class GLRenderer: Renderer {
   private let debug3dProgram: GLProgram
 
   // Clear color state
-  //private var clearColor = Color(0.2, 0.1, 0.1, 1.0)
   private var clearColor = Color.black
 
   // Viewport state

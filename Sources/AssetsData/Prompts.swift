@@ -6,6 +6,7 @@ public enum PromptGroup: String, CaseIterable {
   case inventory
   case confirmCancel
   case itemStorage
+  case itemStorageList
   case itemPickup
   case menuRoot
   case menu
@@ -29,7 +30,11 @@ public enum PromptGroup: String, CaseIterable {
       "Cancel": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],
     .itemStorage: [
-      "Inspect": [["keyboard_option"], ["xbox_button_color_x"], ["playstation_button_color_square"]],
+      "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
+      "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
+    ],
+    .itemStorageList: [
+      "Sort": [["keyboard_option"], ["xbox_button_color_x"], ["playstation_button_color_square"]],
       "Select": [["keyboard_space_icon"], ["xbox_button_color_a"], ["playstation_button_color_triangle"]],
       "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],

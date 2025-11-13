@@ -15,6 +15,7 @@
 @_exported import class Foundation.NSLock
 @_exported import class Foundation.Thread
 @_exported import struct Foundation.URL
+@_exported import class Foundation.DispatchQueue
 
 #if canImport(Darwin)
   @_exported import Darwin

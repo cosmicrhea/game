@@ -160,14 +160,14 @@ final class ModelViewer: RenderLoop {
     guard let scene = currentScene,
       currentAnimationIndex < scene.animations.count
     else {
-      print(
+      logger.warning(
         "ModelViewer: Cannot play animation - scene: \(currentScene != nil), index: \(currentAnimationIndex), count: \(currentScene?.animations.count ?? 0)"
       )
       return
     }
 
     let animation = scene.animations[currentAnimationIndex]
-    print(
+    logger.trace(
       "ModelViewer: Playing animation \(currentAnimationIndex): \(currentAnimationNames[safe: currentAnimationIndex] ?? "Unknown")"
     )
     nodeAnimator.play(animation: animation)
@@ -190,7 +190,7 @@ final class ModelViewer: RenderLoop {
 
     // Debug: Print animation status every 2 seconds
     if Int(nodeAnimator.animationTime) % 2 == 0 && nodeAnimator.playing {
-      print(
+      logger.trace(
         "ModelViewer: Animation playing - time: \(nodeAnimator.animationTime), transforms: \(nodeAnimator.getAllNodeTransforms().count)"
       )
     }
@@ -305,7 +305,7 @@ final class ModelViewer: RenderLoop {
 
   private func findMeshIndex(for meshInstance: MeshInstance, in scene: Scene) -> Int? {
     let index = scene.meshes.firstIndex { $0 === meshInstance.mesh }
-    print("ModelViewer: Looking for mesh, found index: \(index ?? -1)")
+    logger.trace("ModelViewer: Looking for mesh, found index: \(index ?? -1)")
     return index
   }
 
@@ -316,7 +316,7 @@ final class ModelViewer: RenderLoop {
   private func findNodeNameRecursive(node: Node, meshIndex: Int) -> String? {
     // Check if this node contains the mesh
     if node.meshes.contains(meshIndex) {
-      print("ModelViewer: Found node '\(node.name ?? "unnamed")' for mesh index \(meshIndex)")
+      logger.trace("ModelViewer: Found node '\(node.name ?? "unnamed")' for mesh index \(meshIndex)")
       return node.name
     }
 

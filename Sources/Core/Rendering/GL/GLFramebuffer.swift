@@ -5,7 +5,7 @@ public final class GLFramebuffer {
   private var rbo: GLuint = 0
   private let size: Size
   private let scale: Float
-  
+
   public var framebufferSize: Size { size }
 
   public init(size: Size, scale: Float) {
@@ -24,7 +24,7 @@ public final class GLFramebuffer {
     let scaledHeight = Int(size.height * scale)
 
     if scaledWidth <= 0 || scaledHeight <= 0 {
-      print("ERROR: Invalid framebuffer dimensions: \(scaledWidth)x\(scaledHeight)")
+      logger.error("ERROR: Invalid framebuffer dimensions: \(scaledWidth)x\(scaledHeight)")
       return
     }
 
@@ -61,7 +61,7 @@ public final class GLFramebuffer {
     // Check framebuffer completeness
     let status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
     if status != GL_FRAMEBUFFER_COMPLETE {
-      print("Framebuffer not complete: \(status)")
+      logger.error("Framebuffer not complete: \(status)")
     }
 
     // Unbind

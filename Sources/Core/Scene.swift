@@ -56,4 +56,3 @@ public final class Scene {
     return assimpScene.getTransformMatrix(for: mesh)
   }
 }
-

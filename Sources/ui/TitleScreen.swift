@@ -23,11 +23,11 @@ final class TitleScreen: Screen {
   private func setupMenu() {
     let menuItems = [
       ListMenu.MenuItem(id: "new_game", label: String(localized: "New Game")) {
-        print("Starting new game...")
+        logger.trace("Starting new game...")
       },
 
       ListMenu.MenuItem(id: "continue", label: String(localized: "Continue"), isEnabled: false) {
-        print("Loading saved game...")
+        logger.trace("Loading saved game...")
       },
 
       ListMenu.MenuItem(id: "options", label: String(localized: "Options")) {

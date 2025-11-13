@@ -1,7 +1,12 @@
 import Assimp
-import ObjectiveC
 
 // TODO: macro for `@Flag`
+
+/// Macro to automatically generate method registry and dynamic calling for scene scripts
+@attached(
+  member, names: named(methodRegistry), named(availableMethods), named(callMethod), named(_register),
+  named(_autoRegister))
+public macro SceneScript() = #externalMacro(module: "GameMacros", type: "SceneScriptMacro")
 
 class Character {
 
@@ -14,16 +19,31 @@ class Character {
 }
 
 @MainActor
-class Script: NSObject {
+class Script {
 
   private(set) var scene: Scene
   private var dialogView: DialogView
-  var showPickupView: ((Item, Int) async -> Bool)?
+
+  /// Track the current action name (set by MainLoop before calling interaction methods)
+  var currentActionName: String?
+
+  /// Track the current area/zone the player is in (set automatically when transitioning)
+  /// This can be used to determine which side of a door the player is on, etc.
+  var currentArea: String?
+
+  /// Track interaction counts for variations cycling
+  private var interactionCounts: [String: Int] = [:]
+  /// Track call counters per action (resets each interaction)
+  private var sayCallCounters: [String: Int] = [:]
+
+  /// Reset the call counter for an action (called at the start of each interaction)
+  func resetCallCounter(for actionName: String) {
+    sayCallCounters[actionName] = 0
+  }
 
   required init(scene: Scene, dialogView: DialogView) {
     self.scene = scene
     self.dialogView = dialogView
-    super.init()
   }
 
   //private var storageView = ItemStorageView()
@@ -60,6 +80,54 @@ class Script: NSObject {
 
   func loadScene(_ name: String, entry entryName: String? = nil) {}
 
+  /// Transition to a different entry in the current scene
+  /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
+  @MainActor func go(to entry: String) {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
+      return
+    }
+    Task {
+      await mainLoop.transition(to: entry)
+    }
+  }
+
+  /// Transition to a different entry in the current scene (async version that waits for completion)
+  /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
+  @MainActor func go(to entry: String) async {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
+      return
+    }
+    await mainLoop.transition(to: entry)
+  }
+
+  /// Transition to a different scene
+  /// - Parameters:
+  ///   - scene: The scene name to load
+  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  @MainActor func go(toScene scene: String, entry: String? = nil) {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
+      return
+    }
+    Task {
+      await mainLoop.transition(toScene: scene, entry: entry)
+    }
+  }
+
+  /// Transition to a different scene (async version that waits for completion)
+  /// - Parameters:
+  ///   - scene: The scene name to load
+  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  @MainActor func go(toScene scene: String, entry: String? = nil) async {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
+      return
+    }
+    await mainLoop.transition(toScene: scene, entry: entry)
+  }
+
   @MainActor func say(_ string: String) { dialogView.print(chunks: [string]) }
   @MainActor func say(_ strings: [String]) { dialogView.print(chunks: strings) }
 
@@ -77,6 +145,54 @@ class Script: NSObject {
     await dialogView.print(chunks: strings, forceMore: more)
   }
 
+  /// Say text with variations that cycle through on repeated interactions
+  /// - Parameter variations: Array of text variations to cycle through
+  /// The variations loop back to the first after exhausting all options
+  @MainActor func say(variations: [String]) {
+    guard !variations.isEmpty else { return }
+
+    // Use currentActionName if available, otherwise fall back to #function
+    let actionName = currentActionName ?? #function
+
+    // Get and increment the call counter for this action
+    let callIndex = sayCallCounters[actionName, default: 0]
+    sayCallCounters[actionName] = callIndex + 1
+
+    // Use action name + call index as the key
+    let key = "\(actionName):\(callIndex)"
+    let count = interactionCounts[key, default: 0]
+    let index = count % variations.count
+    let text = variations[index]
+
+    interactionCounts[key] = count + 1
+
+    say(text)
+  }
+
+  /// Async version of say(variations:) that waits until the dialog is finished
+  /// - Parameter variations: Array of text variations to cycle through
+  /// The variations loop back to the first after exhausting all options
+  @MainActor func say(variations: [String]) async {
+    guard !variations.isEmpty else { return }
+
+    // Use currentActionName if available, otherwise fall back to #function
+    let actionName = currentActionName ?? #function
+
+    // Get and increment the call counter for this action
+    let callIndex = sayCallCounters[actionName, default: 0]
+    sayCallCounters[actionName] = callIndex + 1
+
+    // Use action name + call index as the key
+    let key = "\(actionName):\(callIndex)"
+    let count = interactionCounts[key, default: 0]
+    let index = count % variations.count
+    let text = variations[index]
+
+    interactionCounts[key] = count + 1
+
+    say(text)
+  }
+
   func ask(_ string: String, options: [String]) -> String { options[0] }
 
   func confirm(_ string: String, _ optionA: String, _ optionB: String = "Cancel") -> Bool {
@@ -88,14 +204,14 @@ class Script: NSObject {
   @discardableResult func acquire(_ item: Item, quantity: Int = 1) async -> Bool {
     // Input is already disabled by dialogView.dismiss() when dialog finishes
     // Show PickupView and wait for result
-    guard let showPickupView else {
-      print("⚠️ Cannot show PickupView: showPickupView callback not set")
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot show PickupView: MainLoop.shared is nil")
       Input.player1.isEnabled = true  // Re-enable on error
       return false
     }
 
     // Show the pickup view and wait for result
-    return await showPickupView(item, quantity)
+    return await mainLoop.showPickupView(item: item, quantity: quantity)
   }
 
   func acquire(_ document: Document) {}
@@ -119,5 +235,15 @@ class Script: NSObject {
   func openStorage() {}
 
   func interact(with node: Node, using item: Item?) {}
+
+  // Default implementations for @SceneScript macro-generated methods
+  // These are overridden by the macro in scene script classes
+  class func availableMethods() -> [String] {
+    return []
+  }
+
+  func callMethod(named methodName: String) -> Task<Void, Never>? {
+    return nil
+  }
 
 }

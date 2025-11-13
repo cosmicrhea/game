@@ -37,9 +37,18 @@ public final class ScrollView {
   public var scrollbarColor = Color.gray500.withAlphaComponent(0.85)
   public var autohideScrollbars: Bool = true
 
+  public enum ScrollbarPosition {
+    case inside
+    case outside
+  }
+  public var scrollbarPosition: ScrollbarPosition = .inside
+
   // Edge fades were experimental; disabled for now
 
   // MARK: - Physics / Interaction
+
+  /// If true, allows scrolling by clicking and dragging the mouse. Default is false.
+  public var mouseDragCanScroll: Bool = false
 
   private var isDragging: Bool = false
   private var lastMouse: Point = .zero
@@ -61,7 +70,7 @@ public final class ScrollView {
   public var springDamping: Float = 26.0
 
   // Scroll wheel/trackpad scale (GLFW yOffset units to pixels)
-  public var wheelPixelsPerUnit: Float = 16.0
+  public var wheelPixelsPerUnit: Float = 8.0  // Reduced from 16.0 for slower scrolling
 
   // Raw scroll tracking for better physics
   private var rawScrollVelocity: Point = .zero  // Raw GLFW units per second
@@ -133,7 +142,7 @@ public final class ScrollView {
   public func handleMouseMove(at position: Point) {
     // Update hover state regardless of dragging
     isHovered = frame.contains(position)
-    guard isDragging else { return }
+    guard isDragging && mouseDragCanScroll else { return }
     let dx = position.x - lastMouse.x
     let dy = position.y - lastMouse.y
     lastMouse = position
@@ -221,7 +230,13 @@ public final class ScrollView {
     maxOffsetX = max(0, contentSize.width - frame.size.width)
     maxOffsetY = max(0, contentSize.height - frame.size.height)
     contentOffset.x = clamp(contentOffset.x, 0, maxOffsetX)
-    contentOffset.y = clamp(contentOffset.y, 0, maxOffsetY)
+    // In Y-flipped coordinates, contentOffset.y = 0 means bottom, maxOffsetY means top
+    // Initialize to top if not already set (when contentOffset.y is still 0 and we have scrollable content)
+    if contentOffset.y == 0 && maxOffsetY > 0 {
+      contentOffset.y = maxOffsetY
+    } else {
+      contentOffset.y = clamp(contentOffset.y, 0, maxOffsetY)
+    }
   }
 
   private func overscrollMarginX() -> Float { frame.size.width * 0.22 }
@@ -420,13 +435,39 @@ public final class ScrollView {
     guard scrollbarAlpha > 0.001 else { return }
     guard contentSize.height > frame.size.height + 0.5 else { return }
 
-    let trackX = frame.maxX - scrollbarInset - scrollbarWidth
+    // Calculate scrollbar position (inside or outside)
+    let trackX: Float
+    if scrollbarPosition == .outside {
+      trackX = frame.maxX + scrollbarInset
+    } else {
+      trackX = frame.maxX - scrollbarInset - scrollbarWidth
+    }
+
     let trackY = frame.origin.y + scrollbarInset
     let trackH = frame.size.height - 2 * scrollbarInset
 
     let visible = frame.size.height
     let total = max(visible, contentSize.height)
-    let ratio = max(visible / total, 0.05)
+    let baseRatio = max(visible / total, 0.05)
+
+    // Calculate overscroll amount (rubberbanding)
+    let overscrollY: Float
+    if contentOffset.y < 0 {
+      overscrollY = abs(contentOffset.y)
+    } else if contentOffset.y > maxOffsetY {
+      overscrollY = contentOffset.y - maxOffsetY
+    } else {
+      overscrollY = 0
+    }
+
+    // Shrink thumb height proportionally when rubberbanding
+    // When fully overscrolled at margin, thumb should be ~50% of normal size
+    let margin = overscrollMarginY()
+    let overscrollRatio = margin > 0 ? min(overscrollY / margin, 1.0) : 0.0
+    // Shrink factor: 1.0 at no overscroll, 0.5 at max overscroll
+    let shrinkFactor = 1.0 - overscrollRatio * 0.5
+    let ratio = baseRatio * shrinkFactor
+
     let thumbH = max(20, trackH * ratio)
 
     let maxScroll = max(0.0001, maxOffsetY)

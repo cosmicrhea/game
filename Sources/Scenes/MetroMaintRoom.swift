@@ -1,4 +1,5 @@
-@objcMembers class MetroMaintenanceRoom: Script {
+@SceneScript
+class MetroMaintenanceRoom: Script {
 
   func bulletinBoard() {
     say("Various postings for the Metro employees.")

@@ -91,6 +91,7 @@ final class SlotDemo: RenderLoop {
 
       // Set colors - normal dark panel
       shader.setVec3("uPanelColor", value: (x: panelColor.red, y: panelColor.green, z: panelColor.blue))
+      shader.setFloat("uPanelAlpha", value: panelColor.alpha)
       shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
       shader.setVec3(
         "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))
@@ -119,6 +120,7 @@ final class SlotDemo: RenderLoop {
 
       // Set colors
       shader.setVec3("uPanelColor", value: (x: amberPanelColor.red, y: amberPanelColor.green, z: amberPanelColor.blue))
+      shader.setFloat("uPanelAlpha", value: amberPanelColor.alpha)
       shader.setVec3("uBorderColor", value: (x: borderColor.red, y: borderColor.green, z: borderColor.blue))
       shader.setVec3(
         "uBorderHighlight", value: (x: borderHighlight.red, y: borderHighlight.green, z: borderHighlight.blue))

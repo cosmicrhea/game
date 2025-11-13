@@ -1,6 +1,6 @@
 final class InventoryView: RenderLoop {
   private let promptList = PromptList(.inventory)
-  private var slotGrid: ItemSlotGrid
+  internal var slotGrid: ItemSlotGrid
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
   private let healthCallout = Callout(style: .healthDisplay)
   internal let healthDisplay = HealthDisplay()
@@ -216,35 +216,48 @@ final class InventoryView: RenderLoop {
     switch action {
     case .equip:
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        print("Equipping item: \(item.name)")
+        logger.trace("Equipping item: \(item.name)")
         // Equip this weapon (single-weapon policy)
-        slotGrid.setEquippedWeaponId(item.id)
+        slotGrid.setEquippedWeaponIndex(slotIndex)
+
+        // Auto-reload if weapon has no ammo loaded
+        if item.kind.isWeapon,
+          case .weapon(_, let compatibleAmmo, _, _) = item.kind,
+          !compatibleAmmo.isEmpty
+        {
+          let currentAmmo = slotData.quantity ?? 0
+          if currentAmmo == 0 {
+            logger.trace("🔫 Auto-reloading newly equipped weapon...")
+            // Try to reload - this will be handled by WeaponSystem when firing
+            // For now, just log it
+          }
+        }
       }
       break
     case .unequip:
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        print("Unequipping item: \(item.name)")
+        logger.trace("Unequipping item: \(item.name)")
         // Only clear if this is currently equipped
-        if slotGrid.equippedWeaponId == item.id { slotGrid.setEquippedWeaponId(nil) }
+        if slotGrid.equippedWeaponIndex == slotIndex { slotGrid.setEquippedWeaponIndex(nil) }
       }
       break
     case .use:
       // Handle item use
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        print("Using item: \(item.name)")
+        logger.trace("Using item: \(item.name)")
       }
       break
     case .inspect:
       // Handle item inspection
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        print("Inspecting item: \(item.name) - \(item.description ?? "No description")")
+        logger.trace("Inspecting item: \(item.name) - \(item.description ?? "No description")")
         showItem(item)
       }
       break
     case .combine:
       // Handle item combination
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        print("Combining item: \(item.name)")
+        logger.trace("Combining item: \(item.name)")
       }
       break
     case .exchange:
@@ -252,10 +265,13 @@ final class InventoryView: RenderLoop {
     case .discard:
       // Handle item discard
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        print("Discarding item: \(item.name)")
-        if slotGrid.equippedWeaponId == item.id { slotGrid.setEquippedWeaponId(nil) }
+        logger.trace("Discarding item: \(item.name)")
+        if slotGrid.equippedWeaponIndex == slotIndex { slotGrid.setEquippedWeaponIndex(nil) }
         slotGrid.setSlotData(nil, at: slotIndex)
       }
+      break
+    case .store, .retrieve:
+      // These actions are handled in ItemStorageView, not InventoryView
       break
     }
   }

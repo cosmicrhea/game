@@ -79,12 +79,12 @@ class NodeAnimator {
     let nodeTransforms = getAllNodeTransforms()
 
     // Debug: Print available node transforms
-    print("Available node transforms: \(nodeTransforms.keys.joined(separator: ", "))")
+    logger.trace("Available node transforms: \(nodeTransforms.keys.joined(separator: ", "))")
 
     // Then calculate the final bone matrices for each mesh
     for mesh in scene.meshes {
       if mesh.numberOfBones > 0 {
-        print("Processing mesh with \(mesh.numberOfBones) bones")
+        logger.trace("Processing mesh with \(mesh.numberOfBones) bones")
         for (boneIndex, bone) in mesh.bones.enumerated() {
           guard let boneName = bone.name else { continue }
 
@@ -100,7 +100,8 @@ class NodeAnimator {
           // Store with bone index as key for GPU access
           boneTransforms["\(boneIndex)"] = finalBoneMatrix
 
-          print("Bone \(boneIndex) (\(boneName)): current=\(currentTransform != mat4(1)), final=\(finalBoneMatrix)")
+          logger.trace(
+            "Bone \(boneIndex) (\(boneName)): current=\(currentTransform != mat4(1)), final=\(finalBoneMatrix)")
         }
       }
     }

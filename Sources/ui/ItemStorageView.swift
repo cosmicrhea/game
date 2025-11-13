@@ -1,5 +1,11 @@
 @MainActor
 final class ItemStorageView: RenderLoop {
+  // MARK: - Storage View Style
+  enum StorageViewStyle {
+    case grid
+    case list
+  }
+
   // MARK: - UI
   private let promptList = PromptList(.itemStorage)
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
@@ -10,9 +16,13 @@ final class ItemStorageView: RenderLoop {
   private var isShowingItem: Bool = false
   public var showingItem: Bool { isShowingItem }
 
+  // MARK: - Storage View Style
+  private var storageViewStyle: StorageViewStyle = .list  // Default to list
+
   // MARK: - Grids
   private let playerGrid: ItemSlotGrid
-  private let storageGrid: ItemSlotGrid
+  private var storageGrid: ItemSlotGrid?
+  private var storageListView: ItemStorageListView?
 
   // MARK: - State
   private enum GridId { case player, storage }
@@ -21,9 +31,14 @@ final class ItemStorageView: RenderLoop {
   private var activePlayerIndex: Int = 1  // 1 or 2
   private var focusedGrid: FocusedGrid = .player
 
-  // Global moving mode across two grids
-  private var isMoveModeActive: Bool = false
-  private var movingSource: (grid: GridId, index: Int)? = nil
+  // Take out mode: blank grid slot selected → focus list → place item
+  private var takeOutModeDestinationSlot: Int? = nil
+
+  // Retrieve mode: list item selected → select grid slot → place item
+  private var retrieveModeSourceIndex: Int? = nil  // display index in list
+
+  // Saved row position when navigating from grid to list
+  private var savedPlayerGridRow: Int? = nil
 
   // Mouse tracking
   private var lastMouseX: Double = 0
@@ -33,29 +48,76 @@ final class ItemStorageView: RenderLoop {
   private let interGridSpacing: Float = 96
 
   init() {
-    // Player inventory grid: same size as InventoryView (4x2)
+    // Player inventory grid: same size as InventoryView (4x4)
     playerGrid = ItemSlotGrid(
       columns: 4,
       rows: 4,
       slotSize: 80.0,
       spacing: 3.0
     )
-    playerGrid.allowsMoving = true
-    playerGrid.showMenuOnSelection = false
+    playerGrid.allowsMoving = false  // Disable move mode - use menus instead
+    playerGrid.showMenuOnSelection = true  // Show menu on selection
+    // Wire up to Inventory.player1
+    playerGrid.inventory = Inventory.player1
+    // Wire up slot menu actions
+    playerGrid.onSlotAction = { [weak self] action, slotIndex in
+      self?.handlePlayerGridSlotAction(action, slotIndex: slotIndex)
+    }
+    // Set custom actions provider for storage view menu
+    playerGrid.customActionsProvider = { [weak self] slotIndex in
+      guard let self = self else { return [] }
+      guard let slotData = self.playerGrid.getSlotData(at: slotIndex) else {
+        // Empty slot - in take out mode, allow selecting it
+        if self.takeOutModeDestinationSlot != nil {
+          return []  // No menu for empty slots, but selection works
+        }
+        return []
+      }
 
-    // Storage grid: larger than inventory view
-    storageGrid = ItemSlotGrid(
-      columns: 6,
-      rows: 4,
-      slotSize: 80.0,
-      spacing: 3.0
-    )
-    storageGrid.allowsMoving = true
-    storageGrid.showMenuOnSelection = false
+      guard let item = slotData.item else { return [] }
 
-    // Populate sample data
-    setupPlayerSlots()
-    setupStorageSlots()
+      var actions: [SlotAction] = [.store, .inspect]
+
+      // Add Combine if applicable (keys can be combined)
+      if case .key = item.kind {
+        actions.insert(.combine, at: 1)
+      }
+
+      return actions
+    }
+
+    // Storage view: create based on style
+    switch storageViewStyle {
+    case .grid:
+      // Storage grid: larger than inventory view
+      let grid = ItemSlotGrid(
+        columns: 6,
+        rows: 4,
+        slotSize: 80.0,
+        spacing: 3.0
+      )
+      grid.allowsMoving = false
+      grid.showMenuOnSelection = true
+      grid.inventory = Inventory.storage
+      storageGrid = grid
+      storageListView = nil
+    case .list:
+      // Storage list view
+      let listFrame = Rect(x: 0, y: 0, width: 440, height: 400)  // Will be positioned in recenterGrids
+      let list = ItemStorageListView(frame: listFrame)
+      list.setInventory(Inventory.storage)
+      list.onSelectionChanged = { [weak self] index in
+        self?.updateItemDescription()
+      }
+      list.onSlotAction = { [weak self] action, displayIndex in
+        self?.handleStorageListSlotAction(action, displayIndex: displayIndex)
+      }
+      list.onItemSelected = { [weak self] displayIndex in
+        self?.handleStorageListEmptyRowSelected(displayIndex: displayIndex)
+      }
+      storageGrid = nil
+      storageListView = list
+    }
 
     // Initial layout
     recenterGrids()
@@ -78,11 +140,29 @@ final class ItemStorageView: RenderLoop {
     let playerY: Float = (Float(Engine.viewportSize.height) - playerTotal.height) * 0.5 + 80
     playerGrid.setPosition(Point(playerX, playerY))
 
-    // Storage grid to the left of player grid
-    let storageTotal = storageGrid.totalSize
-    let storageX = playerX - interGridSpacing - storageTotal.width
-    let storageY = (Float(Engine.viewportSize.height) - storageTotal.height) * 0.5 + 80
-    storageGrid.setPosition(Point(storageX, storageY))
+    // Storage view to the left of player grid
+    switch storageViewStyle {
+    case .grid:
+      if let storageGrid = storageGrid {
+        let storageTotal = storageGrid.totalSize
+        let storageX = playerX - interGridSpacing - storageTotal.width
+        let storageY = (Float(Engine.viewportSize.height) - storageTotal.height) * 0.5 + 80
+        storageGrid.setPosition(Point(storageX, storageY))
+      }
+    case .list:
+      if let storageListView {
+        let listWidth: Float = 440
+        let listHeight: Float = storageListView.rowHeight * 8.5
+        // Center the list between left screen edge and left edge of grid, with slight right bias
+        let gridLeftEdge = playerX - interGridSpacing
+        let leftMargin: Float = 80  // Margin from left edge
+        let availableWidth = gridLeftEdge - leftMargin
+        // let storageX = leftMargin + availableWidth * 0.6 - listWidth * 0.5  // 60% from left, 40% from grid
+        let storageX: Float = 176
+        let storageY = (Float(Engine.viewportSize.height) - listHeight) * 0.5 + 80
+        storageListView.setFrame(Rect(x: storageX, y: storageY, width: listWidth, height: listHeight))
+      }
+    }
   }
 
   // MARK: - RenderLoop
@@ -94,11 +174,17 @@ final class ItemStorageView: RenderLoop {
       recenterGrids()
       // Focus colors
       playerGrid.isFocused = (focusedGrid == .player)
-      storageGrid.isFocused = (focusedGrid == .storage)
+
+      switch storageViewStyle {
+      case .grid:
+        storageGrid?.isFocused = (focusedGrid == .storage)
+        storageGrid?.update(deltaTime: deltaTime)
+      case .list:
+        storageListView?.setFocused(focusedGrid == .storage)
+        storageListView?.update(deltaTime: deltaTime)
+      }
 
       playerGrid.update(deltaTime: deltaTime)
-      storageGrid.update(deltaTime: deltaTime)
-
       updateItemDescription()
     }
   }
@@ -114,53 +200,168 @@ final class ItemStorageView: RenderLoop {
       return
     }
 
-    // Inspect with Alt
+    // Sort with Alt (Option key) - cycle through sort orders
     if key == .leftAlt || key == .rightAlt {
-      if let item = getSelectedItemInFocusedGrid() {
-        UISound.select()
-        showItem(item)
-      }
-      return
-    }
-
-    // Enter/confirm move mode with f/space/enter/numpadEnter
-    if key == .f || key == .space || key == .enter || key == .numpadEnter {
-      if isMoveModeActive {
-        // Confirm move to currently selected cell in focused grid
-        if let source = movingSource {
-          switch (source.grid, focusedGrid) {
-          case (.player, .player):
-            performSameGridSwap(grid: playerGrid, sourceIndex: source.index, targetIndex: playerGrid.selectedIndex)
-          case (.player, .storage):
-            performCrossGridSwap(
-              sourceGrid: playerGrid,
-              sourceIndex: source.index,
-              targetGrid: storageGrid,
-              targetIndex: storageGrid.selectedIndex,
-              keepMoving: true
-            )
-          case (.storage, .storage):
-            performSameGridSwap(grid: storageGrid, sourceIndex: source.index, targetIndex: storageGrid.selectedIndex)
-          case (.storage, .player):
-            performCrossGridSwap(
-              sourceGrid: storageGrid,
-              sourceIndex: source.index,
-              targetGrid: playerGrid,
-              targetIndex: playerGrid.selectedIndex,
-              keepMoving: true
-            )
+      if focusedGrid == .storage, case .list = storageViewStyle {
+        // Cycle sort order
+        if let currentOrder = storageListView?.currentSortOrder {
+          let allOrders = ItemSortOrder.allCases
+          if let currentIndex = allOrders.firstIndex(of: currentOrder) {
+            let nextIndex = (currentIndex + 1) % allOrders.count
+            storageListView?.setSortOrder(allOrders[nextIndex])
+            UISound.navigate()
           }
         }
-      } else {
-        enterMoveModeFromFocusedSelection()
+        return
       }
+      // Alt key disabled for inspect in storage view
       return
     }
 
-    // Switch focused grid with Tab
-    if key == .tab {
-      focusedGrid = (focusedGrid == .player) ? .storage : .player
-      UISound.navigate()
+    // Handle retrieve/take out modes first (but only if menus aren't visible)
+    let menuVisible: Bool = {
+      if focusedGrid == .player && playerGrid.slotMenu.isVisible {
+        return true
+      }
+      if focusedGrid == .storage {
+        switch storageViewStyle {
+        case .list:
+          return storageListView?.isSlotMenuVisible == true
+        case .grid:
+          return storageGrid?.slotMenu.isVisible == true
+        }
+      }
+      return false
+    }()
+
+    if !menuVisible && (retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil) {
+      if key == .f || key == .space || key == .enter || key == .numpadEnter {
+        if focusedGrid == .player {
+          let targetSlot = playerGrid.selectedIndex
+
+          // Retrieve mode: place item from list to selected grid slot
+          if let sourceDisplayIndex = retrieveModeSourceIndex {
+            if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex),
+              let sourceSlotData = Inventory.storage.slots[inventoryIndex]
+            {
+              // Check if target slot is empty
+              if let targetSlotData = playerGrid.getSlotData(at: targetSlot), targetSlotData.isEmpty {
+                // Move item from storage to player grid
+                playerGrid.setSlotData(sourceSlotData, at: targetSlot)
+                Inventory.storage.slots[inventoryIndex] = nil
+                storageListView?.rebuildDisplayList()
+                // Clear retrieve mode
+                retrieveModeSourceIndex = nil
+                playerGrid.highlightedSlotIndex = nil
+                UISound.select()
+                return
+              } else {
+                UISound.error()  // Slot not empty
+                return
+              }
+            }
+          }
+          // Take out mode: place item from selected grid slot to storage
+          else if takeOutModeDestinationSlot != nil {
+            if let sourceSlotData = playerGrid.getSlotData(at: targetSlot), sourceSlotData.item != nil {
+              // Find or create empty slot in storage (storage never fills up)
+              let emptyInventoryIndex = findFirstEmptyStorageInventorySlot()
+              // Move item from player grid to storage
+              playerGrid.setSlotData(nil, at: targetSlot)
+              // Handle equipped state
+              if playerGrid.equippedWeaponIndex == targetSlot {
+                playerGrid.setEquippedWeaponIndex(nil)
+              }
+              Inventory.storage.slots[emptyInventoryIndex] = sourceSlotData
+              storageListView?.rebuildDisplayList()
+              // Clear take out mode
+              takeOutModeDestinationSlot = nil
+              playerGrid.highlightedSlotIndex = nil
+              UISound.select()
+              return
+            }
+          }
+        }
+        return
+      }
+      if key == .escape {
+        // Cancel retrieve/take out mode
+        retrieveModeSourceIndex = nil
+        takeOutModeDestinationSlot = nil
+        playerGrid.highlightedSlotIndex = nil
+        UISound.cancel()
+        return
+      }
+    }
+
+    // Escape key: close menus first, then cancel retrieve/take out modes
+    if key == .escape {
+      // Close any open menus
+      if focusedGrid == .player && playerGrid.slotMenu.isVisible {
+        playerGrid.slotMenu.hide()
+        return
+      }
+      if focusedGrid == .storage {
+        switch storageViewStyle {
+        case .grid:
+          if storageGrid?.slotMenu.isVisible == true {
+            storageGrid?.slotMenu.hide()
+            return
+          }
+        case .list:
+          if storageListView?.isSlotMenuVisible == true {
+            storageListView?.hideSlotMenu()
+            return
+          }
+        }
+      }
+      // If no menus, cancel retrieve/take out modes
+      if retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil {
+        retrieveModeSourceIndex = nil
+        takeOutModeDestinationSlot = nil
+        playerGrid.highlightedSlotIndex = nil
+        UISound.cancel()
+        return
+      }
+    }
+
+    // Forward F/space/enter to grid/list to show menu or handle selection
+    if key == .f || key == .space || key == .enter || key == .numpadEnter {
+      // Check if menus are visible first - if so, forward to menu
+      if menuVisible {
+        // Menu is visible - let it handle the key
+        switch focusedGrid {
+        case .player:
+          _ = playerGrid.handleKey(key)
+        case .storage:
+          switch storageViewStyle {
+          case .grid:
+            _ = storageGrid?.handleKey(key)
+          case .list:
+            _ = storageListView?.handleKey(key)
+          }
+        }
+        return
+      }
+
+      // No menu visible - forward to grid/list to show menu or handle selection
+      switch focusedGrid {
+      case .player:
+        if playerGrid.handleKey(key) {
+          return
+        }
+      case .storage:
+        switch storageViewStyle {
+        case .grid:
+          if storageGrid?.handleKey(key) == true {
+            return
+          }
+        case .list:
+          if storageListView?.handleKey(key) == true {
+            return
+          }
+        }
+      }
       return
     }
 
@@ -184,9 +385,32 @@ final class ItemStorageView: RenderLoop {
     // Otherwise forward navigation to focused grid
     switch focusedGrid {
     case .player:
-      _ = playerGrid.handleKey(key)
+      // Check if menu is visible - if so, don't update highlight
+      if !playerGrid.slotMenu.isVisible {
+        _ = playerGrid.handleKey(key)
+        // Update highlighted slot in retrieve/take out modes
+        if retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil {
+          let selectedSlot = playerGrid.selectedIndex
+          if let slotData = playerGrid.getSlotData(at: selectedSlot), slotData.isEmpty {
+            playerGrid.highlightedSlotIndex = selectedSlot
+            if takeOutModeDestinationSlot == nil {
+              takeOutModeDestinationSlot = selectedSlot
+            }
+          } else {
+            playerGrid.highlightedSlotIndex = nil
+          }
+        }
+      } else {
+        // Menu is visible - just forward to grid (which will forward to menu)
+        _ = playerGrid.handleKey(key)
+      }
     case .storage:
-      _ = storageGrid.handleKey(key)
+      switch storageViewStyle {
+      case .grid:
+        _ = storageGrid?.handleKey(key)
+      case .list:
+        _ = storageListView?.handleKey(key)
+      }
     }
   }
 
@@ -202,11 +426,34 @@ final class ItemStorageView: RenderLoop {
     // Flip Y coordinate to match screen coordinates (top-left origin)
     let mousePosition = Point(Float(x), Float(Engine.viewportSize.height) - Float(y))
     playerGrid.handleMouseMove(at: mousePosition)
-    storageGrid.handleMouseMove(at: mousePosition)
+
+    switch storageViewStyle {
+    case .grid:
+      storageGrid?.handleMouseMove(at: mousePosition)
+    case .list:
+      // Handle both scroll dragging and selection hover
+      _ = storageListView?.handleMouseMove(at: mousePosition)
+    }
   }
 
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    // no-op
+    if isShowingItem {
+      // Forward mouse input to ItemView
+      currentItemView?.onMouseButton(window: window, button: button, state: state, mods: mods)
+      return
+    }
+
+    let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
+
+    if focusedGrid == .storage, case .list = storageViewStyle {
+      if button == .left {
+        if state == .pressed {
+          _ = storageListView?.handleMouseDown(at: mousePosition)
+        } else if state == .released {
+          storageListView?.handleMouseUp()
+        }
+      }
+    }
   }
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
@@ -217,41 +464,119 @@ final class ItemStorageView: RenderLoop {
       return
     }
 
+    // Check if menus are visible - forward clicks to menu handlers
+    if button == .left {
+      if focusedGrid == .player && playerGrid.slotMenu.isVisible {
+        // Menu is visible - let grid handle it (which forwards to menu)
+        _ = playerGrid.handleMouseClick(at: mousePosition)
+        return
+      }
+      if focusedGrid == .storage {
+        switch storageViewStyle {
+        case .grid:
+          if storageGrid?.slotMenu.isVisible == true {
+            _ = storageGrid?.handleMouseClick(at: mousePosition)
+            return
+          }
+        case .list:
+          if storageListView?.isSlotMenuVisible == true {
+            // Menu is visible - let list handle it
+            _ = storageListView?.handleMouseClick(at: mousePosition)
+            return
+          }
+        }
+      }
+    }
+
+    // Right-click: cancel retrieve/take out modes
     if button == .right {
-      // Cancel move mode
-      cancelMoveMode()
+      if retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil {
+        retrieveModeSourceIndex = nil
+        takeOutModeDestinationSlot = nil
+        playerGrid.highlightedSlotIndex = nil
+        UISound.cancel()
+        return
+      }
       return
     }
 
     guard button == .left else { return }
 
-    // Determine clicked grid and index
+    // Handle retrieve/take out modes on click (only if not in menu)
+    if retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil {
+      if let slotIndex = playerGrid.slotIndex(at: mousePosition) {
+        // Retrieve mode: place item from list to clicked grid slot
+        if let sourceDisplayIndex = retrieveModeSourceIndex {
+          if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex),
+            let sourceSlotData = Inventory.storage.slots[inventoryIndex]
+          {
+            // Check if target slot is empty
+            if let targetSlotData = playerGrid.getSlotData(at: slotIndex), targetSlotData.isEmpty {
+              // Move item from storage to player grid
+              playerGrid.setSlotData(sourceSlotData, at: slotIndex)
+              Inventory.storage.slots[inventoryIndex] = nil
+              storageListView?.rebuildDisplayList()
+              // Clear retrieve mode
+              retrieveModeSourceIndex = nil
+              playerGrid.highlightedSlotIndex = nil
+              UISound.select()
+              return
+            } else {
+              UISound.error()  // Slot not empty
+              return
+            }
+          }
+        }
+        // Take out mode: place item from clicked grid slot to storage
+        else if takeOutModeDestinationSlot != nil {
+          if let sourceSlotData = playerGrid.getSlotData(at: slotIndex), sourceSlotData.item != nil {
+            // Find or create empty slot in storage (storage never fills up)
+            let emptyInventoryIndex = findFirstEmptyStorageInventorySlot()
+            // Move item from player grid to storage
+            playerGrid.setSlotData(nil, at: slotIndex)
+            // Handle equipped state
+            if playerGrid.equippedWeaponIndex == slotIndex {
+              playerGrid.setEquippedWeaponIndex(nil)
+            }
+            Inventory.storage.slots[emptyInventoryIndex] = sourceSlotData
+            storageListView?.rebuildDisplayList()
+            // Clear take out mode
+            takeOutModeDestinationSlot = nil
+            playerGrid.highlightedSlotIndex = nil
+            UISound.select()
+            return
+          }
+        }
+      }
+      return
+    }
+
+    // Normal click handling - forward to grids/lists (they'll show menus)
     let playerIndex = playerGrid.slotIndex(at: mousePosition)
-    let storageIndex = storageGrid.slotIndex(at: mousePosition)
+    let storageIndex: Int? = {
+      switch storageViewStyle {
+      case .grid:
+        return storageGrid?.slotIndex(at: mousePosition)
+      case .list:
+        if storageListView?.handleMouseClick(at: mousePosition) == true {
+          return storageListView?.currentSelectedIndex
+        }
+        return nil
+      }
+    }()
 
-    if isMoveModeActive {
-      handleMoveClick(playerIndex: playerIndex, storageIndex: storageIndex)
-      return
+    // Forward clicks to grids (they handle menu display)
+    if playerIndex != nil {
+      _ = playerGrid.handleMouseClick(at: mousePosition)
     }
-
-    // Not in move mode: click picks up (enter move mode) if slot has item
-    if let idx = playerIndex, let data = playerGrid.getSlotData(at: idx), data.item != nil {
-      focusedGrid = .player
-      movingSource = (.player, idx)
-      playerGrid.setSelected(idx)
-      playerGrid.setMovingModeActive(true)
-      isMoveModeActive = true
-      UISound.select()
-      return
-    }
-    if let idx = storageIndex, let data = storageGrid.getSlotData(at: idx), data.item != nil {
-      focusedGrid = .storage
-      movingSource = (.storage, idx)
-      storageGrid.setSelected(idx)
-      storageGrid.setMovingModeActive(true)
-      isMoveModeActive = true
-      UISound.select()
-      return
+    if storageIndex != nil {
+      switch storageViewStyle {
+      case .grid:
+        _ = storageGrid?.handleMouseClick(at: mousePosition)
+      case .list:
+        // Already handled above
+        break
+      }
     }
   }
 
@@ -259,7 +584,19 @@ final class ItemStorageView: RenderLoop {
     // no-op
   }
 
-  func onScroll(window: Window, xOffset: Double, yOffset: Double) {}
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
+    if isShowingItem {
+      // Forward scroll input to ItemView
+      currentItemView?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+      return
+    }
+
+    let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
+
+    if focusedGrid == .storage, case .list = storageViewStyle {
+      storageListView?.handleScroll(xOffset: xOffset, yOffset: yOffset, mouse: mousePosition)
+    }
+  }
 
   func draw() {
     if isShowingItem {
@@ -279,154 +616,25 @@ final class ItemStorageView: RenderLoop {
 
     // Grids
     playerGrid.draw()
-    storageGrid.draw()
+
+    switch storageViewStyle {
+    case .grid:
+      storageGrid?.draw()
+    case .list:
+      storageListView?.draw()
+    }
 
     // Item description
     itemDescriptionView.draw()
 
     // Prompts
-    promptList.group = isMoveModeActive ? .confirmCancel : .itemStorage
+    // Use itemStorageList if storage list is focused, otherwise itemStorage
+    if focusedGrid == .storage, case .list = storageViewStyle {
+      promptList.group = .itemStorageList
+    } else {
+      promptList.group = .itemStorage
+    }
     promptList.draw()
-  }
-
-  // MARK: - Move mode and transfer
-
-  private func toggleMoveMode() {
-    if isMoveModeActive {
-      cancelMoveMode()
-    } else {
-      isMoveModeActive = true
-      movingSource = nil
-      // Ensure both grids are not already in their internal move state
-      playerGrid.setMovingModeActive(false)
-      storageGrid.setMovingModeActive(false)
-    }
-  }
-
-  private func cancelMoveMode() {
-    isMoveModeActive = false
-    movingSource = nil
-    playerGrid.cancelPendingMove()
-    storageGrid.cancelPendingMove()
-    playerGrid.setMovingModeActive(false)
-    storageGrid.setMovingModeActive(false)
-  }
-
-  private func handleMoveClick(playerIndex: Int?, storageIndex: Int?) {
-    // 1) Pick up
-    if movingSource == nil {
-      if let idx = playerIndex, let data = playerGrid.getSlotData(at: idx), data.item != nil {
-        movingSource = (.player, idx)
-        playerGrid.setSelected(idx)
-        playerGrid.setMovingModeActive(true)
-        UISound.select()
-        return
-      }
-      if let idx = storageIndex, let data = storageGrid.getSlotData(at: idx), data.item != nil {
-        movingSource = (.storage, idx)
-        storageGrid.setSelected(idx)
-        storageGrid.setMovingModeActive(true)
-        UISound.select()
-        return
-      }
-      return
-    }
-
-    // 2) Drop/Swap
-    guard let source = movingSource else { return }
-
-    switch source.grid {
-    case .player:
-      if let targetIdx = storageIndex {
-        performCrossGridSwap(
-          sourceGrid: playerGrid, sourceIndex: source.index, targetGrid: storageGrid, targetIndex: targetIdx)
-        return
-      }
-      if let targetIdx = playerIndex {
-        // Same-grid move: delegate to grid logic
-        _ = targetIdx
-        _ = playerGrid.handleMouseClick(
-          at: Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY)))
-        return
-      }
-    case .storage:
-      if let targetIdx = playerIndex {
-        performCrossGridSwap(
-          sourceGrid: storageGrid, sourceIndex: source.index, targetGrid: playerGrid, targetIndex: targetIdx)
-        return
-      }
-      if let targetIdx = storageIndex {
-        // Same-grid move: delegate to grid logic
-        _ = targetIdx
-        _ = storageGrid.handleMouseClick(
-          at: Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY)))
-        return
-      }
-    }
-  }
-
-  private func performCrossGridSwap(
-    sourceGrid: ItemSlotGrid, sourceIndex: Int, targetGrid: ItemSlotGrid, targetIndex: Int, keepMoving: Bool = true
-  ) {
-    let sourceData = sourceGrid.getSlotData(at: sourceIndex)
-    let targetData = targetGrid.getSlotData(at: targetIndex)
-
-    sourceGrid.setSlotData(targetData, at: sourceIndex)
-    targetGrid.setSlotData(sourceData, at: targetIndex)
-
-    UISound.select()
-
-    if keepMoving, let movedItem = sourceData?.item {
-      _ = movedItem
-      // Continue moving with the item now at target
-      if targetGrid === playerGrid {
-        movingSource = (.player, targetIndex)
-        playerGrid.setSelected(targetIndex)
-        playerGrid.setMovingModeActive(true)
-        storageGrid.setMovingModeActive(false)
-        focusedGrid = .player
-      } else {
-        movingSource = (.storage, targetIndex)
-        storageGrid.setSelected(targetIndex)
-        storageGrid.setMovingModeActive(true)
-        playerGrid.setMovingModeActive(false)
-        focusedGrid = .storage
-      }
-      isMoveModeActive = true
-    } else {
-      // Exit move mode
-      playerGrid.cancelPendingMove()
-      storageGrid.cancelPendingMove()
-      playerGrid.setMovingModeActive(false)
-      storageGrid.setMovingModeActive(false)
-      movingSource = nil
-      isMoveModeActive = false
-    }
-  }
-
-  private func performSameGridSwap(grid: ItemSlotGrid, sourceIndex: Int, targetIndex: Int) {
-    guard sourceIndex != targetIndex else { return }
-    let sourceData = grid.getSlotData(at: sourceIndex)
-    let targetData = grid.getSlotData(at: targetIndex)
-    grid.setSlotData(targetData, at: sourceIndex)
-    grid.setSlotData(sourceData, at: targetIndex)
-    UISound.select()
-
-    // Continue moving with the item now at target
-    if grid === playerGrid {
-      movingSource = (.player, targetIndex)
-      playerGrid.setSelected(targetIndex)
-      playerGrid.setMovingModeActive(true)
-      storageGrid.setMovingModeActive(false)
-      focusedGrid = .player
-    } else {
-      movingSource = (.storage, targetIndex)
-      storageGrid.setSelected(targetIndex)
-      storageGrid.setMovingModeActive(true)
-      playerGrid.setMovingModeActive(false)
-      focusedGrid = .storage
-    }
-    isMoveModeActive = true
   }
 
   // MARK: - Cross-grid selection navigation
@@ -436,17 +644,46 @@ final class ItemStorageView: RenderLoop {
     let isRight = (key == .d || key == .right)
     guard isLeft || isRight else { return false }
 
+    // Don't allow cross-grid navigation when menus are visible
+    let menuVisible: Bool = {
+      if focusedGrid == .player && playerGrid.slotMenu.isVisible {
+        return true
+      }
+      if focusedGrid == .storage {
+        switch storageViewStyle {
+        case .list:
+          return storageListView?.isSlotMenuVisible == true
+        case .grid:
+          return storageGrid?.slotMenu.isVisible == true
+        }
+      }
+      return false
+    }()
+    if menuVisible {
+      return false
+    }
+
     switch focusedGrid {
     case .player:
       if isLeft {
-        // Player grid is on the right now: at left edge, jump to storage grid's rightmost column
+        // Player grid is on the right now: at left edge, jump to storage
         let currentIndex = playerGrid.selectedIndex
         let col = currentIndex % playerGrid.columns
-        let row = currentIndex / playerGrid.columns
         if col == 0 {
-          let targetRow = min(row, storageGrid.rows - 1)
-          let targetIndex = targetRow * storageGrid.columns + (storageGrid.columns - 1)
-          storageGrid.setSelected(targetIndex)
+          switch storageViewStyle {
+          case .grid:
+            if let storageGrid = storageGrid {
+              let row = currentIndex / playerGrid.columns
+              let targetRow = min(row, storageGrid.rows - 1)
+              let targetIndex = targetRow * storageGrid.columns + (storageGrid.columns - 1)
+              storageGrid.setSelected(targetIndex)
+            }
+          case .list:
+            // Save the current row before switching to list
+            savedPlayerGridRow = currentIndex / playerGrid.columns
+            // Just switch focus, list will handle selection
+            break
+          }
           focusedGrid = .storage
           UISound.navigate()
           return true
@@ -454,13 +691,34 @@ final class ItemStorageView: RenderLoop {
       }
     case .storage:
       if isRight {
-        // Storage grid is on the left now: at right edge, jump to player grid's leftmost column
-        let currentIndex = storageGrid.selectedIndex
-        let col = currentIndex % storageGrid.columns
-        let row = currentIndex / storageGrid.columns
-        if col == storageGrid.columns - 1 {
-          let targetRow = min(row, playerGrid.rows - 1)
-          let targetIndex = targetRow * playerGrid.columns + 0
+        // Storage is on the left now: at right edge, jump to player grid's leftmost column
+        switch storageViewStyle {
+        case .grid:
+          if let storageGrid = storageGrid {
+            let currentIndex = storageGrid.selectedIndex
+            let col = currentIndex % storageGrid.columns
+            if col == storageGrid.columns - 1 {
+              let row = currentIndex / storageGrid.columns
+              let targetRow = min(row, playerGrid.rows - 1)
+              let targetIndex = targetRow * playerGrid.columns + 0
+              playerGrid.setSelected(targetIndex)
+              focusedGrid = .player
+              UISound.navigate()
+              return true
+            }
+          }
+        case .list:
+          // Always allow switching from list to grid
+          // Restore to saved row if available, otherwise use approximate row from list
+          let targetRow: Int
+          if let savedRow = savedPlayerGridRow {
+            targetRow = min(savedRow, playerGrid.rows - 1)
+            savedPlayerGridRow = nil  // Clear saved row after restoring
+          } else {
+            let currentIndex = storageListView?.currentSelectedIndex ?? 0
+            targetRow = min(currentIndex / 4, playerGrid.rows - 1)  // Approximate row
+          }
+          let targetIndex = targetRow * playerGrid.columns + 0  // First column of the row
           playerGrid.setSelected(targetIndex)
           focusedGrid = .player
           UISound.navigate()
@@ -477,14 +735,22 @@ final class ItemStorageView: RenderLoop {
     let selectedIndex: Int = {
       switch focusedGrid {
       case .player: return playerGrid.selectedIndex
-      case .storage: return storageGrid.selectedIndex
+      case .storage:
+        switch storageViewStyle {
+        case .grid: return storageGrid?.selectedIndex ?? 0
+        case .list: return storageListView?.currentSelectedIndex ?? 0
+        }
       }
     }()
 
     let data: ItemSlotData? = {
       switch focusedGrid {
       case .player: return playerGrid.getSlotData(at: selectedIndex)
-      case .storage: return storageGrid.getSlotData(at: selectedIndex)
+      case .storage:
+        switch storageViewStyle {
+        case .grid: return storageGrid?.getSlotData(at: selectedIndex)
+        case .list: return storageListView?.getSlotData(at: selectedIndex)
+        }
       }
     }()
 
@@ -499,32 +765,143 @@ final class ItemStorageView: RenderLoop {
 
   // MARK: - Helpers
 
+  // MARK: - Menu Action Handlers
+
+  private func handlePlayerGridSlotAction(_ action: SlotAction, slotIndex: Int) {
+    switch action {
+    case .store:
+      // Store item from grid to storage
+      if let slotData = playerGrid.getSlotData(at: slotIndex), slotData.item != nil {
+        // Find first empty slot in storage
+        if let emptyIndex = findFirstEmptyStorageSlot() {
+          // Move item to storage
+          playerGrid.setSlotData(nil, at: slotIndex)
+          // Handle equipped state
+          if playerGrid.equippedWeaponIndex == slotIndex {
+            playerGrid.setEquippedWeaponIndex(nil)
+          }
+          // Add to storage
+          switch storageViewStyle {
+          case .grid:
+            storageGrid?.setSlotData(slotData, at: emptyIndex)
+          case .list:
+            // Find or create actual inventory index for empty slot (storage never fills up)
+            let inventoryIndex = findFirstEmptyStorageInventorySlot()
+            Inventory.storage.slots[inventoryIndex] = slotData
+            storageListView?.rebuildDisplayList()
+          }
+          UISound.select()
+        }
+      }
+    case .combine:
+      // TODO: Implement combine logic
+      UISound.select()
+    case .inspect:
+      if let slotData = playerGrid.getSlotData(at: slotIndex), let item = slotData.item {
+        showItem(item)
+      }
+    default:
+      break
+    }
+  }
+
+  private func handleStorageListSlotAction(_ action: SlotAction, displayIndex: Int) {
+    switch action {
+    case .retrieve:
+      // Enter retrieve mode: highlight this item, wait for grid slot selection
+      retrieveModeSourceIndex = displayIndex
+      // Move focus to grid
+      focusedGrid = .player
+      // Highlight first empty slot if available
+      if let emptySlot = findFirstEmptyPlayerSlot() {
+        playerGrid.highlightedSlotIndex = emptySlot
+      }
+      UISound.select()
+    case .inspect:
+      if let slotData = storageListView?.getSlotData(at: displayIndex), let item = slotData.item {
+        showItem(item)
+      }
+    default:
+      break
+    }
+  }
+
+  private func handleStorageListEmptyRowSelected(displayIndex: Int) {
+    // Empty row selected - enter take out mode: focus grid, wait for item selection
+    guard let storageListView = storageListView else { return }
+    // Get the slot data to check if it's empty
+    guard let slotData = storageListView.getSlotData(at: displayIndex), slotData.isEmpty else { return }
+
+    // Enter take out mode: store destination slot (will be set when user selects a slot in grid)
+    takeOutModeDestinationSlot = nil  // Will be set when user selects a slot
+    // Move focus to grid
+    focusedGrid = .player
+    // Highlight first empty slot if available (for visual feedback)
+    if let emptySlot = findFirstEmptyPlayerSlot() {
+      playerGrid.highlightedSlotIndex = emptySlot
+      takeOutModeDestinationSlot = emptySlot
+    }
+    UISound.select()
+  }
+
+  // MARK: - Helper Functions
+
+  private func findFirstEmptyStorageSlot() -> Int? {
+    switch storageViewStyle {
+    case .grid:
+      guard let storageGrid = storageGrid else { return nil }
+      // Check existing slots
+      for i in 0..<(storageGrid.columns * storageGrid.rows) {
+        if let slotData = storageGrid.getSlotData(at: i), slotData.isEmpty {
+          return i
+        }
+      }
+      // If grid is full, expand storage inventory and return new index
+      let newIndex = Inventory.storage.slots.count
+      Inventory.storage.slots.append(nil)
+      // Note: The grid view might need to be updated to reflect new slots, but for now
+      // we'll return the index and let the grid handle it
+      return newIndex < (storageGrid.columns * storageGrid.rows) ? newIndex : nil
+    case .list:
+      // For list, we need to find an empty inventory slot (always succeeds)
+      return findFirstEmptyStorageInventorySlot()
+    }
+  }
+
+  private func findFirstEmptyStorageInventorySlot() -> Int {
+    // Find first empty slot, or create a new one if all are full
+    for (index, slot) in Inventory.storage.slots.enumerated() {
+      if slot == nil || slot?.isEmpty == true {
+        return index
+      }
+    }
+    // No empty slot found - append a new one
+    let newIndex = Inventory.storage.slots.count
+    Inventory.storage.slots.append(nil)
+    return newIndex
+  }
+
+  private func findFirstEmptyPlayerSlot() -> Int? {
+    for i in 0..<(playerGrid.columns * playerGrid.rows) {
+      if let slotData = playerGrid.getSlotData(at: i), slotData.isEmpty {
+        return i
+      }
+    }
+    return nil
+  }
+
   private func getSelectedItemInFocusedGrid() -> Item? {
     switch focusedGrid {
     case .player:
       return playerGrid.getSlotData(at: playerGrid.selectedIndex)?.item
     case .storage:
-      return storageGrid.getSlotData(at: storageGrid.selectedIndex)?.item
-    }
-  }
-
-  private func enterMoveModeFromFocusedSelection() {
-    switch focusedGrid {
-    case .player:
-      let idx = playerGrid.selectedIndex
-      if let data = playerGrid.getSlotData(at: idx), data.item != nil {
-        movingSource = (.player, idx)
-        playerGrid.setMovingModeActive(true)
-        isMoveModeActive = true
-        UISound.select()
-      }
-    case .storage:
-      let idx = storageGrid.selectedIndex
-      if let data = storageGrid.getSlotData(at: idx), data.item != nil {
-        movingSource = (.storage, idx)
-        storageGrid.setMovingModeActive(true)
-        isMoveModeActive = true
-        UISound.select()
+      switch storageViewStyle {
+      case .grid:
+        guard let storageGrid = storageGrid else { return nil }
+        return storageGrid.getSlotData(at: storageGrid.selectedIndex)?.item
+      case .list:
+        guard let storageListView = storageListView else { return nil }
+        return storageListView.getSlotData(at: storageListView.currentSelectedIndex)?.item
       }
     }
   }
@@ -542,41 +919,4 @@ final class ItemStorageView: RenderLoop {
     isShowingItem = false
   }
 
-  // MARK: - Sample data
-
-  private func setupPlayerSlots() {
-    let totalSlots = playerGrid.columns * playerGrid.rows
-    var data: [ItemSlotData?] = Array(repeating: nil, count: totalSlots)
-    let items: [(Item, Int?)] = [
-      (.knife, nil),
-      (.glock17, 15),
-      (.handgunAmmo, 48),
-      (.morphine, nil),
-      (.metroKey, nil),
-      (.handgunAmmo, 30),
-      (.morphine, nil),
-      (.knife, nil),
-    ]
-    for (i, pair) in items.enumerated() where i < totalSlots {
-      data[i] = ItemSlotData(item: pair.0, quantity: pair.1)
-    }
-    playerGrid.setSlotData(data)
-  }
-
-  private func setupStorageSlots() {
-    let totalSlots = storageGrid.columns * storageGrid.rows
-    var data: [ItemSlotData?] = Array(repeating: nil, count: totalSlots)
-    let items: [(Item, Int?)] = [
-      (.handgunAmmo, 99),
-      (.morphine, nil),
-      (.knife, nil),
-      (.glock17, 15),
-      (.handgunAmmo, 24),
-      (.morphine, nil),
-    ]
-    for (i, pair) in items.enumerated() where i < totalSlots {
-      data[i] = ItemSlotData(item: pair.0, quantity: pair.1)
-    }
-    storageGrid.setSlotData(data)
-  }
 }

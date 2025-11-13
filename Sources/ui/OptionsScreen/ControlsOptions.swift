@@ -13,7 +13,7 @@ final class ControlsOptionsPanel: OptionsPanel {
         button: "Key Bindings",
         action: {
           // TODO: Open key bindings screen
-          print("Key Bindings clicked")
+          logger.trace("Key Bindings clicked")
         }),
       Row(label: "Run Type", control: runTypePicker),
       Row(label: "Crouch Type", control: crouchTypePicker),

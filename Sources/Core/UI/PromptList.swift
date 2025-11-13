@@ -400,6 +400,4 @@ extension PromptList {
     public let iconNames: [String]
     public let label: String
   }
-
-  // PromptList.Anchor has been replaced with the centralized Alignment enum in Geometry.swift
 }

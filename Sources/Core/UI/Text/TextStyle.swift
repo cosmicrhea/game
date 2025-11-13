@@ -16,8 +16,8 @@ extension TextStyle {
     fontName: "ZF2334Squarish-Regular",
     //fontSize: 48,
     fontSize: 32,
-    color: Color(0.42069, 0.4971, 0.5320, 1), // based on gray500
-//    color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
+    color: Color(0.42069, 0.4971, 0.5320, 1),  // based on gray500
+    //    color: Color(red: 0.745, green: 0.749, blue: 0.655, alpha: 1.0),
     strokeWidth: 2,
     strokeColor: Color(red: 0.078, green: 0.059, blue: 0.055, alpha: 1.0)
   )
@@ -59,7 +59,8 @@ extension TextStyle {
     strokeColor: .gray700
   )
 
-  static let menuItemDisabled = menuItem
+  static let menuItemDisabled =
+    menuItem
     .withColor(.gray500)
     .withStrokeColor(.gray900)
 
@@ -99,18 +100,22 @@ extension TextStyle {
     strokeColor: .black
   )
 
+  static let slotListQuantity = itemName
+
   /// Creates a menu item style based on selection and disabled state
   static func menuItem(selected: Bool, disabled: Bool) -> TextStyle {
     let baseStyle = disabled ? menuItemDisabled : menuItem
 
     if selected && !disabled {
       // Red text with dark red stroke for selected items
-      return baseStyle
+      return
+        baseStyle
         .withColor(.rose)
         .withStroke(width: 2, color: Color(0.3, 0.1, 0.1, 1.0))  // Dark red stroke
     } else if selected && disabled {
       // Dark red for disabled AND selected items
-      return baseStyle
+      return
+        baseStyle
         .withColor(Color(0.4, 0.1, 0.1, 1.0))  // Dark red color
         .withStroke(width: 2, color: Color(0.2, 0.05, 0.05, 1.0))  // Darker red stroke
     } else if disabled {

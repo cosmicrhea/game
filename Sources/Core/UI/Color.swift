@@ -69,7 +69,6 @@ extension Color {
   }
 }
 
-
 // MARK: - Accent Color (dynamic, app-wide)
 
 // File-scoped storage for the dynamic accent color. Defaults to rose.
@@ -100,6 +99,8 @@ extension Color {
   public static let cyan = Color(0, 1, 1, 1)
   public static let magenta = Color(1, 0, 1, 1)
   public static let clear = Color(0, 0, 0, 0)
+
+  public static let almostBlack = Color(0.063, 0.063, 0.063, 1)
 
   public static let indigo = Color(0.3098, 0.2745, 0.8980, 1)
   public static let amber = Color(0.9608, 0.6196, 0.0431, 1)

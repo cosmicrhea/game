@@ -37,6 +37,7 @@ let package = Package(
     .package("stb-text-edit"),
     .package("stb-truetype"),
     .package("swift-image-formats"),
+    .package("theora"),
     .package("tinyexr", branch: "release"),
 
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
@@ -46,8 +47,7 @@ let package = Package(
     //    .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
     .package(url: "https://github.com/apple/swift-syntax", from: "509.0.0"),
 
-    // .package(url: "https://github.com/krzysztofzablocki/Inject", from: "1.2.4"),
-
+    //.package(url: "https://github.com/krzysztofzablocki/Inject", branch: "main"),
     // .package(url: "https://github.com/AdaEngine/msdf-atlas-gen", branch: "master"),
     // .package(url: "https://github.com/EvgenijLutz/HarfBuzz", branch: "main"),
   ],
@@ -55,7 +55,6 @@ let package = Package(
   targets: [
     .executableTarget(
       name: "Game",
-
       dependencies: [
         "GameMacros",
 
@@ -65,9 +64,8 @@ let package = Package(
         .product(name: "Markdown", package: "swift-markdown"),
         .product(name: "ImageFormats", package: "swift-image-formats"),
 
-        // .product(name: "Inject", package: "Inject"),
-
         // .product(name: "MSDFAtlasGen", package: "msdf-atlas-gen"),
+        //"Inject",
         // .product(name: "HarfBuzz", package: "HarfBuzz"),
 
         .product(name: "Assimp", package: "assimp"),
@@ -82,16 +80,17 @@ let package = Package(
         .product(name: "STBRectPack", package: "stb-rect-pack"),
         .product(name: "STBTextEdit", package: "stb-text-edit"),
         .product(name: "STBTrueType", package: "stb-truetype"),
+        .product(name: "Theora", package: "theora"),
         .product(name: "TinyEXR", package: "tinyexr"),
       ],
 
       path: ".",
 
       exclude: [
-        // "Documentation",
         "Sources/Assets",
         "Sources/Core/Build",
         "Sources/Core/Macros",
+        //"Sources/Core/Shell",
         "NOTES.md",
         "TODO.md",
         "README.md",
@@ -113,16 +112,15 @@ let package = Package(
 
       cSettings: [
         .define("GL_SILENCE_DEPRECATION", .when(platforms: [.macOS])),
-        .define("GLES_SILENCE_DEPRECATION", .when(platforms: [.iOS, .tvOS])),
+        .define("GLES_SILENCE_DEPRECATION", .when(platforms: [.iOS, .tvOS, .visionOS])),
       ],
 
       swiftSettings: [
-        .define("EDITOR", .when(platforms: [.macOS], configuration: .debug)),
-        .define("EMIT_FRONTEND_COMMAND_LINES", .when(platforms: [.macOS], configuration: .debug)),
+        //.define("EDITOR"),
       ],
 
       linkerSettings: [
-        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS], configuration: .debug))
+        .unsafeFlags(["-Xlinker", "-interposable"], .when(platforms: [.macOS]))
       ],
 
       plugins: [
@@ -142,7 +140,7 @@ let package = Package(
 
     .plugin(
       name: "GameBuildTools",
-      capability: .buildTool(),
+      capability: .buildTool,
       path: "Sources/Core/Build"
     ),
   ]

@@ -46,6 +46,43 @@ enum CreditsData {
       // https://sketchfab.com/ecler
       // SPAS-12, MP5, Beretta 92, FNX-45, Remington 870
       "Ecler",
+
+      // https://sketchfab.com/chambersu1996
+      // https://sketchfab.com/3d-models/animated-doors-and-a-window-demo-b6b7c0c6526b4a2f9f2ae4710cbb29d2
+      "ChamberSu1996",
+
+      // https://sketchfab.com/ahmagh2e
+      // https://sketchfab.com/3d-models/door-wooden-door-metal-60e611ffc3594495a34d01c660cd15ee
+      "Mehdi Shahsavan",
+
+      // https://sketchfab.com/3DWorkbench
+      // https://sketchfab.com/3d-models/armor-vest-b0431f9c3c724f9cbe0238f307c8cac0
+      "3DWorkbench",
+
+      // https://sketchfab.com/deadcomrade
+      // https://sketchfab.com/3d-models/kinghunter-armory-magnum-express-581bd228c198491ebefe83151feea296
+      "deadcomrade",
+
+      // https://sketchfab.com/MrMirai
+      // https://sketchfab.com/3d-models/table-with-metal-legs-02b1f16a578245ecaeaccf138fd91d7e
+      "Mirai",
+
+      // https://sketchfab.com/rayferric
+      // https://sketchfab.com/3d-models/armored-cabinet-d16736e243904210b938590a42c8ea88
+      "Ray Ferric",
+
+      // https://sketchfab.com/commonspence
+      // https://sketchfab.com/3d-models/way-out-fded0c6a2704434ead975115b75dd028"
+      "CommonSpence",
+
+      // https://sketchfab.com/Thomas_Crozelon
+      // https://sketchfab.com/3d-models/factory-props-ee08d29bc6cd411e845e50903e4060ca
+      // Cratelift, etc.
+      "Thomas Crozelon",
+
+      // https://sketchfab.com/azamata2019
+      // https://sketchfab.com/3d-models/fire-extinguisher-90c60e3bc9fb4fe9966e4cea3aac0e30
+      "Azamat Jonikulov",
     ],
 
     "Sound Designers": [
@@ -75,6 +112,17 @@ enum CreditsData {
       // CreatoDisplay-*.otf
       "Lafontype",
       "Anugrah Pasau",
+    ],
+
+    "Icon Designers": [
+      // https://phosphoricons.com
+      "Helena Zhang",
+      "Tobias Fried",
+
+      // http://ninmunanmu.com
+      // https://game-icons.net/1x1/john-colburn/pistol-gun.html
+      // gun.svg
+      "John Colburn",
     ],
 
     "Asset Pipeline Programming": [

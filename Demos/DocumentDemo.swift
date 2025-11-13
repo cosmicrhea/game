@@ -96,14 +96,14 @@ final class DocumentDemo: RenderLoop {
   private func handleDocumentFinished() {
     // Fade to black when document is finished
     isFadingToBlack = true
-    ScreenFadeFBO.shared.fadeToBlack(duration: 0.3) {
+    ScreenFade.shared.fadeToBlack(duration: 0.3) {
       self.isFadedOut = true
       self.isFadingToBlack = false
     }
   }
 
   private func fadeBackIn() {
-    ScreenFadeFBO.shared.fadeFromBlack(duration: 0.3) {
+    ScreenFade.shared.fadeFromBlack(duration: 0.3) {
       self.isFadedOut = false
     }
   }

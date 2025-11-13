@@ -202,7 +202,7 @@ final class PickupView: RenderLoop {
         self.loadingProgress.markCompleted()
       }
     } catch {
-      print("Failed to load model: \(error)")
+      logger.error("Failed to load model: \(error)")
       await MainActor.run {
         self.loadingProgress.markCompleted()
       }

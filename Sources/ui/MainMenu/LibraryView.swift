@@ -192,10 +192,10 @@ final class LibraryView: RenderLoop {
 
   private func handleDocumentSelection(_ document: Document?) {
     if let document = document {
-      print("Selected document: \(document.displayName ?? "Unknown")")
+      logger.trace("Selected document: \(document.displayName ?? "Unknown")")
       showDocument(document)
     } else {
-      print("Selected empty slot")
+      logger.trace("Selected empty slot")
       UISound.error()
     }
   }

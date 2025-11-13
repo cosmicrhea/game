@@ -209,7 +209,7 @@ class MeshInstance: @unchecked Sendable {
 
     if !hasAnimatedTransforms {
       // No animation data, use identity matrices to avoid distortion
-      print("No animated transforms found, using identity matrices")
+      logger.trace("No animated transforms found, using identity matrices")
       for index in 0..<boneTransforms.count {
         boneTransforms[index] = mat4(1)
       }
@@ -355,9 +355,9 @@ class MeshInstance: @unchecked Sendable {
       }
 
       // Debug: Print bone transform info
-      print("Skeletal mesh: \(boneTransforms.count) bone transforms")
+      logger.trace("Skeletal mesh: \(boneTransforms.count) bone transforms")
       for (index, transform) in boneTransforms.enumerated() {
-        print("Bone \(index): \(transform)")
+        logger.trace("Bone \(index): \(transform)")
       }
     }
 
@@ -936,9 +936,9 @@ extension Mesh {
 
     // Debug: Print bone information
     if numberOfBones > 0 {
-      print("Mesh has \(numberOfBones) bones, weight map has \(boneWeightMap.count) entries")
+      logger.trace("Mesh has \(numberOfBones) bones, weight map has \(boneWeightMap.count) entries")
       for (index, bone) in bones.enumerated() {
-        print("Bone \(index): \(bone.name ?? "Unknown") with \(bone.numberOfWeights) weights")
+        logger.trace("Bone \(index): \(bone.name ?? "Unknown") with \(bone.numberOfWeights) weights")
       }
     }
 

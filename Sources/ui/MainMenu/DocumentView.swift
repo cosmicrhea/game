@@ -331,4 +331,3 @@ final class DocumentView: RenderLoop {
     promptList.draw()
   }
 }
-  

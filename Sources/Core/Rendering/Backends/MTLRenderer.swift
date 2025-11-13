@@ -78,7 +78,7 @@ public final class MTLRenderer: Renderer {
   public func beginFrame(windowSize: Size) {
     // Store window size for actual Metal viewport
     currentViewportSize = windowSize
-    
+
     // Coordinate space size is set separately via setCoordinateSpaceSize
     // Default to window size if not explicitly set
     if coordinateSpaceSize == DESIGN_RESOLUTION && windowSize != DESIGN_RESOLUTION {
@@ -87,14 +87,14 @@ public final class MTLRenderer: Renderer {
 
     // Get next drawable from the layer
     guard let drawable = metalLayer.nextDrawable() else {
-      print("MTLRenderer: Failed to get next drawable")
+      logger.error("MTLRenderer: Failed to get next drawable")
       return
     }
     self.currentDrawable = drawable
 
     // Create command buffer for this frame
     guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-      print("MTLRenderer: Failed to create command buffer")
+      logger.error("MTLRenderer: Failed to create command buffer")
       return
     }
     self.currentCommandBuffer = commandBuffer
@@ -112,7 +112,7 @@ public final class MTLRenderer: Renderer {
 
     // Create render command encoder
     guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-      print("MTLRenderer: Failed to create render command encoder")
+      logger.error("MTLRenderer: Failed to create render command encoder")
       return
     }
     self.currentRenderEncoder = renderEncoder
@@ -125,7 +125,7 @@ public final class MTLRenderer: Renderer {
     )
     renderEncoder.setViewport(viewport)
   }
-  
+
   /// Sets the coordinate space size used for UI coordinates and orthographic matrix.
   /// This may differ from the actual Metal viewport when VIEWPORT_SCALING is enabled.
   func setCoordinateSpaceSize(_ size: Size) {
@@ -162,7 +162,7 @@ public final class MTLRenderer: Renderer {
   @MainActor
   public func attachToWindow(_ nsWindow: NSWindow) {
     guard let contentView = nsWindow.contentView else {
-      print("MTLRenderer: No content view found")
+      logger.error("MTLRenderer: No content view found")
       return
     }
 
@@ -173,7 +173,7 @@ public final class MTLRenderer: Renderer {
     // Update layer frame to match content view bounds
     metalLayer.frame = contentView.bounds
 
-    print("MTLRenderer: Metal layer attached to window")
+    logger.trace("MTLRenderer: Metal layer attached to window")
   }
 
   public func drawImage(
@@ -187,7 +187,7 @@ public final class MTLRenderer: Renderer {
       let vertexBuffer = imageVertexBuffer,
       let indexBuffer = imageIndexBuffer
     else {
-      print("MTLRenderer.drawImage: No active render encoder or buffers")
+      logger.warning("MTLRenderer.drawImage: No active render encoder or buffers")
       return
     }
 
@@ -210,7 +210,7 @@ public final class MTLRenderer: Renderer {
     let maxIndices = indexBuffer.length / MemoryLayout<UInt32>.size
 
     guard vertices.count <= maxVertices && indices.count <= maxIndices else {
-      print(
+      logger.error(
         "MTLRenderer.drawImage: Buffer overflow - vertices: \(vertices.count)/\(maxVertices), indices: \(indices.count)/\(maxIndices)"
       )
       return
@@ -233,7 +233,7 @@ public final class MTLRenderer: Renderer {
 
     // For now, we'll use a placeholder texture since we don't have texture management yet
     // TODO: Implement proper texture management
-    print("MTLRenderer.drawImage: textureID=\(textureID), rect=\(rect), tint=\(tint != nil ? "Color" : "nil")")
+    logger.trace("MTLRenderer.drawImage: textureID=\(textureID), rect=\(rect), tint=\(tint != nil ? "Color" : "nil")")
 
     // Draw stroke outline if specified
     if strokeWidth > 0, let strokeColor = strokeColor {
@@ -306,7 +306,7 @@ public final class MTLRenderer: Renderer {
       let vertexBuffer = imageVertexBuffer,
       let indexBuffer = imageIndexBuffer
     else {
-      print("MTLRenderer.drawImageRegion: No active render encoder or buffers")
+      logger.warning("MTLRenderer.drawImageRegion: No active render encoder or buffers")
       return
     }
 
@@ -345,7 +345,7 @@ public final class MTLRenderer: Renderer {
 
     // For now, we'll use a placeholder texture since we don't have texture management yet
     // TODO: Implement proper texture management
-    print(
+    logger.trace(
       "MTLRenderer.drawImageRegion: textureID=\(textureID), rect=\(rect), uv=\(uv), tint=\(tint != nil ? "Color" : "nil")"
     )
 
@@ -423,7 +423,7 @@ public final class MTLRenderer: Renderer {
       let vertexBuffer = imageVertexBuffer,
       let indexBuffer = imageIndexBuffer
     else {
-      print("MTLRenderer.drawImageTransformed: No active render encoder or buffers")
+      logger.warning("MTLRenderer.drawImageTransformed: No active render encoder or buffers")
       return
     }
 
@@ -475,7 +475,7 @@ public final class MTLRenderer: Renderer {
     var mvp = createOrthographicMatrix(viewportSize: currentViewportSize)
 
     // TODO: bind real texture by textureID when texture binding is implemented
-    print("MTLRenderer.drawImageTransformed: textureID=\(textureID), rotation=\(rotation)")
+    logger.trace("MTLRenderer.drawImageTransformed: textureID=\(textureID), rotation=\(rotation)")
 
     // Draw stroke outline if specified
     if strokeWidth > 0, let strokeColor = strokeColor {
@@ -540,12 +540,12 @@ public final class MTLRenderer: Renderer {
 
   public func setClipRect(_ rect: Rect?) {
     // TODO: Implement Metal scissor rect
-    print("MTLRenderer.setClipRect: \(rect != nil ? "Rect" : "nil")")
+    logger.trace("MTLRenderer.setClipRect: \(rect != nil ? "Rect" : "nil")")
   }
 
   public func setWireframeMode(_ enabled: Bool) {
     // TODO: Implement Metal wireframe mode
-    print("MTLRenderer.setWireframeMode: \(enabled)")
+    logger.trace("MTLRenderer.setWireframeMode: \(enabled)")
   }
 
   public func setClearColor(_ color: Color) {
@@ -751,7 +751,7 @@ public final class MTLRenderer: Renderer {
       let vertexBuffer = pathVertexBuffer,
       let indexBuffer = pathIndexBuffer
     else {
-      print("MTLRenderer.drawTriangles: No active render encoder or buffers")
+      logger.warning("MTLRenderer.drawTriangles: No active render encoder or buffers")
       return
     }
 
@@ -760,7 +760,7 @@ public final class MTLRenderer: Renderer {
     let maxIndices = indexBuffer.length / MemoryLayout<UInt32>.size
 
     guard vertices.count <= maxVertices && indices.count <= maxIndices else {
-      print(
+      logger.error(
         "MTLRenderer.drawTriangles: Buffer overflow - vertices: \(vertices.count)/\(maxVertices), indices: \(indices.count)/\(maxIndices)"
       )
       return

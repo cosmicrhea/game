@@ -36,7 +36,7 @@ final class DebugRendererImplementation: DebugRendererProcs {
   }
 
   func drawText3D(position: RVec3, text: String, color: Jolt.Color, height: Float) {
-    print(#function, text)
+    logger.trace("\(#function) \(text)")
     // For now, just ignore text rendering
     // TODO: Implement 3D text rendering if needed
   }

@@ -3,14 +3,14 @@ from os import getenv
 
 # SAMPLES = 1
 # SAMPLES = 128
-# SAMPLES = 1024
-SAMPLES = 4096
+SAMPLES = 1024
+#SAMPLES = 4096
 # SAMPLES = 8192
 
 name = bpy.path.display_name_from_filepath(bpy.data.filepath)
 
-if "puzzles/" in bpy.data.filepath:
-	name = "puzzles/" + name
+if "closeups/" in bpy.data.filepath:
+	name = "closeups/" + name
 
 scene = bpy.context.scene
 scene.name = name
@@ -25,12 +25,13 @@ scene.frame_start = 0
 
 scene.render.use_multiview = True
 scene.render.views_format = "MULTIVIEW"
-scene.render.resolution_x = 640
-scene.render.resolution_y = 400
+scene.render.resolution_x = 640 * 2
+scene.render.resolution_y = 400 * 2
 #scene.render.resolution_x = 320
 #scene.render.resolution_y = 200
 
 scene.cycles.use_adaptive_sampling = False
+#scene.cycles.use_adaptive_sampling = True
 scene.cycles.use_denoising = True
 #scene.cycles.use_denoising = False
 
@@ -40,8 +41,8 @@ scene.render.image_settings.file_format = "PNG"
 scene.render.image_settings.color_mode = "RGBA"
 
 world = bpy.data.worlds["World"]
-# world.mist_settings.start = 0.1  # 0.1?
-# world.mist_settings.depth = 100  # 20?
+world.mist_settings.start = 0.1  # 0.1?
+world.mist_settings.depth = 100  # 20?
 # world.mist_settings.falloff = "LINEAR"
 world.mist_settings.falloff = "LINEAR"
 
@@ -67,13 +68,13 @@ for camera in cameras:
 	if camera.type != "CAMERA" or "-noimp" in camera.name or camera.hide_render:
 		continue
 
-	camera_name = camera.name.removeprefix("Camera_")
+	camera_name = camera.name.removeprefix("Camera_").removeprefix("Camera.")
 
 	if getenv("CAMERAS") and getenv("CAMERAS") not in camera_name:
 		# print("Skipping camera " + camera_name, flush=True)
 		continue
 
-	if camera_name == "0":
+	if camera_name == "0" or camera_name == "debug" or camera_name == "debug_side":
 		scene.cycles.samples = 4
 	else:
 		scene.cycles.samples = SAMPLES

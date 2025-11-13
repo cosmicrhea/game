@@ -2,9 +2,12 @@
 @MainActor
 public final class Inventory {
   public var slots: [ItemSlotData?]
+  /// Slot index of the currently equipped weapon, if any
+  public var equippedWeaponIndex: Int? = nil
 
-  public init(slots: [ItemSlotData?]) {
+  public init(slots: [ItemSlotData?], equippedWeaponIndex: Int? = nil) {
     self.slots = slots
+    self.equippedWeaponIndex = equippedWeaponIndex
   }
 
   /// Global player 1 inventory
@@ -87,5 +90,69 @@ public final class Inventory {
     }
 
     return _player1!
+  }
+
+  /// Global storage inventory (contains one of each available item)
+  private nonisolated(unsafe) static var _storage: Inventory? = nil
+
+  public static var storage: Inventory {
+    if _storage == nil {
+      // Create storage inventory with one of each available item
+      var storageSlots: [ItemSlotData?] = []
+      
+      // Add all available items
+      let allItems: [Item] = [
+        // Recovery
+        .morphine,
+        // Melee
+        .knife,
+        // Handguns
+        .glock17,
+        .glock18,
+        .sigp320,
+        .beretta92,
+        .fnx45,
+        // Shotguns
+        .remington870,
+        .spas12,
+        // SMGs
+        .mp5sd,
+        // Launchers
+        .m32,
+        // Ammo
+        .handgunAmmo,
+        .grenadeRounds,
+        // Keys
+        .utilityKey,
+        .metroKey,
+        .tagKey,
+        // Other
+        .cryoGloves,
+        .lighter,
+        .catStatue,
+      ]
+      
+      // Add one of each item
+      for item in allItems {
+        // For weapons, add with default ammo quantity if applicable
+        let quantity: Int? = {
+          if case .weapon(_, _, let capacity, _) = item.kind, let capacity = capacity {
+            return capacity
+          }
+          return nil
+        }()
+        storageSlots.append(ItemSlotData(item: item, quantity: quantity))
+      }
+      
+      // Fill remaining slots with nil (empty)
+      let totalSlots = 6 * 4  // 6 columns * 4 rows = 24 slots
+      while storageSlots.count < totalSlots {
+        storageSlots.append(nil)
+      }
+      
+      _storage = Inventory(slots: storageSlots)
+    }
+
+    return _storage!
   }
 }

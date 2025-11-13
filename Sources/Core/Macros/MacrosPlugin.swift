@@ -7,5 +7,6 @@ struct MacrosPlugin: CompilerPlugin {
     EditableMacro.self,
     EditorFunctionMacro.self,
     ConfigMacro.self,
+    SceneScriptMacro.self,
   ]
 }

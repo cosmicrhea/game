@@ -1,0 +1,107 @@
+# Action
+regexp=Fra:.+\|.+\|(.+\|)?(.+\|)? .+
+colours=bright_black
+======
+# Scene, ViewLayer, Camera
+regexp=Peak:[\d\.KMGT]+ \| [^\|]+, [^\|]+(, [^\|]+)? \|
+colours=magenta
+======
+# Scene, ViewLayer, Camera | Prefix
+regexp=Peak:[\d\.KMGT]+ \|
+colours=bright_black
+======
+# Sample
+regexp=Sample \d+/\d+|Finished
+colours=bold white
+======
+# Finished
+regexp=Finished
+colours=green
+# ======
+# # Timestamp
+# regexp=^\d\d:\d\d:\d\d
+# colours=cyan
+# ======
+# # Info
+# regexp= INFO: .+
+# colours=magenta
+======
+# Frame
+regexp=^Fra:\d+
+colours=cyan
+======
+# Frame
+regexp=^Fra:
+colours=bright_black
+# ======
+# # Memory
+# regexp=Mem:[\d\.KMGT]+
+# colours=cyan
+# ======
+# # Memory Peak
+# regexp=Peak[:\s][\d\.KMGT]+
+# colours=bold cyan
+# ======
+# # Time
+# regexp=Time:\d\d:\d\d\.\d\d
+# colours=bold blue
+# ======
+# # Remaining
+# regexp=Remaining:\d\d:\d\d\.\d\d
+# colours=bold blue
+======
+# Saved
+regexp=^Saved: .+
+colours=bold green
+======
+# Saved
+regexp=^Saved:
+colours=green
+======
+# Misc
+regexp=^Reloading external .+|^Creating first entry|^Read (prefs|blend): .+|^Device with name .+ supports metal minimum requirements
+colours=bright_black
+======
+# Substance 3D in Blender
+regexp=^Substance 3D in Blender: .+
+colours=bright_black
+======
+# Blender quit
+regexp=^Blender quit
+colours=bold bright_black
+======
+# Blender killed
+regexp=^Blender killed
+colours=bold red
+======
+# Blender version
+regexp=^Blender .+ \(hash .+ built .+\)
+colours=bold white
+=======
+# Warnings
+regexp=^Warning: .+|^WARN \(bgl\): .+
+colours=bright_black
+=======
+# Warnings
+regexp=^Warning:|^WARN \(bgl\):
+colours=yellow
+=======
+# Pipes
+regexp= \|
+colours=bright_black
+=======
+# Broken links
+regexp=Info: LIB: .+ missing from .+
+colours=red
+=======
+# Library reads
+regexp=Info: Read library:\s+'.+', '.+', parent '.+'
+colours=bright_black
+=======
+# Export Log
+regexp=\d\d:\d\d:\d\d | INFO: .+
+colours=bright_black
+======
+# Finished glTF export
+regexp=Finished glTF 2.0 export
+colours=green

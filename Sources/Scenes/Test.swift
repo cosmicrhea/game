@@ -1,4 +1,5 @@
-@objcMembers class Test: Script {
+@SceneScript
+class Test: Script {
 
   var catStatue: Node!
 
@@ -11,7 +12,7 @@
     if catStatue.isHidden {
       UISound.select()
       catStatue.isHidden = false
-      print("showing cat!!!!")
+      logger.trace("showing cat!!!!")
     }
   }
 
@@ -24,7 +25,7 @@
     say([
       "The stove is cold and lifeless.",
       "There's nothing cooking right now.",
-      "It looks like it hasn't been used in a while."
+      "It looks like it hasn't been used in a while.",
     ])
   }
 
