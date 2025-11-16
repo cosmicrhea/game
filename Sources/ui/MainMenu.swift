@@ -68,6 +68,20 @@
       return
     }
 
+    // Handle map cycling when on map tab
+    if tabs.activeTab == .map {
+      switch key {
+      case .z:
+        mapView.cycleMap(-1)
+        return
+      case .c:
+        mapView.cycleMap(1)
+        return
+      default:
+        break
+      }
+    }
+
     switch key {
     case .escape:
       // Exit main menu - could be handled by parent
@@ -117,7 +131,46 @@
     {
       tabs.draw()
       objectiveCallout.draw()
+
+      // Draw map name when on map tab
+      if tabs.activeTab == .map {
+        drawMapName()
+      }
     }
+  }
+
+  private func drawMapName() {
+    let iconSpacing: Float = 72
+    let totalWidth = Float(MainMenuTabs.Tab.allCases.count - 1) * iconSpacing
+    let isCentered = Config.current.centeredLayout
+    let startX: Float = {
+      if isCentered {
+        return (Float(Engine.viewportSize.width) - totalWidth) * 0.5
+      } else {
+        return Float(Engine.viewportSize.width) - totalWidth - marginX
+      }
+    }()
+    let iconY: Float = Float(Engine.viewportSize.height) - 96
+    let promptY = iconY
+    let promptSpacing: Float = 64
+    let prevPromptX = startX - promptSpacing
+    let nextPromptX = startX + totalWidth + promptSpacing
+
+    let mapPromptY = promptY - 48
+    // Use display name from MapView (which may have custom mappings)
+    let mapNameRaw = mapView.currentMapDisplayName
+    // Format map name: replace underscores with spaces and capitalize
+    // TODO: make some kind of String extension for this
+    let mapName = mapNameRaw.replacingOccurrences(of: "_", with: " ")
+      .split(separator: " ")
+      .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+      .joined(separator: " ")
+    let mapNameX = (prevPromptX - 64 + nextPromptX + 64) * 0.5
+    mapName.draw(
+      at: Point(mapNameX, mapPromptY),
+      style: .menuItem.withFontSize(24),
+      anchor: .center
+    )
   }
 
 }
@@ -150,6 +203,8 @@ final class MainMenuTabs {
   // Navigation prompts
   private let prevPrompt = Prompt([["keyboard_q"], ["xbox_lb"], ["playstation_trigger_l1"]])
   private let nextPrompt = Prompt([["keyboard_e"], ["xbox_rb"], ["playstation_trigger_r1"]])
+  private let prevMapPrompt = Prompt([["keyboard_z"], ["xbox_dpad_left"], ["playstation_dpad_left"]])
+  private let nextMapPrompt = Prompt([["keyboard_c"], ["xbox_dpad_right"], ["playstation_dpad_right"]])
 
   // Icon scaling
   private let baseIconSize: Float = 48.0
@@ -331,6 +386,15 @@ final class MainMenuTabs {
     let nextPromptX = startX + totalWidth + promptSpacing
     nextPrompt.targetIconHeight = 32
     nextPrompt.draw(at: Point(nextPromptX, promptY), anchor: .center)
+
+    // Draw map navigation prompts below the tab prompts (only when on map tab)
+    if currentTab == .map {
+      let mapPromptY = promptY - 48  // Position below existing prompts
+      prevMapPrompt.targetIconHeight = 32
+      prevMapPrompt.draw(at: Point(prevPromptX, mapPromptY), anchor: .center)
+      nextMapPrompt.targetIconHeight = 32
+      nextMapPrompt.draw(at: Point(nextPromptX, mapPromptY), anchor: .center)
+    }
 
     // Draw tab icons
     for (index, tab) in Tab.allCases.enumerated() {

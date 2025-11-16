@@ -8,13 +8,14 @@ import ObjectiveC.runtime
   static var shared: MainLoop?
 
   // Scene configuration
-  // private var sceneName: String = "test"
-  private var sceneName: String = "shooting_range"
-  // private var sceneName: String = "radar_office"
+  // private(set) var sceneName: String = "test"
+  // private(set) var sceneName: String = "test_map"
+  private(set) var sceneName: String = "shooting_range"
+  // private(set) var sceneName: String = "radar_office"
 
   // Gameplay state
-  private var playerPosition: vec3 = vec3(0, 0, 0)
-  private var playerRotation: Float = 0.0
+  private(set) var playerPosition: vec3 = vec3(0, 0, 0)
+  private(set) var playerRotation: Float = 0.0
   private var moveSpeed: Float = 3.0
   private var rotationSpeed: Float = 2.0  // radians per second
   private var smoothedFPS: Float = 60.0
@@ -28,7 +29,7 @@ import ObjectiveC.runtime
   private var foregroundMeshInstances: [MeshInstance] = []
 
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
-  private let capsuleHeightOffset: Float = 1.25
+  @Editor(0.0...2.0) var capsuleHeightOffset: Float = 1.2
 
   // Footstep tracking
   private var footstepAccumulatedDistance: Float = 0.0
@@ -69,6 +70,9 @@ import ObjectiveC.runtime
   private var cachedActionQueryResults: [JPH_CollideShapeResult] = []  // Cached action query results
   private var cachedTriggerQueryResults: [JPH_CollideShapeResult] = []  // Cached trigger query results
   private let queryCacheInterval: UInt32 = 2  // Run queries every 2 frames (30fps effective rate)
+
+  // Debug camera override mode - when enabled, camera triggers are ignored
+  private var isDebugCameraOverrideMode: Bool = false
 
   @Editor var visualizePhysics: Bool = false
   @Editor var disableDepth: Bool = false
@@ -684,11 +688,17 @@ import ObjectiveC.runtime
         showMainMenu(tab: .map)
 
       case .escape:
-        // Could be used for other gameplay features
+        // Exit debug camera override mode if active
+        if isDebugCameraOverrideMode {
+          UISound.select()
+          isDebugCameraOverrideMode = false
+        }
         break
 
       case .semicolon:
         UISound.select()
+        // Enter debug camera override mode when manually cycling cameras
+        isDebugCameraOverrideMode = true
         prerenderedEnvironment?.cycleToNextCamera()
         selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
         // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
@@ -696,6 +706,8 @@ import ObjectiveC.runtime
 
       case .apostrophe:
         UISound.select()
+        // Enter debug camera override mode when manually cycling cameras
+        isDebugCameraOverrideMode = true
         prerenderedEnvironment?.cycleToPreviousCamera()
         selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
         // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
@@ -703,6 +715,8 @@ import ObjectiveC.runtime
 
       case .graveAccent:
         UISound.select()
+        // Enter debug camera override mode and switch to debug camera
+        isDebugCameraOverrideMode = true
         prerenderedEnvironment?.switchToDebugCamera()
         selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
         // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
@@ -1183,6 +1197,12 @@ import ObjectiveC.runtime
   }
 
   private func handleCameraTrigger(cameraName: String) {
+    // Ignore camera triggers when in debug camera override mode
+    if isDebugCameraOverrideMode {
+      logger.trace("📷 Camera trigger '\(cameraName)' ignored: debug camera override mode is active")
+      return
+    }
+
     // Extract area from camera name
     // Examples: "hallway_1" -> "hallway", "Entry_1" -> "Entry_1"
     let triggerArea: String
@@ -1817,10 +1837,13 @@ import ObjectiveC.runtime
 
 extension MainLoop {
   private func drawDebugInfo() {
+    // Show "(override)" suffix when in debug camera override mode
+    let cameraDisplayName = isDebugCameraOverrideMode ? "\(selectedCamera) (override)" : selectedCamera
+
     let overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
       //"Scene: \(sceneName)",
-      "Camera: \(selectedCamera)",
+      "Camera: \(cameraDisplayName)",
 
       String(
         format: "Position: %.2f, %.2f, %.2f",

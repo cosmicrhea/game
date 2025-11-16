@@ -1,7 +1,7 @@
 import struct GLFW.Color
 
 extension Color {
-  public init(_ glfwColor: GLFW.Color) {
+  public init(glfwColor: GLFW.Color) {
     self.red = Float(glfwColor.redBits) / 255.0
     self.green = Float(glfwColor.greenBits) / 255.0
     self.blue = Float(glfwColor.blueBits) / 255.0

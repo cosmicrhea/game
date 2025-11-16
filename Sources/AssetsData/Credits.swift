@@ -123,6 +123,10 @@ enum CreditsData {
       // https://game-icons.net/1x1/john-colburn/pistol-gun.html
       // gun.svg
       "John Colburn",
+
+      // https://tabler.io/icons
+      // MapHeading.svg (aka navigation.svg)
+      "Tabler Icons",
     ],
 
     "Asset Pipeline Programming": [

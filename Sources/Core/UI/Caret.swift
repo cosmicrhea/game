@@ -232,7 +232,10 @@ public final class Caret {
           in: rect,
           tint: finalTint,
           strokeWidth: strokeWidth ?? 0,
-          strokeColor: strokeColor
+          strokeColor: strokeColor,
+          shadowColor: nil,
+          shadowOffset: Point(0, 0),
+          shadowBlur: 0
         )
       }
     }

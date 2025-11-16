@@ -1,3 +1,5 @@
+import GLMath
+
 /// A color value with red, green, blue, and alpha components.
 public struct Color: Sendable, Equatable, RawRepresentable {
   /// The red component (0.0 to 1.0).
@@ -38,6 +40,16 @@ public struct Color: Sendable, Equatable, RawRepresentable {
   public func withAlphaComponent(_ alpha: Float) -> Color {
     let clampedAlpha = max(0.0, min(1.0, alpha))
     return Color(red: red, green: green, blue: blue, alpha: clampedAlpha)
+  }
+
+  /// Returns a vec3 representation of this color (RGB components only)
+  public var vec3Representation: vec3 {
+    return vec3(red, green, blue)
+  }
+
+  /// Returns a vec4 representation of this color (RGBA components)
+  public var vec4Representation: vec4 {
+    return vec4(red, green, blue, alpha)
   }
 }
 

@@ -8,8 +8,8 @@ final class DebugRendererImplementation: DebugRendererProcs {
     let fromVec = vec3(Float(from.x), Float(from.y), Float(from.z))
     let toVec = vec3(Float(to.x), Float(to.y), Float(to.z))
 
-    // Convert Jolt.Color (RGBA packed UInt32) to Color
-    let lineColor = Color(color)
+    // Convert Jolt.Color (ABGR packed UInt32) to Color
+    let lineColor = Color(abgr: color)
 
     MainActor.assumeIsolated {
       // Use GLRenderer directly instead of drawDebugLine

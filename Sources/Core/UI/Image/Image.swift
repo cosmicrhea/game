@@ -71,6 +71,9 @@ public struct Image: Sendable {
   ///   - tint: Optional color tint to apply to the image.
   ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
   ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
+  ///   - shadowColor: Optional shadow color. If nil, no shadow is applied.
+  ///   - shadowOffset: Offset of the shadow from the image in points.
+  ///   - shadowBlur: Blur radius of the shadow in points. If 0, no blur is applied.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   public func draw(
     at point: Point,
@@ -78,6 +81,9 @@ public struct Image: Sendable {
     tint: Color? = nil,
     strokeWidth: Float? = nil,
     strokeColor: Color? = nil,
+    shadowColor: Color? = nil,
+    shadowOffset: Point = Point(0, 0),
+    shadowBlur: Float = 0,
     context: GraphicsContext? = nil
   ) {
     let ctx = context ?? GraphicsContext.current
@@ -104,7 +110,10 @@ public struct Image: Sendable {
       in: adjustedRect,
       tint: tint,
       strokeWidth: strokeWidth ?? 0,
-      strokeColor: strokeColor
+      strokeColor: strokeColor,
+      shadowColor: shadowColor,
+      shadowOffset: shadowOffset,
+      shadowBlur: shadowBlur
     )
   }
 
@@ -114,12 +123,18 @@ public struct Image: Sendable {
   ///   - tint: Optional color tint to apply to the image.
   ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
   ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
+  ///   - shadowColor: Optional shadow color. If nil, no shadow is applied.
+  ///   - shadowOffset: Offset of the shadow from the image in points.
+  ///   - shadowBlur: Blur radius of the shadow in points. If 0, no blur is applied.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   public func draw(
     in rect: Rect,
     tint: Color? = nil,
     strokeWidth: Float? = nil,
     strokeColor: Color? = nil,
+    shadowColor: Color? = nil,
+    shadowOffset: Point = Point(0, 0),
+    shadowBlur: Float = 0,
     context: GraphicsContext? = nil
   ) {
     let ctx = context ?? GraphicsContext.current
@@ -145,7 +160,10 @@ public struct Image: Sendable {
       in: adjustedRect,
       tint: tint,
       strokeWidth: strokeWidth ?? 0,
-      strokeColor: strokeColor
+      strokeColor: strokeColor,
+      shadowColor: shadowColor,
+      shadowOffset: shadowOffset,
+      shadowBlur: shadowBlur
     )
   }
 
@@ -157,6 +175,9 @@ public struct Image: Sendable {
   ///   - tint: Optional color tint.
   ///   - strokeWidth: Optional stroke width in points. If 0 or nil, no stroke is applied.
   ///   - strokeColor: Optional stroke color. Ignored if strokeWidth is 0 or nil.
+  ///   - shadowColor: Optional shadow color. If nil, no shadow is applied.
+  ///   - shadowOffset: Offset of the shadow from the image in points.
+  ///   - shadowBlur: Blur radius of the shadow in points. If 0, no blur is applied.
   ///   - context: Target `GraphicsContext`; defaults to `GraphicsContext.current`.
   public func draw(
     in rect: Rect,
@@ -165,6 +186,9 @@ public struct Image: Sendable {
     tint: Color? = nil,
     strokeWidth: Float? = nil,
     strokeColor: Color? = nil,
+    shadowColor: Color? = nil,
+    shadowOffset: Point = Point(0, 0),
+    shadowBlur: Float = 0,
     context: GraphicsContext? = nil
   ) {
     let ctx = context ?? GraphicsContext.current
@@ -191,7 +215,10 @@ public struct Image: Sendable {
       scale: scale,
       tint: tint,
       strokeWidth: strokeWidth ?? 0,
-      strokeColor: strokeColor
+      strokeColor: strokeColor,
+      shadowColor: shadowColor,
+      shadowOffset: shadowOffset,
+      shadowBlur: shadowBlur
     )
   }
 
@@ -205,6 +232,9 @@ public struct Image: Sendable {
     tint: Color? = nil,
     strokeWidth: Float? = nil,
     strokeColor: Color? = nil,
+    shadowColor: Color? = nil,
+    shadowOffset: Point = Point(0, 0),
+    shadowBlur: Float = 0,
     context: GraphicsContext? = nil
   ) {
     let drawSize = size ?? naturalSize
@@ -216,6 +246,9 @@ public struct Image: Sendable {
       tint: tint,
       strokeWidth: strokeWidth,
       strokeColor: strokeColor,
+      shadowColor: shadowColor,
+      shadowOffset: shadowOffset,
+      shadowBlur: shadowBlur,
       context: context
     )
   }

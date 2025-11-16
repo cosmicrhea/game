@@ -35,7 +35,13 @@ public protocol Renderer {
   ///   - tint: Optional color tint to apply to the image.
   ///   - strokeWidth: Width of the stroke in points. If 0, no stroke is applied.
   ///   - strokeColor: Color of the stroke. Ignored if strokeWidth is 0.
-  func drawImage(textureID: UInt64, in rect: Rect, tint: Color?, strokeWidth: Float, strokeColor: Color?)
+  ///   - shadowColor: Optional shadow color. If nil, no shadow is applied.
+  ///   - shadowOffset: Offset of the shadow from the image in points.
+  ///   - shadowBlur: Blur radius of the shadow in points. If 0, no blur is applied.
+  func drawImage(
+    textureID: UInt64, in rect: Rect, tint: Color?, strokeWidth: Float, strokeColor: Color?,
+    shadowColor: Color?, shadowOffset: Point, shadowBlur: Float
+  )
 
   /// Draws an image with translation/rotation/scale around its center.
   /// - Parameters:
@@ -46,6 +52,9 @@ public protocol Renderer {
   ///   - tint: Optional color tint.
   ///   - strokeWidth: Width of the stroke in points. If 0, no stroke is applied.
   ///   - strokeColor: Color of the stroke. Ignored if strokeWidth is 0.
+  ///   - shadowColor: Optional shadow color. If nil, no shadow is applied.
+  ///   - shadowOffset: Offset of the shadow from the image in points.
+  ///   - shadowBlur: Blur radius of the shadow in points. If 0, no blur is applied.
   func drawImageTransformed(
     textureID: UInt64,
     in rect: Rect,
@@ -53,7 +62,10 @@ public protocol Renderer {
     scale: Point,
     tint: Color?,
     strokeWidth: Float,
-    strokeColor: Color?
+    strokeColor: Color?,
+    shadowColor: Color?,
+    shadowOffset: Point,
+    shadowBlur: Float
   )
 
   /// Draws a region of an image with the specified texture ID and UV coordinates.
@@ -64,7 +76,8 @@ public protocol Renderer {
   ///   - tint: Optional color tint to apply to the image.
   ///   - strokeWidth: Width of the stroke in points. If 0, no stroke is applied.
   ///   - strokeColor: Color of the stroke. Ignored if strokeWidth is 0.
-  func drawImageRegion(textureID: UInt64, in rect: Rect, uv: Rect, tint: Color?, strokeWidth: Float, strokeColor: Color?)
+  func drawImageRegion(
+    textureID: UInt64, in rect: Rect, uv: Rect, tint: Color?, strokeWidth: Float, strokeColor: Color?)
 
   // MARK: - Gradients
 

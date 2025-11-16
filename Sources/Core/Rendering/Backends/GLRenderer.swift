@@ -121,7 +121,10 @@ public final class GLRenderer: Renderer {
     in rect: Rect,
     tint: Color?,
     strokeWidth: Float,
-    strokeColor: Color?
+    strokeColor: Color?,
+    shadowColor: Color?,
+    shadowOffset: Point,
+    shadowBlur: Float
   ) {
     // Apply coordinate flipping if the current GraphicsContext is flipped
     let finalRect: Rect
@@ -191,6 +194,59 @@ public final class GLRenderer: Renderer {
       glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
       imageProgram.setInt("uTexture", value: 0)
 
+      // Draw CoreGraphics-style drop shadow: uniform Gaussian blur simulation
+      if let shadowColor = shadowColor, shadowBlur > 0 {
+        // Use a grid-based sampling pattern to approximate Gaussian blur
+        // This creates a more uniform blur like CoreGraphics instead of a circular halo
+        let blurRadius = shadowBlur
+        let gridSize = max(3, Int(blurRadius / 2.0))  // Grid size based on blur radius
+        let totalSamples = gridSize * gridSize
+
+        // Sample in a grid pattern with Gaussian-like falloff
+        for y in 0..<gridSize {
+          for x in 0..<gridSize {
+            // Normalize grid position to -1 to 1 range
+            let normX = (Float(x) / Float(gridSize - 1)) * 2.0 - 1.0
+            let normY = (Float(y) / Float(gridSize - 1)) * 2.0 - 1.0
+
+            // Calculate distance from center for Gaussian falloff
+            let dist = sqrt(normX * normX + normY * normY)
+            if dist > 1.0 { continue }  // Skip samples outside unit circle
+
+            // Gaussian-like falloff: e^(-(d^2) / (2*sigma^2))
+            // Using sigma = 0.4 for a nice falloff
+            let sigma: Float = 0.4
+            let gaussianWeight = exp(-(dist * dist) / (2.0 * sigma * sigma))
+
+            // Calculate spread based on distance and blur radius
+            let spread = dist * blurRadius
+            let spreadX = normX * spread
+            let spreadY = normY * spread
+
+            // Combine base offset with spread
+            let layerOffsetX = shadowOffset.x + spreadX
+            let layerOffsetY = shadowOffset.y + spreadY
+
+            // Opacity based on Gaussian weight
+            let opacity = gaussianWeight * shadowColor.alpha
+
+            imageProgram.setVec4("uTint", value: (shadowColor.red, shadowColor.green, shadowColor.blue, opacity))
+
+            // Create shadow vertices with offset
+            var shadowVerts = verts
+            for i in stride(from: 0, to: shadowVerts.count, by: 4) {
+              shadowVerts[i] += layerOffsetX
+              shadowVerts[i + 1] += layerOffsetY
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBufferData(GL_ARRAY_BUFFER, shadowVerts.count * MemoryLayout<Float>.stride, shadowVerts, GL_DYNAMIC_DRAW)
+
+            glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+          }
+        }
+      }
+
       // Draw stroke outline if specified (similar to text stroke)
       if strokeWidth > 0, let strokeColor = strokeColor {
         imageProgram.setVec4(
@@ -244,7 +300,10 @@ public final class GLRenderer: Renderer {
     scale: Point,
     tint: Color?,
     strokeWidth: Float,
-    strokeColor: Color?
+    strokeColor: Color?,
+    shadowColor: Color?,
+    shadowOffset: Point,
+    shadowBlur: Float
   ) {
     // Apply coordinate flipping if the current GraphicsContext is flipped
     let finalRect: Rect
@@ -331,6 +390,68 @@ public final class GLRenderer: Renderer {
       glActiveTexture(GL_TEXTURE0)
       glBindTexture(GL_TEXTURE_2D, GLuint(textureID))
       imageProgram.setInt("uTexture", value: 0)
+
+      // Draw CoreGraphics-style drop shadow: uniform Gaussian blur simulation
+      if let shadowColor = shadowColor, shadowBlur > 0 {
+        // Rotate shadow offset to match image rotation
+        let c = cos(rotation)
+        let s = sin(rotation)
+        let rotatedOffsetX = shadowOffset.x * c - shadowOffset.y * s
+        let rotatedOffsetY = shadowOffset.x * s + shadowOffset.y * c
+
+        // Use a grid-based sampling pattern to approximate Gaussian blur
+        // This creates a more uniform blur like CoreGraphics instead of a circular halo
+        let blurRadius = shadowBlur
+        let gridSize = max(3, Int(blurRadius / 2.0))  // Grid size based on blur radius
+
+        // Sample in a grid pattern with Gaussian-like falloff
+        for y in 0..<gridSize {
+          for x in 0..<gridSize {
+            // Normalize grid position to -1 to 1 range
+            let normX = (Float(x) / Float(gridSize - 1)) * 2.0 - 1.0
+            let normY = (Float(y) / Float(gridSize - 1)) * 2.0 - 1.0
+
+            // Calculate distance from center for Gaussian falloff
+            let dist = sqrt(normX * normX + normY * normY)
+            if dist > 1.0 { continue }  // Skip samples outside unit circle
+
+            // Gaussian-like falloff: e^(-(d^2) / (2*sigma^2))
+            // Using sigma = 0.4 for a nice falloff
+            let sigma: Float = 0.4
+            let gaussianWeight = exp(-(dist * dist) / (2.0 * sigma * sigma))
+
+            // Calculate spread based on distance and blur radius
+            let spread = dist * blurRadius
+            let spreadX = normX * spread
+            let spreadY = normY * spread
+
+            // Rotate spread to match image rotation
+            let rotatedSpreadX = spreadX * c - spreadY * s
+            let rotatedSpreadY = spreadX * s + spreadY * c
+
+            // Combine base offset with rotated spread
+            let layerOffsetX = rotatedOffsetX + rotatedSpreadX
+            let layerOffsetY = rotatedOffsetY + rotatedSpreadY
+
+            // Opacity based on Gaussian weight
+            let opacity = gaussianWeight * shadowColor.alpha
+
+            imageProgram.setVec4("uTint", value: (shadowColor.red, shadowColor.green, shadowColor.blue, opacity))
+
+            // Create shadow vertices with offset
+            var shadowVerts = verts
+            for i in stride(from: 0, to: shadowVerts.count, by: 4) {
+              shadowVerts[i] += layerOffsetX
+              shadowVerts[i + 1] += layerOffsetY
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBufferData(GL_ARRAY_BUFFER, shadowVerts.count * MemoryLayout<Float>.stride, shadowVerts, GL_DYNAMIC_DRAW)
+
+            glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+          }
+        }
+      }
 
       // Draw stroke outline if specified
       if strokeWidth > 0, let strokeColor = strokeColor {
@@ -728,11 +849,16 @@ public final class GLRenderer: Renderer {
   }
 
   public func drawRadialGradient(_ gradient: Gradient, in rect: Rect, center: Point) {
-    // TODO: Implement OpenGL gradient rendering
-    // For now, fall back to solid color (first color stop)
-    if let firstColor = gradient.colorStops.first?.color {
-      drawRect(rect, color: firstColor)
+    // Validate rect to prevent artifacts
+    guard rect.width > 0 && rect.height > 0,
+      rect.origin.x.isFinite && rect.origin.y.isFinite,
+      rect.maxX.isFinite && rect.maxY.isFinite
+    else {
+      return  // Skip if rect is invalid
     }
+
+    // Use the proper gradient rendering with type 1 (radial)
+    drawGradient(gradient, in: rect, type: 1, angle: 0, center: center)
   }
 
   public func drawRadialGradient(_ gradient: Gradient, in path: BezierPath, center: Point) {
@@ -1006,25 +1132,61 @@ public final class GLRenderer: Renderer {
       textProgram.setMat4("uMVP", value: buffer.baseAddress!)
     }
 
-    // Draw shadow first if specified
+    // Draw CoreGraphics-style drop shadow: uniform Gaussian blur simulation
     if let shadowColor = shadowColor, shadowBlur > 0 {
-      textProgram.setVec4("uColor", value: (shadowColor.red, shadowColor.green, shadowColor.blue, shadowColor.alpha))
+      // Use a grid-based sampling pattern to approximate Gaussian blur
+      // This creates a more uniform blur like CoreGraphics instead of a circular halo
+      let blurRadius = shadowBlur
+      let gridSize = max(3, Int(blurRadius / 2.0))  // Grid size based on blur radius
 
-      // Create shadow vertices with offset
-      var shadowVertices = vertices
-      for i in stride(from: 0, to: shadowVertices.count, by: 8) {
-        shadowVertices[i] += shadowOffset.x
-        shadowVertices[i + 1] += shadowOffset.y
+      // Sample in a grid pattern with Gaussian-like falloff
+      for y in 0..<gridSize {
+        for x in 0..<gridSize {
+          // Normalize grid position to -1 to 1 range
+          let normX = (Float(x) / Float(gridSize - 1)) * 2.0 - 1.0
+          let normY = (Float(y) / Float(gridSize - 1)) * 2.0 - 1.0
+
+          // Calculate distance from center for Gaussian falloff
+          let dist = sqrt(normX * normX + normY * normY)
+          if dist > 1.0 { continue }  // Skip samples outside unit circle
+
+          // Gaussian-like falloff: e^(-(d^2) / (2*sigma^2))
+          // Using sigma = 0.4 for a nice falloff
+          let sigma: Float = 0.4
+          let gaussianWeight = exp(-(dist * dist) / (2.0 * sigma * sigma))
+
+          // Calculate spread based on distance and blur radius
+          let spread = dist * blurRadius
+          let spreadX = normX * spread
+          let spreadY = normY * spread
+
+          // Combine base offset with spread
+          let layerOffsetX = shadowOffset.x + spreadX
+          let layerOffsetY = shadowOffset.y + spreadY
+
+          // Opacity based on Gaussian weight
+          let opacity = gaussianWeight * shadowColor.alpha
+
+          textProgram.setVec4("uColor", value: (shadowColor.red, shadowColor.green, shadowColor.blue, opacity))
+
+          // Create shadow vertices with offset
+          var shadowVertices = vertices
+          for i in stride(from: 0, to: shadowVertices.count, by: 8) {
+            shadowVertices[i] += layerOffsetX
+            shadowVertices[i + 1] += layerOffsetY
+          }
+
+          glBindBuffer(GL_ARRAY_BUFFER, vbo)
+          glBufferData(
+            GL_ARRAY_BUFFER, shadowVertices.count * MemoryLayout<Float>.stride, shadowVertices, GL_DYNAMIC_DRAW)
+
+          glActiveTexture(GL_TEXTURE0)
+          glBindTexture(GL_TEXTURE_2D, atlas.texture)
+          textProgram.setInt("uAtlas", value: 0)
+
+          glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
+        }
       }
-
-      glBindBuffer(GL_ARRAY_BUFFER, vbo)
-      glBufferData(GL_ARRAY_BUFFER, shadowVertices.count * MemoryLayout<Float>.stride, shadowVertices, GL_DYNAMIC_DRAW)
-
-      glActiveTexture(GL_TEXTURE0)
-      glBindTexture(GL_TEXTURE_2D, atlas.texture)
-      textProgram.setInt("uAtlas", value: 0)
-
-      glDrawElements(GL_TRIANGLES, GLsizei(indices.count), GL_UNSIGNED_INT, nil)
     }
 
     // Draw outline if specified

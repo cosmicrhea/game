@@ -141,6 +141,7 @@ extension Item {
     id: "cryo_gloves",
     name: "Cryogenic Gloves",
     description: "A pair of gloves suitable for handling supercooled liquids.",
+    inspectionDistance: 0.4,
   )
 
   static let lighter = Item(

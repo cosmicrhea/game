@@ -260,31 +260,32 @@ public final class Engine: NSObject {
 
   private func setupLoops() {
     loops = [
+      MainLoop(),
+      TitleScreenStack(),
+
       // DialogDemo(),
-      MapView()
+      MapView(),
       // ItemView(item: .sigp320),
       // PickupView(item: .catStatue),
-      // ItemStorageView(),
-      // TitleScreenStack(),
-      // MainLoop(),
-      // MainMenu(),
+      ItemStorageView(),
+      //MainMenu(),
       // UIDemo(),
       // DocumentDemo(),
-      // MovieDemo(),
+      MovieDemo(),
       // //ModelViewer(),
-      // CreditsScreen(),
+      CreditsScreen(),
 
       // // InventoryView(),
       // GradientDemo(),
-      //SVGDemo(),
-      //SlotDemo(),
-      //SlotGridDemo(),
+      SVGDemo(),
+      SlotDemo(),
+      SlotGridDemo(),
       // LibraryView(),
-      //CalloutDemo(),
-      //PromptListDemo(),
-      //FontsDemo(),
-      //PathDemo(),
-      //TextEffectsDemo(),
+      CalloutDemo(),
+      PromptListDemo(),
+      FontsDemo(),
+      PathDemo(),
+      TextEffectsDemo(),
       //FadeDemo(),
     ]
 

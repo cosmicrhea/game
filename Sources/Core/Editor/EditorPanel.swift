@@ -36,6 +36,7 @@ public final class EditorPanel: OptionsPanel {
   private var sliders: [Slider] = []
   private var switches: [Switch] = []
   private var pickers: [Picker] = []
+  private var colorPickers: [ColorPicker] = []
   private var currentObject: Editing?
   private var editorWindowSize: Size = Size(520, 720)
   private var noEditorMessage: String? = nil
@@ -99,6 +100,7 @@ public final class EditorPanel: OptionsPanel {
       let isSlider = rows[i].control is Slider
       let isSwitch = rows[i].control is Switch
       let isPicker = rows[i].control is Picker
+      let isColorPicker = rows[i].control is ColorPicker
 
       // Size by control type
       let controlWidth: Float
@@ -113,6 +115,9 @@ public final class EditorPanel: OptionsPanel {
       } else if isPicker {
         controlWidth = r.size.width * 0.55
         controlHeight = 36
+      } else if isColorPicker {
+        controlWidth = 44
+        controlHeight = 28  // Same height as switches
       } else {
         controlWidth = r.size.width * 0.55
         controlHeight = 36
@@ -181,6 +186,7 @@ public final class EditorPanel: OptionsPanel {
     sliders.removeAll()
     switches.removeAll()
     pickers.removeAll()
+    colorPickers.removeAll()
     var rows: [Row] = []
 
     if !propertyGroups.isEmpty {
@@ -199,6 +205,9 @@ public final class EditorPanel: OptionsPanel {
           } else if let picker = createPickerForProperty(property) {
             pickers.append(picker)
             rows.append(Row(label: property.displayName, control: picker))
+          } else if let colorPicker = createColorPickerForProperty(property) {
+            colorPickers.append(colorPicker)
+            rows.append(Row(label: property.displayName, control: colorPicker))
           }
         }
       }
@@ -214,6 +223,9 @@ public final class EditorPanel: OptionsPanel {
         } else if let picker = createPickerForProperty(property) {
           pickers.append(picker)
           rows.append(Row(label: property.displayName, control: picker))
+        } else if let colorPicker = createColorPickerForProperty(property) {
+          colorPickers.append(colorPicker)
+          rows.append(Row(label: property.displayName, control: colorPicker))
         }
       }
     }
@@ -289,6 +301,17 @@ public final class EditorPanel: OptionsPanel {
     return picker
   }
 
+  private func createColorPickerForProperty(_ property: AnyEditorProperty) -> ColorPicker? {
+    // Check if this is a Color property
+    guard let colorValue = property.value as? Color else { return nil }
+
+    let colorPicker = ColorPicker(frame: .zero, color: colorValue)
+    colorPicker.onColorChanged = { newColor in
+      property.setValue(newColor)
+    }
+    return colorPicker
+  }
+
   /// Update slider values when the underlying object properties change
   public func refreshValues() {
     guard let object = currentObject else { return }
@@ -305,6 +328,7 @@ public final class EditorPanel: OptionsPanel {
     var sliderIndex = 0
     var switchIndex = 0
     var pickerIndex = 0
+    var colorPickerIndex = 0
     for property in currentProperties {
       if let floatValue = property.value as? Float, sliderIndex < sliders.count {
         sliders[sliderIndex].value = floatValue
@@ -318,6 +342,9 @@ public final class EditorPanel: OptionsPanel {
           pickers[pickerIndex].selectedIndex = optionIndex
         }
         pickerIndex += 1
+      } else if let colorValue = property.value as? Color, colorPickerIndex < colorPickers.count {
+        colorPickers[colorPickerIndex].color = colorValue
+        colorPickerIndex += 1
       }
     }
   }

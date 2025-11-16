@@ -7,6 +7,7 @@ public enum PromptGroup: String, CaseIterable {
   case confirmCancel
   case itemStorage
   case itemStorageList
+  // case itemStorageList(sortOrder: ItemSortOrder)
   case itemPickup
   case menuRoot
   case menu
@@ -16,6 +17,23 @@ public enum PromptGroup: String, CaseIterable {
   case modelViewerControls
   case itemView
   case mapView
+
+  // static let allCases: [PromptGroup] = [
+  //   .skip,
+  //   .library,
+  //   .confirmCancel,
+  //   .itemStorage,
+  //   .itemStorageList(sortOrder: .key),
+  //   .itemPickup,
+  //   .menuRoot,
+  //   .menu,
+  //   .documentView,
+  //   .`continue`,
+  //   .modelViewer,
+  //   .modelViewerControls,
+  //   .itemView,
+  //   .mapView,
+  // ]
 
   @MainActor public static let prompts: OrderedDictionary<PromptGroup, OrderedDictionary<String, [[String]]>> = [
     .skip: [
@@ -78,7 +96,7 @@ public enum PromptGroup: String, CaseIterable {
       "Close": [["mouse_right"], ["xbox_button_color_b"], ["playstation_button_color_circle"]],
     ],
     .mapView: [
-      "Change Floor": [["keyboard_arrows_vertical"], ["xbox_dpad_vertical"], ["playstation_dpad_vertical"]],
+      //"Change Floor": [["keyboard_arrows_vertical"], ["xbox_dpad_vertical"], ["playstation_dpad_vertical"]],
       "Move": [["mouse_move"], ["xbox_stick_l"], ["playstation_stick_l"]],
       "Zoom": [["mouse_scroll_vertical"], ["xbox_stick_r_vertical"], ["playstation_stick_r_vertical"]],
       "Reset": [["keyboard_r"], ["xbox_button_color_x"], ["playstation_button_color_cross"]],

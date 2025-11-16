@@ -181,7 +181,10 @@ public final class MTLRenderer: Renderer {
     in rect: Rect,
     tint: Color?,
     strokeWidth: Float,
-    strokeColor: Color?
+    strokeColor: Color?,
+    shadowColor: Color?,
+    shadowOffset: Point,
+    shadowBlur: Float
   ) {
     guard let renderEncoder = currentRenderEncoder,
       let vertexBuffer = imageVertexBuffer,
@@ -417,7 +420,10 @@ public final class MTLRenderer: Renderer {
     scale: Point,
     tint: Color?,
     strokeWidth: Float,
-    strokeColor: Color?
+    strokeColor: Color?,
+    shadowColor: Color?,
+    shadowOffset: Point,
+    shadowBlur: Float
   ) {
     guard let renderEncoder = currentRenderEncoder,
       let vertexBuffer = imageVertexBuffer,

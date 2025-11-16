@@ -62,8 +62,8 @@ public final class Picker: OptionsControl {
         width: rightSize.width,
         height: rightSize.height
       )
-      ctx.renderer.drawImage(textureID: leftChevronImage.textureID, in: leftRect, tint: .gray300, strokeWidth: 0, strokeColor: nil)
-      ctx.renderer.drawImage(textureID: rightChevronImage.textureID, in: rightRect, tint: .gray300, strokeWidth: 0, strokeColor: nil)
+      ctx.renderer.drawImage(textureID: leftChevronImage.textureID, in: leftRect, tint: .gray300, strokeWidth: 0, strokeColor: nil, shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
+      ctx.renderer.drawImage(textureID: rightChevronImage.textureID, in: rightRect, tint: .gray300, strokeWidth: 0, strokeColor: nil, shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
     }
   }
 

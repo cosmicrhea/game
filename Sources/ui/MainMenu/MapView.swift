@@ -15,7 +15,7 @@ class MapView: RenderLoop {
   // Mesh instances for rendering
   private var floorMeshInstances: [MeshInstance] = []
   private var doorMeshInstances: [MeshInstance] = []
-  // Border line data for room outlines (GL_LINES)
+  // Border line data for area outlines (GL_LINES)
   private struct BorderLineData {
     var vertices: [Float]  // x, y, z per vertex
     var indices: [UInt32]  // pairs of indices for lines
@@ -28,7 +28,7 @@ class MapView: RenderLoop {
   // Each segment tracks which floor mesh instance indices it belongs to
   private var borderSegments: [(start: vec3, end: vec3, floorIndices: Set<Int>)] = []
 
-  // Area (room) data for labels
+  // Area data for labels
   private var areaData: [(node: Node, floorNode: Node?, boundingBox: (min: vec3, max: vec3))] = []
   // Map marker data (nodes named "MapMarker (Something)")
   private var mapMarkers: [(node: Node, position: vec3)] = []
@@ -42,16 +42,16 @@ class MapView: RenderLoop {
   // Marker-to-area relationships: maps marker index to array of area indices it belongs to
   private var markerToAreas: [Int: [Int]] = [:]
 
-  // Room visibility mask for debugging (binary: each bit represents a room)
-  private var roomVisibilityMask: UInt = 0  // 0 = all visible, or use bitmask
-  private var roomVisibilityMode: RoomVisibilityMode = .all
+  // Area visibility mask for debugging (binary: each bit represents an area)
+  private var areaVisibilityMask: UInt = 0  // 0 = all visible, or use bitmask
+  private var areaVisibilityMode: AreaVisibilityMode = .all
 
   // Setup flag
   private var isSetupComplete = false
 
-  enum RoomVisibilityMode {
-    case all  // Show all rooms
-    case binary(UInt)  // Binary mask: bit N = room N visible
+  enum AreaVisibilityMode {
+    case all  // Show all areas
+    case binary(UInt)  // Binary mask: bit N = area N visible
   }
 
   // Camera from scene
@@ -61,7 +61,7 @@ class MapView: RenderLoop {
 
   // Camera controls
   private var cameraPan: vec2 = vec2(0, 0)  // Pan offset in world space
-  private var cameraZoom: Float = 0.8  // Zoom level (1.0 = default)
+  private var cameraZoom: Float = 0.58  // Zoom level (1.0 = default)
   private var baseSceneBounds: (minX: Float, maxX: Float, minZ: Float, maxZ: Float)? = nil
 
   // Mouse drag panning
@@ -73,10 +73,13 @@ class MapView: RenderLoop {
   private var resetStartTime: Float = 0.0
   private let resetDuration: Float = 1.0
   private var resetStartPan: vec2 = vec2(0, 0)
-  private var resetStartZoom: Float = 0.8
+  private var resetStartZoom: Float = 0.58
 
   // Debug text toggle
   private var showDebugText: Bool = false
+
+  // Player marker animation
+  private var animationTime: Float = 0.0
 
   @Editor(8.0...64.0) var gridCellSize: Float = 32.0
   @Editor(0.5...3.0) var gridThickness: Float = 1.0
@@ -86,22 +89,70 @@ class MapView: RenderLoop {
   @Editor var vignetteStrength: Float = 0.7
   @Editor var vignetteRadius: Float = 1.0
 
-  // SDF edge detection parameters
-  @Editor(0.01...50.0) var sdfGradientScale: Float = 4.89
-  @Editor(0.001...1.0) var sdfEpsilon: Float = 0.26
-  @Editor(0.0...20.0) var sdfDistanceOffset: Float = 10.00
-  @Editor(0.1...100.0) var sdfDistanceMultiplier: Float = 0.39
-  @Editor(0.0...5.0) var strokeThreshold: Float = 0.98
-  @Editor(0.0...5.0) var shadowThreshold: Float = 0.0
+  // Area SDF edge detection parameters
+  @Editor(0.01...50.0) var areaSdfGradientScale: Float = 4.89
+  @Editor(0.001...1.0) var areaSdfEpsilon: Float = 0.26
+  @Editor(0.0...20.0) var areaSdfDistanceOffset: Float = 10.00
+  @Editor(0.1...2.0) var areaSdfDistanceMultiplier: Float = 0.39
+  @Editor(0.0...5.0) var areaStrokeThreshold: Float = 0.98
+  @Editor(0.0...5.0) var areaShadowThreshold: Float = 0.0
+
+  // Door SDF edge detection parameters
+  @Editor(0.01...50.0) var doorSdfGradientScale: Float = 4.89
+  @Editor(0.001...1.0) var doorSdfEpsilon: Float = 0.26
+  @Editor(0.0...20.0) var doorSdfDistanceOffset: Float = 10.00
+  @Editor(0.1...2.0) var doorSdfDistanceMultiplier: Float = 0.39
+  @Editor(0.0...5.0) var doorStrokeThreshold: Float = 0.98
+  @Editor(0.0...5.0) var doorShadowThreshold: Float = 0.0
   @Editor(0.0...100.0) var shadowSize: Float = 30.0  // Inner glow/shadow size in pixels
   @Editor(0.0...50.0) var strokeWidth: Float = 5.12  // Stroke width in pixels
+  @Editor(0.0...50.0) var doorStrokeWidth: Float = 5.12  // Door stroke width in pixels
   @Editor(0.0...1.0) var shadowStrength: Float = 0.25  // Inner shadow strength (0-1)
   @Editor(0.5...5.0) var shadowFalloff: Float = 2.04  // Inner shadow falloff power (higher = softer)
   @Editor var debugShowGradient: Bool = false  // Visualize gradient instead of stroke
   @Editor var enableWallMerging: Bool = true  // Toggle wall merging
+  @Editor(0.01...1.0) var wallWidth: Float = 0.08 {  // Wall thickness in world units
+    didSet {
+      // Regenerate border meshes when wall width changes
+      if isSetupComplete {
+        regenerateBorderLineMeshes()
+      }
+    }
+  }
 
   var backgroundColor: Color = .blueprintBackground
   var gridColor: Color = .blueprintGrid
+
+  // Map rendering colors
+  @Editor var floorFillColor: Color = Color(0x36434AFF)
+  @Editor var floorStrokeColor: Color = Color(0x5F6261FF)
+  @Editor var shadowColor: Color = Color(0x2F3235FF)
+  @Editor var doorColor: Color = Color(0xE5E5E5FF)  // Neutral light gray
+  @Editor var doorStrokeColor: Color = Color(0x0A0A0AFF)  // Almost black solid stroke
+  @Editor var doorUnlockedColor: Color = Color(0x3E4D86FF)
+  @Editor var doorLockedColor: Color = Color(0x713D3AFF)
+
+  // Map list and current map
+  private let availableMaps = ["test", "test_map", "shooting_range"]
+  private var currentMapIndex: Int = 2  // Start with shooting_range
+
+  // Temporary hack: map raw map names to display names
+  private let mapDisplayNames: [String: String] = [
+    "test_map": "Map Test",
+    "shooting_range": "Training Facility",
+  ]
+
+  var currentMapName: String {
+    guard currentMapIndex >= 0 && currentMapIndex < availableMaps.count else {
+      return availableMaps[0]
+    }
+    return availableMaps[currentMapIndex]
+  }
+
+  var currentMapDisplayName: String {
+    let rawName = currentMapName
+    return mapDisplayNames[rawName] ?? rawName
+  }
 
   init() {
     // Initialize map shader
@@ -111,9 +162,45 @@ class MapView: RenderLoop {
       // Failed to load map shader
     }
 
+    loadMap(at: currentMapIndex)
+  }
+
+  func cycleMap(_ direction: Int) {
+    let mapCount = availableMaps.count
+    let newIndex = (currentMapIndex + direction + mapCount) % mapCount
+    currentMapIndex = newIndex
+    UISound.scroll()
+    loadMap(at: currentMapIndex)
+  }
+
+  private func loadMap(at index: Int) {
+    guard index >= 0 && index < availableMaps.count else { return }
+    let mapName = availableMaps[index]
+
+    // Reset setup state so setupMapRendering will run again
+    isSetupComplete = false
+    scene = nil
+
+    // Clear existing mesh data
+    floorMeshInstances = []
+    doorMeshInstances = []
+    borderLineMeshes = []
+    borderSegments = []
+    areaData = []
+    mapMarkers = []
+    doorToAreas = [:]
+    doorAdjustedTransforms = [:]
+    floorIndexToAreaIndex = [:]
+    markerToAreas = [:]
+
+    // Reset camera state
+    cameraPan = vec2(0, 0)
+    cameraZoom = 0.58
+    baseSceneBounds = nil
+
     Task {
       do {
-        let scenePath = Bundle.game.path(forResource: "Scenes/shooting_range", ofType: "glb")!
+        let scenePath = Bundle.game.path(forResource: "Scenes/\(mapName)", ofType: "glb")!
         let assimpScene = try Assimp.Scene(
           file: scenePath,
           flags: [.triangulate, .flipUVs, .calcTangentSpace]
@@ -140,13 +227,13 @@ class MapView: RenderLoop {
       debugCamera = camera
     }
 
-    // Find floor nodes (children of room nodes)
+    // Find floor nodes (children of area nodes)
     let floorNodes = findNodesContaining(keywords: ["Floor"], in: scene.rootNode)
 
     // Find door action nodes (under Actions)
     let doorActionNodes = findNodesContaining(keywords: ["Door-action", "FrontDoor-action"], in: scene.rootNode)
 
-    // Find actual area (room) nodes (exclude parent "Rooms" node - only get nodes that end with "-col" or are children)
+    // Find actual area nodes (exclude parent "Rooms" node - only get nodes that end with "-col" or are children)
     let allAreaNodes = findNodesContaining(keywords: ["Room"], in: scene.rootNode)
     let areaNodes = allAreaNodes.filter { node in
       // Only include nodes that are actual areas (have "-col" suffix or are children of Rooms)
@@ -224,7 +311,7 @@ class MapView: RenderLoop {
       }
     }
 
-    // Merge overlapping wall segments (where two rooms share a wall)
+    // Merge overlapping wall segments (where two areas share a wall)
     if enableWallMerging {
       mergeOverlappingWallSegments()
     } else {
@@ -248,7 +335,7 @@ class MapView: RenderLoop {
     calculateBaseSceneBounds()
   }
 
-  /// Merge overlapping wall segments where two rooms share a wall
+  /// Merge overlapping wall segments where two areas share a wall
   private func mergeOverlappingWallSegments() {
     guard borderSegments.count > 1 else { return }
 
@@ -337,7 +424,7 @@ class MapView: RenderLoop {
     // Create new mesh from merged segments
     guard !borderSegments.isEmpty else { return }
 
-    let lineWidth: Float = 0.1  // World units - thick border
+    let lineWidth = wallWidth  // Use editor variable for wall thickness
     var quadVertices: [Float] = []
     var quadIndices: [UInt32] = []
     var vertexIndex: UInt32 = 0
@@ -346,7 +433,7 @@ class MapView: RenderLoop {
       // Check if this segment should be visible based on its floor indices' areas
       let isVisible = segment.floorIndices.contains { floorIndex in
         if let areaIndex = floorIndexToAreaIndex[floorIndex] {
-          return isRoomVisible(index: areaIndex)
+          return isAreaVisible(index: areaIndex)
         }
         return true  // If no area mapping, show it
       }
@@ -511,7 +598,7 @@ class MapView: RenderLoop {
     }
   }
 
-  /// Calculate which areas (rooms) each door connects to based on spatial proximity
+  /// Calculate which areas each door connects to based on spatial proximity
   private func calculateDoorToAreaRelationships() {
     doorToAreas.removeAll()
 
@@ -554,7 +641,7 @@ class MapView: RenderLoop {
     }
   }
 
-  /// Calculate which areas (rooms) each marker belongs to based on spatial proximity
+  /// Calculate which areas each marker belongs to based on spatial proximity
   private func calculateMarkerToAreaRelationships() {
     markerToAreas.removeAll()
 
@@ -593,7 +680,7 @@ class MapView: RenderLoop {
   private func createBorderLineMesh(from floor: MeshInstance, floorIndex: Int) -> BorderLineData? {
     let mesh = floor.mesh
     let transform = floor.transformMatrix
-    let lineWidth: Float = 0.1  // World units - thick border
+    let lineWidth = wallWidth  // Use editor variable for wall thickness
 
     // Find unique edges (edges that appear only once are border edges)
     var edgeCount: [String: Int] = [:]
@@ -832,6 +919,8 @@ class MapView: RenderLoop {
   }
 
   func update(deltaTime: Float) {
+    // Update animation time for pulsation
+    animationTime += deltaTime
     // Process keyboard input for pan/zoom
     guard let window = Engine.shared.window else { return }
     let keyboard = window.keyboard
@@ -883,11 +972,11 @@ class MapView: RenderLoop {
     }
 
     let zoomSpeed: Float = 1.5 * deltaTime * speedMultiplier
-    if keyboard.state(of: .q) == .pressed {
+    if keyboard.state(of: .num1) == .pressed {
       cameraZoom *= (1.0 + zoomSpeed)
       cameraZoom = min(cameraZoom, 10.0)  // Max zoom
     }
-    if keyboard.state(of: .e) == .pressed {
+    if keyboard.state(of: .num3) == .pressed {
       cameraZoom *= (1.0 - zoomSpeed)
       cameraZoom = max(cameraZoom, 0.1)  // Min zoom
     }
@@ -911,12 +1000,12 @@ class MapView: RenderLoop {
       resetStartTime = 0.0
       isResetting = true
     case .semicolon:
-      // Cycle forward through room visibility combinations
-      cycleRoomVisibility(forward: true)
+      // Cycle forward through area visibility combinations
+      cycleAreaVisibility(forward: true)
       UISound.select()
     case .apostrophe:
-      // Cycle backward through room visibility combinations
-      cycleRoomVisibility(forward: false)
+      // Cycle backward through area visibility combinations
+      cycleAreaVisibility(forward: false)
       UISound.select()
     case .backspace:
       // Toggle debug text
@@ -927,35 +1016,35 @@ class MapView: RenderLoop {
     }
   }
 
-  private func cycleRoomVisibility(forward: Bool) {
+  private func cycleAreaVisibility(forward: Bool) {
     let areaCount = areaData.count
     guard areaCount > 0 else { return }
 
     let maxCombinations = UInt(1 << areaCount)  // 2^areaCount
 
-    switch roomVisibilityMode {
+    switch areaVisibilityMode {
     case .all:
       // Start from all visible (mask = all 1s) when going forward
       // Start from all hidden (mask = 0) when going backward
       if forward {
-        roomVisibilityMask = maxCombinations - 1  // All rooms visible
+        areaVisibilityMask = maxCombinations - 1  // All areas visible
       } else {
-        roomVisibilityMask = 0  // All rooms hidden
+        areaVisibilityMask = 0  // All areas hidden
       }
-      roomVisibilityMode = .binary(roomVisibilityMask)
+      areaVisibilityMode = .binary(areaVisibilityMask)
     case .binary(let currentMask):
       if forward {
         // Cycle forward: increment mask, wrap around to 0
-        roomVisibilityMask = (currentMask + 1) % maxCombinations
+        areaVisibilityMask = (currentMask + 1) % maxCombinations
       } else {
         // Cycle backward: decrement mask, wrap around to max
         if currentMask == 0 {
-          roomVisibilityMask = maxCombinations - 1
+          areaVisibilityMask = maxCombinations - 1
         } else {
-          roomVisibilityMask = currentMask - 1
+          areaVisibilityMask = currentMask - 1
         }
       }
-      roomVisibilityMode = .binary(roomVisibilityMask)
+      areaVisibilityMode = .binary(areaVisibilityMask)
     }
 
     // Regenerate border meshes to reflect new visibility
@@ -1114,11 +1203,14 @@ class MapView: RenderLoop {
     // Render map directly to screen
     renderMapDirect(shaderProgram: shaderProgram, renderer: renderer, context: context)
 
-    // Draw room labels on top
-    drawRoomLabels(context: context, scene: scene)
+    // Draw area labels on top
+    drawAreaLabels(context: context, scene: scene)
 
     // Draw map markers
     //drawMapMarkers(context: context, scene: scene)
+
+    // Draw player marker
+    drawPlayerMarker(context: context, scene: scene)
 
     // Draw debug text if enabled
     if showDebugText {
@@ -1219,36 +1311,28 @@ class MapView: RenderLoop {
     shaderProgram.setBool("isWireframe", value: false)
     shaderProgram.setVec2("viewportSize", value: (Float(viewportSize.width), Float(viewportSize.height)))
 
-    // Set SDF tuning parameters
-    shaderProgram.setFloat("sdfGradientScale", value: sdfGradientScale)
-    shaderProgram.setFloat("sdfEpsilon", value: sdfEpsilon)
-    shaderProgram.setFloat("sdfDistanceOffset", value: sdfDistanceOffset)
-    shaderProgram.setFloat("sdfDistanceMultiplier", value: sdfDistanceMultiplier)
-    shaderProgram.setFloat("strokeThreshold", value: strokeThreshold)
-    shaderProgram.setFloat("shadowThreshold", value: shadowThreshold)
+    // Set area SDF tuning parameters
+    shaderProgram.setFloat("sdfGradientScale", value: areaSdfGradientScale)
+    shaderProgram.setFloat("sdfEpsilon", value: areaSdfEpsilon)
+    shaderProgram.setFloat("sdfDistanceOffset", value: areaSdfDistanceOffset)
+    shaderProgram.setFloat("sdfDistanceMultiplier", value: areaSdfDistanceMultiplier)
+    shaderProgram.setFloat("strokeThreshold", value: areaStrokeThreshold)
+    shaderProgram.setFloat("shadowThreshold", value: areaShadowThreshold)
     shaderProgram.setBool("debugShowGradient", value: debugShowGradient)
-
-    // Convert hex colors to RGB
-    // 36434A -> (0x36/255, 0x43/255, 0x4A/255) = (0.212, 0.263, 0.290)
-    let floorFillColor = vec3(0x36 / 255.0, 0x43 / 255.0, 0x4A / 255.0)
-    // 5F6261 -> (0x5F/255, 0x62/255, 0x61/255) = (0.373, 0.384, 0.380)
-    let floorStrokeColor = vec3(0x5F / 255.0, 0x62 / 255.0, 0x61 / 255.0)
-    // 2F3235 -> (0x2F/255, 0x32/255, 0x35/255) = (0.184, 0.196, 0.208)
-    let shadowColor = vec3(0x2F / 255.0, 0x32 / 255.0, 0x35 / 255.0)
 
     // Render floor meshes with shader-based stroke
     for (index, meshInstance) in floorMeshInstances.enumerated() {
-      // Check room visibility mask
-      if !isRoomVisible(index: index) {
+      // Check area visibility mask
+      if !isAreaVisible(index: index) {
         continue
       }
       shaderProgram.setMat4("model", value: meshInstance.transformMatrix)
-      shaderProgram.setVec3("fillColor", value: (floorFillColor.x, floorFillColor.y, floorFillColor.z))
-      shaderProgram.setVec3("strokeColor", value: (floorStrokeColor.x, floorStrokeColor.y, floorStrokeColor.z))
-      shaderProgram.setVec3("shadowColor", value: (shadowColor.x, shadowColor.y, shadowColor.z))
+      shaderProgram.setColor("fillColor", value: floorFillColor)
+      shaderProgram.setColor("strokeColor", value: floorStrokeColor)
+      shaderProgram.setColor("shadowColor", value: shadowColor)
       shaderProgram.setFloat("shadowSize", value: shadowSize)
       shaderProgram.setFloat("strokeWidth", value: strokeWidth)
-      shaderProgram.setFloat("shadowThreshold", value: shadowThreshold)
+      shaderProgram.setFloat("shadowThreshold", value: areaShadowThreshold)
       shaderProgram.setFloat("shadowStrength", value: shadowStrength)
       shaderProgram.setFloat("shadowFalloff", value: shadowFalloff)
       shaderProgram.setBool("isWireframe", value: false)
@@ -1267,10 +1351,8 @@ class MapView: RenderLoop {
     // Render border quads (thick lines as geometry) - BEFORE doors so doors render on top
     shaderProgram.setBool("isWireframe", value: false)
     shaderProgram.setFloat("strokeWidth", value: 0.0)  // No shader stroke, we use geometry
-    // 5F6261 -> (0x5F/255, 0x62/255, 0x61/255) = (0.373, 0.384, 0.380) - wall color
-    let borderStrokeColor = vec3(0x5F / 255.0, 0x62 / 255.0, 0x61 / 255.0)
-    shaderProgram.setVec3("fillColor", value: (borderStrokeColor.x, borderStrokeColor.y, borderStrokeColor.z))
-    shaderProgram.setVec3("strokeColor", value: (borderStrokeColor.x, borderStrokeColor.y, borderStrokeColor.z))
+    shaderProgram.setColor("fillColor", value: floorStrokeColor)  // Use floor stroke color for walls
+    shaderProgram.setColor("strokeColor", value: floorStrokeColor)
     shaderProgram.setMat4("model", value: mat4(1))  // Quads are already in world space
 
     for border in borderLineMeshes {
@@ -1288,22 +1370,35 @@ class MapView: RenderLoop {
       let nodeName = meshInstance.node?.name ?? ""
       let isLocked = nodeName.contains("frontdoor") || nodeName.lowercased().contains("front")
 
-      // 3E4D86 unlocked, 713D3A locked
-      let doorColor =
-        isLocked
-        ? vec3(0x71 / 255.0, 0x3D / 255.0, 0x3A / 255.0)  // Locked: brown/red
-        : vec3(0x3E / 255.0, 0x4D / 255.0, 0x86 / 255.0)  // Unlocked: blue
+      // Use appropriate door color based on lock status
+      let doorColor = isLocked ? doorLockedColor : doorUnlockedColor
 
       // Use adjusted transform if available, otherwise use original
       var doorTransform = doorAdjustedTransforms[doorIndex] ?? meshInstance.transformMatrix
       doorTransform[3][1] += 0.02  // Add Y offset to render on top
 
+      // Set door-specific SDF parameters
+      shaderProgram.setFloat("sdfGradientScale", value: doorSdfGradientScale)
+      shaderProgram.setFloat("sdfEpsilon", value: doorSdfEpsilon)
+      shaderProgram.setFloat("sdfDistanceOffset", value: doorSdfDistanceOffset)
+      shaderProgram.setFloat("sdfDistanceMultiplier", value: doorSdfDistanceMultiplier)
+      shaderProgram.setFloat("strokeThreshold", value: doorStrokeThreshold)
+      shaderProgram.setFloat("shadowThreshold", value: doorShadowThreshold)
+
       shaderProgram.setMat4("model", value: doorTransform)
-      shaderProgram.setVec3("fillColor", value: (doorColor.x, doorColor.y, doorColor.z))
-      shaderProgram.setVec3("strokeColor", value: (doorColor.x * 0.7, doorColor.y * 0.7, doorColor.z * 0.7))
-      shaderProgram.setVec3("shadowColor", value: (doorColor.x * 0.5, doorColor.y * 0.5, doorColor.z * 0.5))
-      shaderProgram.setFloat("shadowSize", value: 2.0)
-      shaderProgram.setFloat("strokeWidth", value: 0.0)  // No stroke for doors
+      shaderProgram.setColor("fillColor", value: doorColor)
+      shaderProgram.setColor("strokeColor", value: doorStrokeColor)  // Solid dark stroke
+      shaderProgram.setColor("shadowColor", value: doorStrokeColor)  // Not used, but set for consistency
+      shaderProgram.setFloat("shadowSize", value: 0.0)  // Disable inner shadow
+      shaderProgram.setFloat("strokeWidth", value: doorStrokeWidth)  // Solid stroke width
+      shaderProgram.setFloat("shadowStrength", value: 0.0)  // Disable shadow strength
+      shaderProgram.setFloat("shadowFalloff", value: shadowFalloff)
+      shaderProgram.setBool("isWireframe", value: false)
+
+      // Calculate mesh bounding box in world space for distance-based inner glow
+      let meshBounds = calculateMeshBoundingBox(mesh: meshInstance.mesh, transform: doorTransform)
+      shaderProgram.setVec3("meshBoundsMin", value: (meshBounds.min.x, meshBounds.min.y, meshBounds.min.z))
+      shaderProgram.setVec3("meshBoundsMax", value: (meshBounds.max.x, meshBounds.max.y, meshBounds.max.z))
 
       glBindVertexArray(meshInstance.VAO)
       glDrawElements(GL_TRIANGLES, GLsizei(meshInstance.mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
@@ -1317,7 +1412,7 @@ class MapView: RenderLoop {
     if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
   }
 
-  private func drawRoomLabels(context: GraphicsContext, scene: Scene) {
+  private func drawAreaLabels(context: GraphicsContext, scene: Scene) {
     guard !areaData.isEmpty else { return }
 
     // Use Camera_0 projection if available, otherwise fall back
@@ -1375,13 +1470,21 @@ class MapView: RenderLoop {
     // Scale font size with zoom (base size * zoom)
     let baseFontSize: Float = 48.0  // Doubled from 24.0
     let scaledFontSize = baseFontSize * cameraZoom
-    let labelStyle = TextStyle.itemDescription.withFontSize(scaledFontSize)
+
+    // Add CoreGraphics-style drop shadow to labels
+    let shadowBlur: Float = 19.0
+    let shadowOffset = Point.zero
+    let shadowColor = Color(0, 0, 0, 0.08)  // Semi-transparent black shadow
+
+    let labelStyle = TextStyle.itemDescription
+      .withFontSize(scaledFontSize)
+      .withShadow(width: shadowBlur, offset: shadowOffset, color: shadowColor)
 
     // Draw area labels
     var areaNumber = 1
     for (index, (_, floorNode, boundingBox)) in areaData.enumerated() {
       // Check area visibility mask
-      if !isRoomVisible(index: index) {
+      if !isAreaVisible(index: index) {
         areaNumber += 1  // Still increment to keep numbering consistent
         continue
       }
@@ -1418,10 +1521,10 @@ class MapView: RenderLoop {
         {
           labelText = String(match.1)
         } else {
-          labelText = "Room \(areaNumber)"
+          labelText = "Area \(areaNumber)"
         }
       } else {
-        labelText = "Room \(areaNumber)"
+        labelText = "Area \(areaNumber)"
       }
 
       labelText.draw(
@@ -1436,7 +1539,7 @@ class MapView: RenderLoop {
   private func drawMapMarkers(context: GraphicsContext, scene: Scene) {
     guard !mapMarkers.isEmpty else { return }
 
-    // Use Camera_0 projection if available, otherwise fall back (same as drawRoomLabels)
+    // Use Camera_0 projection if available, otherwise fall back (same as drawAreaLabels)
     let projection: mat4
     var view: mat4
 
@@ -1522,8 +1625,152 @@ class MapView: RenderLoop {
     }
   }
 
+  private func drawPlayerMarker(context: GraphicsContext, scene: Scene) {
+    // Get player position and rotation from MainLoop
+    guard let mainLoop = MainLoop.shared else { return }
+
+    // Only show player marker if we're viewing the map that the player is currently in
+    guard mainLoop.sceneName == currentMapName else { return }
+
+    let playerPosition = mainLoop.playerPosition
+    let playerRotation = mainLoop.playerRotation
+
+    // Use Camera_0 projection if available, otherwise fall back (same as drawAreaLabels)
+    let projection: mat4
+    var view: mat4
+
+    if let camera = debugCamera, camera.orthographicWidth > 0 {
+      let orthoWidth = camera.orthographicWidth
+      let finalAspect = camera.aspect > 0 ? camera.aspect : (context.size.width / context.size.height)
+      let zoomedWidth = orthoWidth / cameraZoom
+      let left = -zoomedWidth
+      let right = zoomedWidth
+      let bottom = -zoomedWidth / finalAspect
+      let top = zoomedWidth / finalAspect
+      projection = GLMath.ortho(left, right, bottom, top, camera.clipPlaneNear, camera.clipPlaneFar)
+
+      if debugCameraWorldTransform != mat4(1) {
+        view = inverse(debugCameraWorldTransform)
+        let rightVector = vec3(
+          debugCameraWorldTransform[0].x, debugCameraWorldTransform[0].y, debugCameraWorldTransform[0].z)
+        let upVector = vec3(
+          debugCameraWorldTransform[1].x, debugCameraWorldTransform[1].y, debugCameraWorldTransform[1].z)
+        let panInWorldSpace = rightVector * cameraPan.x + upVector * (-cameraPan.y)
+        view = GLMath.translate(view, -panInWorldSpace)
+      } else {
+        view = mat4(1)
+      }
+    } else {
+      guard let bounds = baseSceneBounds else { return }
+      let sceneWidth = bounds.maxX - bounds.minX
+      let sceneDepth = bounds.maxZ - bounds.minZ
+      let sceneCenterX = (bounds.minX + bounds.maxX) * 0.5
+      let sceneCenterZ = (bounds.minZ + bounds.maxZ) * 0.5
+      let zoomedWidth = sceneWidth / cameraZoom
+      let zoomedDepth = sceneDepth / cameraZoom
+      let panX = sceneCenterX + cameraPan.x
+      let panZ = sceneCenterZ + cameraPan.y
+      let padding: Float = 5.0
+      let left = panX - zoomedWidth * 0.5 - padding
+      let right = panX + zoomedWidth * 0.5 + padding
+      let bottom = panZ - zoomedDepth * 0.5 - padding
+      let top = panZ + zoomedDepth * 0.5 + padding
+      projection = GLMath.ortho(left, right, bottom, top, -100.0, 100.0)
+      let cameraPos = vec3(panX, 50.0, panZ)
+      view = GLMath.lookAt(cameraPos, vec3(panX, 0, panZ), vec3(0, 1, 0))
+    }
+
+    let viewportSize = context.size
+    let centerX = viewportSize.width / 2.0
+    let centerY = viewportSize.height / 2.0
+
+    // Transform player position to screen space
+    let worldPos = vec4(playerPosition.x, playerPosition.y, playerPosition.z, 1.0)
+    let clipPos = projection * view * worldPos
+
+    // Convert from clip space [-1, 1] to screen space [0, width/height]
+    let ndcX = clipPos.x / clipPos.w
+    let ndcY = clipPos.y / clipPos.w
+    let screenX = centerX + ndcX * (viewportSize.width / 2.0)
+    let screenY = centerY + ndcY * (viewportSize.height / 2.0)
+
+    // Check if position is valid and on screen (prevent glitchy lines)
+    guard screenX.isFinite && screenY.isFinite,
+      screenX >= -100 && screenX <= viewportSize.width + 100,
+      screenY >= -100 && screenY <= viewportSize.height + 100
+    else {
+      return  // Skip rendering if position is invalid or way off screen
+    }
+
+    // Calculate subtle breathing pulsation (slower, more gentle)
+    let pulseSpeed: Float = 0.6  // cycles per second (even slower)
+    let pulseAmount: Float = 0.12  // ±12% scale variation (more pronounced)
+    // Use a smoother sine wave for natural breathing (sine already has smooth acceleration/deceleration)
+    // Apply a slight smoothing to make it even more gentle
+    let rawPulse = sin(animationTime * pulseSpeed * 2.0 * .pi)
+    // Use a smoother curve: apply a gentle ease to the sine wave itself
+    // This creates a more natural breathing rhythm
+    let smoothedPulse = rawPulse * (1.0 - abs(rawPulse) * 0.3)  // Gentle smoothing that preserves the sine shape
+    let pulse = 1.0 + pulseAmount * smoothedPulse
+
+    // Icon size with pulsation and zoom scaling
+    let baseIconSize: Float = 32.0
+    let iconSize = baseIconSize * pulse * cameraZoom
+
+    // RE2 style colors: light/white fill with dark border
+    let lightColor = Color(0.95, 0.95, 0.90)  // Off-white/light beige
+    let darkBorderColor = Color(0.15, 0.15, 0.12)  // Very dark brown/black for border
+
+    // Load heading icon at appropriate resolution based on zoom level
+    // Use multiple resolutions for better performance and quality
+    let rasterizedIconSize: Float
+    if cameraZoom < 0.5 {
+      // Zoomed out - use smaller resolution
+      rasterizedIconSize = 32.0
+    } else if cameraZoom < 1.5 {
+      // Medium zoom - use medium resolution
+      rasterizedIconSize = 64.0
+    } else {
+      // Zoomed in - use high resolution
+      rasterizedIconSize = 128.0
+    }
+    let headingIcon = Image("UI/MapHeading.svg", size: Size(rasterizedIconSize, rasterizedIconSize))
+
+    // Convert player rotation (yaw in radians) to icon rotation
+    // Subtract 90° (π/2) to align icon with player facing direction
+    // Player rotation is around Y axis; for top-down view, we need to offset for icon orientation
+    let iconRotation = playerRotation - .pi / 2.0
+
+    // Draw icon with RE2 style: light fill, dark border, pulsation scale, and rotation
+    // Ensure icon position is valid and within reasonable bounds
+    let iconPoint = Point(screenX - iconSize / 2.0, screenY - iconSize / 2.0)
+    guard iconPoint.x.isFinite && iconPoint.y.isFinite,
+      iconPoint.x >= -500 && iconPoint.x <= viewportSize.width + 500,
+      iconPoint.y >= -500 && iconPoint.y <= viewportSize.height + 500
+    else {
+      return  // Skip if position is invalid or way off screen
+    }
+
+    // CoreGraphics-style drop shadow: small offset, soft blur
+    let shadowBlur: Float = 24.0  //4.0 * cameraZoom  // Soft blur radius
+    let shadowOffset = Point.zero
+
+    headingIcon.draw(
+      at: iconPoint,
+      size: Size(iconSize, iconSize),
+      rotation: iconRotation,
+      tint: lightColor,
+      strokeWidth: 0,  // No stroke - using shadow for depth
+      strokeColor: nil,
+      shadowColor: darkBorderColor.withAlphaComponent(0.1),  // Semi-transparent shadow
+      shadowOffset: shadowOffset,
+      shadowBlur: shadowBlur,
+      context: context
+    )
+  }
+
   private func drawDebugText(context: GraphicsContext) {
-    // Calculate current font size (same as in drawRoomLabels)
+    // Calculate current font size (same as in drawAreaLabels)
     let currentFontSize = 48.0 * cameraZoom
 
     // Build debug text lines (matching MainLoop style)
@@ -1558,9 +1805,9 @@ class MapView: RenderLoop {
 
   // MARK: - Helper Functions
 
-  /// Check if an area (room) at the given index should be visible based on the visibility mask
-  private func isRoomVisible(index: Int) -> Bool {
-    switch roomVisibilityMode {
+  /// Check if an area at the given index should be visible based on the visibility mask
+  private func isAreaVisible(index: Int) -> Bool {
+    switch areaVisibilityMode {
     case .all:
       return true
     case .binary(let mask):
@@ -1579,7 +1826,7 @@ class MapView: RenderLoop {
     // This way, if you're viewing area A, you see doors that connect to area A,
     // even if the other connected area (B) is hidden
     return connectedAreas.contains { areaIndex in
-      isRoomVisible(index: areaIndex)
+      isAreaVisible(index: areaIndex)
     }
   }
 
@@ -1592,7 +1839,7 @@ class MapView: RenderLoop {
 
     // Marker is visible if ANY of its associated areas are visible
     return associatedAreas.contains { areaIndex in
-      isRoomVisible(index: areaIndex)
+      isAreaVisible(index: areaIndex)
     }
   }
 

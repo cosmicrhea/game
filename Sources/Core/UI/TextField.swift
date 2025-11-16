@@ -107,7 +107,7 @@ public final class TextField: OptionsControl {
       let iconY = frame.midY - desiredH * 0.5
       let iconRect = Rect(x: iconX, y: iconY, width: iconW, height: desiredH)
       if let ctx = GraphicsContext.current {
-        ctx.renderer.drawImage(textureID: icon.textureID, in: iconRect, tint: leftIconTint, strokeWidth: 0, strokeColor: nil)
+        ctx.renderer.drawImage(textureID: icon.textureID, in: iconRect, tint: leftIconTint, strokeWidth: 0, strokeColor: nil, shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
       }
       textOriginX += iconW + leftIconPadding
     }

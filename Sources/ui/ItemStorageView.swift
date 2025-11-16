@@ -154,9 +154,9 @@ final class ItemStorageView: RenderLoop {
         let listWidth: Float = 440
         let listHeight: Float = storageListView.rowHeight * 8.5
         // Center the list between left screen edge and left edge of grid, with slight right bias
-        let gridLeftEdge = playerX - interGridSpacing
-        let leftMargin: Float = 80  // Margin from left edge
-        let availableWidth = gridLeftEdge - leftMargin
+        // let gridLeftEdge = playerX - interGridSpacing
+        // let leftMargin: Float = 80  // Margin from left edge
+        // let availableWidth = gridLeftEdge - leftMargin
         // let storageX = leftMargin + availableWidth * 0.6 - listWidth * 0.5  // 60% from left, 40% from grid
         let storageX: Float = 176
         let storageY = (Float(Engine.viewportSize.height) - listHeight) * 0.5 + 80
