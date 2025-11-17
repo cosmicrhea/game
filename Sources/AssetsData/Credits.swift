@@ -92,6 +92,16 @@ enum CreditsData {
       // https://sketchfab.com/subhashssimon
       // https://sketchfab.com/3d-models/executive-office-chair-88e43eb5dc55498dace0bda014603b3d
       "Subhash S. Simon",
+
+      // https://sketchfab.com/kirikom9000
+      // https://sketchfab.com/3d-models/fountain-pens-48de5fd3726d4792a474cb9781549155
+      "Kai Xiang",
+
+      // https://www.artstation.com/noxiou5
+      // https://sketchfab.com/NoXiou5
+      // https://sketchfab.com/3d-models/notebook-and-pen-dc4c2866a51d4cb78011311dae2fdfa2
+      // https://sketchfab.com/3d-models/scissor-lift-2438e8f5612e43fca46747b0f50a56f6
+      "Stanislav Danilov",
     ],
 
     "Sound Designers": [

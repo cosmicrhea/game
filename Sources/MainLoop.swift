@@ -57,7 +57,7 @@ private let defaultScene = "nexus"
   private var triggerBodyNames: [BodyID: String] = [:]
   // Currently active triggers (OrderedSet to avoid duplicates while maintaining order)
   private var currentTriggers: OrderedSet<String> = []
-  // Currently active camera triggers
+  // Currently active camera triggers (OrderedSet to avoid duplicates while maintaining order)
   private var currentCameraTriggers: OrderedSet<String> = []
   // Previous frame's triggers (to detect new entries)
   private var previousTriggers: Set<String> = []
@@ -1815,7 +1815,7 @@ extension MainLoop {
     // Show "(override)" suffix when in debug camera override mode
     let cameraDisplayName = isDebugCameraOverrideMode ? "\(selectedCamera) (override)" : selectedCamera
 
-    let overlayLines = [
+    var overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
       //"Scene: \(sceneName)",
       "Camera: \(cameraDisplayName)",
@@ -1841,15 +1841,14 @@ extension MainLoop {
         : "Triggers: \(currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
     ]
 
-    // Add camera triggers line only if there are any
-    var overlayLinesWithCamera = overlayLines
+    // Add camera triggers line if there are any
     if !currentCameraTriggers.isEmpty {
-      overlayLinesWithCamera.append(
+      overlayLines.append(
         "Camera Triggers: \(currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
       )
     }
 
-    let overlay = overlayLinesWithCamera.joined(separator: "\n")
+    let overlay = overlayLines.joined(separator: "\n")
 
     overlay.draw(
       at: Point(20, Engine.viewportSize.height - 20),
