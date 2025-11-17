@@ -106,7 +106,8 @@ class MapView: RenderLoop {
   @Editor(0.0...5.0) var doorShadowThreshold: Float = 0.0
   @Editor(0.0...100.0) var shadowSize: Float = 30.0  // Inner glow/shadow size in pixels
   @Editor(0.0...50.0) var strokeWidth: Float = 5.12  // Stroke width in pixels
-  @Editor(0.0...50.0) var doorStrokeWidth: Float = 5.12  // Door stroke width in pixels
+  //@Editor(0.0...50.0) var doorStrokeWidth: Float = 5.12  // Door stroke width in pixels
+  @Editor(0.0...50.0) var doorStrokeWidth: Float = 0  // Door stroke width in pixels; disabled for now
   @Editor(0.0...1.0) var shadowStrength: Float = 0.25  // Inner shadow strength (0-1)
   @Editor(0.5...5.0) var shadowFalloff: Float = 2.04  // Inner shadow falloff power (higher = softer)
   @Editor var debugShowGradient: Bool = false  // Visualize gradient instead of stroke
@@ -133,8 +134,15 @@ class MapView: RenderLoop {
   @Editor var doorLockedColor: Color = Color(0x713D3AFF)
 
   // Map list and current map
-  private let availableMaps = ["test", "test_map", "shooting_range"]
-  private var currentMapIndex: Int = 2  // Start with shooting_range
+  private let availableMaps = [
+    "test",
+    "test_map",
+    "shooting_range",
+    "nexus",
+    //"radar_office",
+  ]
+
+  private var currentMapIndex: Int = 1  // Start with shooting_range
 
   // Temporary hack: map raw map names to display names
   private let mapDisplayNames: [String: String] = [
@@ -162,7 +170,28 @@ class MapView: RenderLoop {
       // Failed to load map shader
     }
 
-    loadMap(at: currentMapIndex)
+    // Sync to current scene if available, otherwise use default
+    syncToCurrentScene()
+  }
+
+  /// Sync the map view to show the map that the player is currently in
+  func syncToCurrentScene() {
+    guard let mainLoop = MainLoop.shared else {
+      // Fall back to default if MainLoop isn't available yet
+      loadMap(at: currentMapIndex)
+      return
+    }
+
+    let currentScene = mainLoop.sceneName
+
+    // Find the index of the current scene in available maps
+    if let index = availableMaps.firstIndex(of: currentScene) {
+      currentMapIndex = index
+      loadMap(at: currentMapIndex)
+    } else {
+      // Scene not in available maps, use default
+      loadMap(at: currentMapIndex)
+    }
   }
 
   func cycleMap(_ direction: Int) {
@@ -230,8 +259,12 @@ class MapView: RenderLoop {
     // Find floor nodes (children of area nodes)
     let floorNodes = findNodesContaining(keywords: ["Floor"], in: scene.rootNode)
 
-    // Find door action nodes (under Actions)
-    let doorActionNodes = findNodesContaining(keywords: ["Door-action", "FrontDoor-action"], in: scene.rootNode)
+    // Find door action nodes: must contain "Door" and end with "-action"
+    let allDoorNodes = findNodesContaining(keywords: ["Door"], in: scene.rootNode)
+    let doorActionNodes = allDoorNodes.filter { node in
+      guard let name = node.name else { return false }
+      return name.hasSuffix("-action")
+    }
 
     // Find actual area nodes (exclude parent "Rooms" node - only get nodes that end with "-col" or are children)
     let allAreaNodes = findNodesContaining(keywords: ["Room"], in: scene.rootNode)

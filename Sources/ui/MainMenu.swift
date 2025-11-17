@@ -32,10 +32,23 @@
       return !(self.tabs.activeTab == .library && self.libraryView.showingDocument)
         && !(self.tabs.activeTab == .inventory && self.inventoryView.showingItem)
     }
+
+    tabs.onTabChanged = { [weak self] tab in
+      guard let self = self else { return }
+      // When switching to map tab, sync to current scene
+      if tab == .map {
+        self.mapView.syncToCurrentScene()
+      }
+    }
   }
 
   func setActiveTab(_ tab: MainMenuTabs.Tab, animated: Bool = true) {
     tabs.setActiveTab(tab, animated: animated)
+
+    // When switching to map tab, sync to current scene
+    if tab == .map {
+      mapView.syncToCurrentScene()
+    }
   }
 
   /// Check if there's a nested view open (item, document, or popup menu)
@@ -333,7 +346,8 @@ final class MainMenuTabs {
     UISound.select()
     let tabCount = Tab.allCases.count
     let newIndex = (currentTab.rawValue + direction + tabCount) % tabCount
-    currentTab = Tab(rawValue: newIndex)!
+    let newTab = Tab(rawValue: newIndex)!
+    currentTab = newTab
     onTabChanged?(currentTab)
   }
 

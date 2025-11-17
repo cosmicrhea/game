@@ -8,6 +8,12 @@ import Assimp
   named(_autoRegister))
 public macro SceneScript() = #externalMacro(module: "GameMacros", type: "SceneScriptMacro")
 
+/// Macro to automatically find a node from the scene
+/// Usage: `@FindNode var catStatue: Node!` or `@FindNode("StatueOfCat") var catStatue: Node!`
+@attached(accessor)
+@attached(peer, names: arbitrary)
+public macro FindNode(_ nodeName: String? = nil) = #externalMacro(module: "GameMacros", type: "FindNodeMacro")
+
 class Character {
 
   func play(animation animationName: String) {}
@@ -18,11 +24,33 @@ class Character {
 
 }
 
-@MainActor
-class Script {
+protocol SceneLoadingDelegate {
+  func sceneDidLoad()
+}
 
-  private(set) var scene: Scene
-  private var dialogView: DialogView
+extension SceneLoadingDelegate {
+  func sceneDidLoad() {}
+}
+
+@MainActor
+class Script: SceneLoadingDelegate {
+
+  var scene: Scene {
+    guard let mainLoop = MainLoop.shared else {
+      fatalError("MainLoop.shared is nil - ensure MainLoop.init() has been called")
+    }
+    guard let scene = mainLoop.scene else {
+      fatalError("MainLoop.shared.scene is nil - ensure loadScene() has been called")
+    }
+    return scene
+  }
+
+  var dialogView: DialogView {
+    guard let mainLoop = MainLoop.shared else {
+      fatalError("MainLoop.shared is nil - ensure MainLoop.init() has been called")
+    }
+    return mainLoop.dialogView
+  }
 
   /// Track the current action name (set by MainLoop before calling interaction methods)
   var currentActionName: String?
@@ -41,18 +69,13 @@ class Script {
     sayCallCounters[actionName] = 0
   }
 
-  required init(scene: Scene, dialogView: DialogView) {
-    self.scene = scene
-    self.dialogView = dialogView
-  }
-
   //private var storageView = ItemStorageView()
 
   var hasAliveEnemies: Bool { false }
 
-  /// Called when the scene script is loaded and initialized
-  /// Override this method in scene-specific script classes to perform initialization
-  func sceneDidLoad() {}
+  // /// Called when the scene script is loaded and initialized
+  // /// Override this method in scene-specific script classes to perform initialization
+  // func sceneDidLoad() {}
 
   /// Find a node by name, searching from the root node
   /// Matches exact names or names with dashed suffixes (e.g., "CatStatue" matches "CatStatue-fg")

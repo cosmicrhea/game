@@ -2,16 +2,15 @@ import Assimp
 import CJolt
 import Foundation
 import Jolt
-import ObjectiveC.runtime
+//import ObjectiveC.runtime
+
+private let defaultScene = "nexus"
 
 @Editable final class MainLoop: RenderLoop {
   static var shared: MainLoop?
 
   // Scene configuration
-  // private(set) var sceneName: String = "test"
-  // private(set) var sceneName: String = "test_map"
-  private(set) var sceneName: String = "shooting_range"
-  // private(set) var sceneName: String = "radar_office"
+  private(set) var sceneName: String = defaultScene
 
   // Gameplay state
   private(set) var playerPosition: vec3 = vec3(0, 0, 0)
@@ -48,6 +47,8 @@ import ObjectiveC.runtime
   private var objectVsBroadPhaseLayerFilter: ObjectVsBroadPhaseLayerFilterTable?
   // Character controller for player capsule
   private var characterController: CharacterVirtual?
+  // Tracking all physics body IDs for the current scene (so we can clear them when loading a new scene)
+  private var collisionBodyIDs: [BodyID] = []
   // Mapping from action body IDs to their node names
   private var actionBodyNames: [BodyID: String] = [:]
   // Currently detected action body name (updated each frame)
@@ -56,6 +57,8 @@ import ObjectiveC.runtime
   private var triggerBodyNames: [BodyID: String] = [:]
   // Currently active triggers (OrderedSet to avoid duplicates while maintaining order)
   private var currentTriggers: OrderedSet<String> = []
+  // Currently active camera triggers
+  private var currentCameraTriggers: OrderedSet<String> = []
   // Previous frame's triggers (to detect new entries)
   private var previousTriggers: Set<String> = []
   // Sensor body in front of capsule for detecting action triggers
@@ -157,21 +160,6 @@ import ObjectiveC.runtime
     // This registers factory functions - they'll be called lazily when scripts are created
     registerAllSceneScripts()
 
-    // Load scene and find first camera
-    loadScene()
-
-    // Load capsule mesh
-    loadCapsuleMesh()
-
-    // Initialize prerendered environment
-    do {
-      prerenderedEnvironment = try PrerenderedEnvironment(sceneName)
-      // Sync the selectedCamera property with the actual current camera
-      selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? "1"
-    } catch {
-      logger.error("Failed to initialize PrerenderedEnvironment: \(error)")
-    }
-
     // Initialize Jolt runtime (required before using any Jolt features)
     JoltRuntime.initialize()
 
@@ -234,102 +222,12 @@ import ObjectiveC.runtime
     // Create ground plane immediately (doesn't depend on scene)
     createGroundPlane()
 
-    // Load collision bodies into physics system when scene is ready
+    // Load capsule mesh
+    loadCapsuleMesh()
+
+    // Load default scene
     Task {
-      // Wait for scene to load
-      while scene == nil {
-        try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
-      }
-      await MainActor.run {
-        if let loadedScene = scene {
-          loadCollisionBodiesIntoPhysics(scene: loadedScene)
-          loadActionBodiesIntoPhysics(scene: loadedScene)
-          loadTriggerBodiesIntoPhysics(scene: loadedScene)
-          // Optimize broad phase after adding bodies (recommended before first Update)
-          physicsSystem?.optimizeBroadPhase()
-
-          // Create character controller now that physics is ready
-          if let physicsSystem = physicsSystem {
-            // Spawn at Entry_1 if present
-            if let entryNode = loadedScene.rootNode.findNode(named: "Entry_1") {
-              let entryWorld = calculateNodeWorldTransform(entryNode, scene: loadedScene)
-              let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
-              let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
-              let yaw = atan2(fwd.x, fwd.z)
-              let spawnRot = yaw - (.pi * 0.5)
-              createCharacterController(at: extractedPos, rotation: spawnRot, in: physicsSystem)
-            }
-          }
-
-          // Mark physics system as ready for updates
-          physicsSystemReady = true
-        }
-      }
-    }
-  }
-
-  private func loadScene() {
-    Task {
-      do {
-        let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
-        let assimpScene = try Assimp.Scene(
-          file: scenePath,
-          flags: [.triangulate, .flipUVs, .calcTangentSpace]
-        )
-
-        // Wrap in our Scene wrapper
-        let scene = Scene(assimpScene)
-
-        print("\(scene.rootNode)")
-        //scene.cameras.forEach { logger.trace("\($0)") }
-
-        await MainActor.run {
-          self.scene = scene
-
-          // Load scene script class dynamically
-          loadSceneScript()
-
-          // Initialize active camera from scene using default name Camera_1
-          self.syncActiveCamera(name: "Camera_1")
-
-          // Load scene lights
-          //self.loadSceneLights()
-
-          // Load foreground meshes (nodes with -fg suffix)
-          self.loadForegroundMeshes(scene: scene)
-
-          // Spawn at Entry_1 if present
-          if let entryNode = scene.rootNode.findNode(named: "Entry_1") {
-            let entryWorld = self.calculateNodeWorldTransform(entryNode, scene: scene)
-            // Position from world transform translation (column 3, rows 0-2)
-            // In GLMath mat4, [3] is the 4th column which contains translation
-            let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
-            self.spawnPosition = extractedPos
-            // Forward direction from world transform's third row (basis Z)
-            let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
-            // Our movement uses forward = (sin(theta), 0, cos(theta)). Blender/glTF forward differs by ~90°.
-            // Apply a yaw offset to align the exported arrow (forward) with our tank-forward.
-            let yaw = atan2(fwd.x, fwd.z)
-            self.spawnRotation = yaw - (.pi * 0.5)
-            self.playerPosition = self.spawnPosition
-            self.playerRotation = self.spawnRotation
-            self.previousPlayerPosition = self.spawnPosition  // Initialize footstep tracking
-            logger.trace("🚀 Spawned capsule at Entry_1: \(self.playerPosition)")
-            logger.trace(
-              "📐 Entry_1 world transform translation column [3]: (\(entryWorld[3].x), \(entryWorld[3].y), \(entryWorld[3].z))"
-            )
-            // Character controller will be created after physics system is ready (in setupGameplay)
-
-            // Disable small-room clamping for real scene navigation
-            self.restrictMovementToRoom = false
-
-            // Set initial area
-            sceneScript?.currentArea = "Entry_1"
-          }
-        }
-      } catch {
-        fatalError("Failed to load scene: \(error)")
-      }
+      await loadScene(defaultScene)
     }
   }
 
@@ -985,17 +883,22 @@ import ObjectiveC.runtime
     let yaw = atan2(fwd.x, fwd.z)
     let entryRotation = yaw - (.pi * 0.5)
 
+    // The entry position is at the feet, but character controller uses center position
+    // Adjust Y position to account for capsule half-height
+    let capsuleHalfHeight: Float = 0.8
+    let adjustedPos = vec3(extractedPos.x, extractedPos.y + capsuleHalfHeight, extractedPos.z)
+
     // Update player position and rotation
-    playerPosition = extractedPos
+    playerPosition = adjustedPos
     playerRotation = entryRotation
-    spawnPosition = extractedPos
+    spawnPosition = extractedPos  // Keep spawn position at feet for reference
     spawnRotation = entryRotation
-    previousPlayerPosition = extractedPos  // Reset footstep tracking
+    previousPlayerPosition = adjustedPos  // Reset footstep tracking
     footstepAccumulatedDistance = 0.0  // Reset footstep accumulator
 
     // Update character controller if it exists
     if let characterController = characterController {
-      characterController.position = RVec3(x: extractedPos.x, y: extractedPos.y, z: extractedPos.z)
+      characterController.position = RVec3(x: adjustedPos.x, y: adjustedPos.y, z: adjustedPos.z)
       let rotationQuat = Quat(x: 0, y: sin(entryRotation / 2), z: 0, w: cos(entryRotation / 2))
       characterController.rotation = rotationQuat
       characterController.linearVelocity = Vec3(x: 0, y: 0, z: 0)  // Stop all movement
@@ -1075,15 +978,34 @@ import ObjectiveC.runtime
     // Fade out
     await ScreenFade.shared.fadeToBlack(duration: 0.3)
 
-    // Change scene name
-    self.sceneName = scene
-
     // Load the new scene and position at entry (defaults to Entry_1 if not specified)
     let entryName = entry ?? "Entry_1"
-    await loadSceneAsync(entry: entryName)
 
-    // Update current area in scene script
-    sceneScript?.currentArea = entryName
+    // Determine prerendered camera name based on entry (same logic as transition(to:))
+    // We need to determine this before loading the scene, but we'll need the scene to check for named cameras
+    // So we'll load with a default and update if needed
+    let defaultPrerenderedCameraName: String
+    if entryName.hasPrefix("Entry_") {
+      // Unnamed area - Entry_1 -> "1", Entry_2 -> "2", etc.
+      let entrySuffix = String(entryName.dropFirst(6))  // Remove "Entry_" prefix
+      defaultPrerenderedCameraName = entrySuffix
+    } else {
+      // For named areas, we'll default to "1" and update after scene loads if needed
+      defaultPrerenderedCameraName = "1"
+    }
+
+    // Load the scene
+    await loadScene(scene, entry: entryName, prerenderedCameraName: defaultPrerenderedCameraName)
+
+    // If it's a named area, check if we need to update the camera
+    if !entryName.hasPrefix("Entry_"), let currentScene = self.scene {
+      let areaCameraName = "Camera_\(entryName)_1"
+      if currentScene.rootNode.findNode(named: areaCameraName) != nil {
+        let prerenderedCameraName = "\(entryName)_1"
+        try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
+        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
+      }
+    }
 
     await Task.sleep(0.15)
 
@@ -1094,76 +1016,122 @@ import ObjectiveC.runtime
     UISound.doorCloseA()
   }
 
-  /// Async wrapper for loadScene
-  /// - Parameter entry: The entry name to position player at (defaults to "Entry_1")
-  private func loadSceneAsync(entry: String = "Entry_1") async {
-    await withCheckedContinuation { continuation in
-      Task {
-        do {
-          let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
-          let assimpScene = try Assimp.Scene(
-            file: scenePath,
-            flags: [.triangulate, .flipUVs, .calcTangentSpace]
-          )
+  /// Clear all physics bodies from the previous scene
+  private func clearOldPhysicsBodies() {
+    guard let physicsSystem = physicsSystem else { return }
+    let bodyInterface = physicsSystem.bodyInterface()
 
-          // Wrap in our Scene wrapper
-          let scene = Scene(assimpScene)
+    // Remove old character controller
+    characterController = nil
+    capsuleSensorBodyID = nil
 
-          print("\(scene.rootNode)")
-          //scene.cameras.forEach { logger.trace("\($0)") }
+    // Remove all collision bodies
+    for bodyID in collisionBodyIDs {
+      bodyInterface.removeAndDestroyBody(bodyID)
+    }
+    collisionBodyIDs.removeAll()
 
-          await MainActor.run {
-            self.scene = scene
+    // Remove all action bodies
+    for bodyID in actionBodyNames.keys {
+      bodyInterface.removeAndDestroyBody(bodyID)
+    }
+    actionBodyNames.removeAll()
 
-            // Reload physics bodies for new scene
-            if let physicsSystem = physicsSystem {
-              // Clear old bodies
-              // TODO: Properly clean up old physics bodies
+    // Remove all trigger bodies
+    for bodyID in triggerBodyNames.keys {
+      bodyInterface.removeAndDestroyBody(bodyID)
+    }
+    triggerBodyNames.removeAll()
+  }
 
-              // Load new collision bodies
-              loadCollisionBodiesIntoPhysics(scene: scene)
-              loadActionBodiesIntoPhysics(scene: scene)
-              loadTriggerBodiesIntoPhysics(scene: scene)
-              physicsSystem.optimizeBroadPhase()
+  /// Load a scene by name, setting up everything (scene, physics, prerendered environment, player position)
+  /// - Parameters:
+  ///   - sceneName: The scene name to load
+  ///   - entry: The entry name to position player at (defaults to "Entry_1")
+  ///   - prerenderedCameraName: Optional camera name for prerendered environment (defaults to "1")
+  @MainActor func loadScene(_ sceneName: String, entry: String = "Entry_1", prerenderedCameraName: String? = nil) async
+  {
+    do {
+      // Update scene name
+      self.sceneName = sceneName
 
-              // Remove old character controller
-              characterController = nil
-              capsuleSensorBodyID = nil
+      // Load the scene file
+      let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
+      let assimpScene = try Assimp.Scene(
+        file: scenePath,
+        flags: [.triangulate, .flipUVs, .calcTangentSpace]
+      )
 
-              // Position player at entry (updates player position/rotation)
-              positionPlayerAtEntry(entry, in: scene)
+      // Wrap in our Scene wrapper
+      let scene = Scene(assimpScene)
 
-              // Create character controller at the positioned location
-              if let entryNode = scene.rootNode.findNode(named: entry.hasPrefix("Entry_") ? entry : "Entry_\(entry)") {
-                let entryWorld = calculateNodeWorldTransform(entryNode, scene: scene)
-                let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
-                let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
-                let yaw = atan2(fwd.x, fwd.z)
-                let spawnRot = yaw - (.pi * 0.5)
+      print("\(scene.rootNode)")
+      //scene.cameras.forEach { logger.trace("\($0)") }
 
-                createCharacterController(at: extractedPos, rotation: spawnRot, in: physicsSystem)
-              }
-            }
+      // Set the scene
+      self.scene = scene
 
-            // Load scene script class dynamically
-            loadSceneScript()
-
-            // Set initial area (will be updated by transition if called, but set default here)
-            sceneScript?.currentArea = entry
-
-            // Initialize active camera from scene using default name Camera_1
-            self.syncActiveCamera(name: "Camera_1")
-
-            // Load foreground meshes (nodes with -fg suffix)
-            self.loadForegroundMeshes(scene: scene)
-
-            continuation.resume()
-          }
-        } catch {
-          logger.error("⚠️ Failed to load scene: \(error)")
-          continuation.resume()
-        }
+      // Clear old physics bodies if physics system is ready
+      guard let physicsSystem = physicsSystem else {
+        logger.error("⚠️ Physics system not ready, cannot load physics for scene '\(sceneName)'")
+        return
       }
+
+      logger.trace("🔄 Loading physics for scene '\(sceneName)'...")
+      clearOldPhysicsBodies()
+
+      // Load new collision bodies
+      loadCollisionBodiesIntoPhysics(scene: scene)
+      loadActionBodiesIntoPhysics(scene: scene)
+      loadTriggerBodiesIntoPhysics(scene: scene)
+      physicsSystem.optimizeBroadPhase()
+      logger.trace(
+        "✅ Loaded physics bodies: \(collisionBodyIDs.count) collision, \(actionBodyNames.count) action, \(triggerBodyNames.count) trigger"
+      )
+
+      // Position player at entry (updates player position/rotation)
+      // This already adjusts for capsule height, so playerPosition is the center position
+      positionPlayerAtEntry(entry, in: scene)
+
+      // Create character controller at the positioned location
+      // Use the position that was set by positionPlayerAtEntry (already adjusted for capsule height)
+      createCharacterController(at: playerPosition, rotation: playerRotation, in: physicsSystem)
+
+      if characterController == nil {
+        logger.error("⚠️ Failed to create character controller at entry '\(entry)'")
+      } else {
+        logger.trace("✅ Character controller created successfully")
+      }
+
+      // Mark physics system as ready for updates
+      physicsSystemReady = true
+
+      // Load scene script class dynamically
+      loadSceneScript()
+
+      // Set initial area
+      sceneScript?.currentArea = entry
+
+      // Initialize active camera from scene using default name Camera_1
+      syncActiveCamera(name: "Camera_1")
+
+      // Load foreground meshes (nodes with -fg suffix)
+      loadForegroundMeshes(scene: scene)
+
+      // Initialize prerendered environment for the scene
+      let cameraName = prerenderedCameraName ?? "1"
+      do {
+        prerenderedEnvironment = try PrerenderedEnvironment(sceneName, cameraName: cameraName)
+        // Sync the selectedCamera property with the actual current camera
+        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
+      } catch {
+        logger.error("⚠️ Failed to initialize PrerenderedEnvironment for scene '\(sceneName)': \(error)")
+      }
+
+      // Disable small-room clamping for real scene navigation
+      restrictMovementToRoom = false
+    } catch {
+      logger.error("⚠️ Failed to load scene '\(sceneName)': \(error)")
     }
   }
 
@@ -1273,7 +1241,11 @@ import ObjectiveC.runtime
   }
 
   private func createCharacterController(at position: vec3, rotation: Float, in system: PhysicsSystem) {
-    guard characterController == nil else { return }  // Only create once
+    // If character controller already exists, remove it first
+    if characterController != nil {
+      characterController = nil
+      capsuleSensorBodyID = nil
+    }
 
     // Create capsule shape for character (radius ~0.4, halfHeight ~0.8)
     let capsuleRadius: Float = 0.4
@@ -1519,6 +1491,7 @@ import ObjectiveC.runtime
       // Check for trigger body contacts
       // Triggers fire immediately when player enters them
       currentTriggers.removeAll()
+      currentCameraTriggers.removeAll()
       var newTriggers: Set<String> = []
 
       // Check character controller contacts for triggers (always check these, they're fast)
@@ -1527,6 +1500,7 @@ import ObjectiveC.runtime
           // Handle camera triggers
           if triggerName.hasPrefix("CameraTrigger_") {
             let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
+            currentCameraTriggers.append(cameraName)
             // Check if we're not already on this camera - switch if needed
             let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
             if currentCamera != cameraName {
@@ -1559,6 +1533,7 @@ import ObjectiveC.runtime
           // Handle camera triggers
           if triggerName.hasPrefix("CameraTrigger_") {
             let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
+            currentCameraTriggers.append(cameraName)
             // Check if we're not already on this camera - switch if needed
             let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
             if currentCamera != cameraName {
@@ -1866,7 +1841,15 @@ extension MainLoop {
         : "Triggers: \(currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
     ]
 
-    let overlay = overlayLines.joined(separator: "\n")
+    // Add camera triggers line only if there are any
+    var overlayLinesWithCamera = overlayLines
+    if !currentCameraTriggers.isEmpty {
+      overlayLinesWithCamera.append(
+        "Camera Triggers: \(currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
+      )
+    }
+
+    let overlay = overlayLinesWithCamera.joined(separator: "\n")
 
     overlay.draw(
       at: Point(20, Engine.viewportSize.height - 20),
@@ -1970,6 +1953,7 @@ extension MainLoop {
             // Create and add body to physics system
             let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
             if bodyID != 0 {
+              collisionBodyIDs.append(bodyID)
               logger.trace("✅ Created collision body ID: \(bodyID) for node '\(name)'")
             } else {
               logger.error("❌ Failed to create collision body for node '\(name)'")

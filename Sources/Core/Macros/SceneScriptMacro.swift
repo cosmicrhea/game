@@ -163,16 +163,8 @@ public struct SceneScriptMacro: MemberMacro {
       static func _register() {
         logger.trace("🔄 Registering \(raw: className)")
         ScriptRegistry.shared.register("\(raw: className)") {
-          // Get scene and dialogView from MainLoop.shared
-          // This factory closure is stored and only called lazily when create() is invoked,
-          // which happens after the scene is loaded, so MainLoop.shared and scene should be available
-          guard let mainLoop = MainLoop.shared else {
-            fatalError("MainLoop.shared is nil when creating \(raw: className) - ensure MainLoop.init() has been called")
-          }
-          guard let scene = mainLoop.scene else {
-            fatalError("MainLoop.shared.scene is nil when creating \(raw: className) - ensure loadScene() has been called")
-          }
-          return \(raw: className)(scene: scene, dialogView: mainLoop.dialogView)
+          // Script now accesses scene and dialogView through MainLoop.shared
+          return \(raw: className)()
         }
         logger.trace("✅ Registered \(raw: className)")
       }

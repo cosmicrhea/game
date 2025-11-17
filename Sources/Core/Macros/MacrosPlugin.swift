@@ -8,5 +8,6 @@ struct MacrosPlugin: CompilerPlugin {
     EditorFunctionMacro.self,
     ConfigMacro.self,
     SceneScriptMacro.self,
+    FindNodeMacro.self,
   ]
 }

@@ -200,7 +200,6 @@ public final class GLRenderer: Renderer {
         // This creates a more uniform blur like CoreGraphics instead of a circular halo
         let blurRadius = shadowBlur
         let gridSize = max(3, Int(blurRadius / 2.0))  // Grid size based on blur radius
-        let totalSamples = gridSize * gridSize
 
         // Sample in a grid pattern with Gaussian-like falloff
         for y in 0..<gridSize {

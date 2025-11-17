@@ -3,11 +3,7 @@ class ShootingRange: Script {
 
   let locked = false
 
-  var catStatue: Node!
-
-  override func sceneDidLoad() {
-    catStatue = findNode("CatStatue")
-  }
+  @FindNode var catStatue: Node
 
   func door() {
     if locked {
@@ -24,17 +20,18 @@ class ShootingRange: Script {
 
   func frontDoor() {
     //play(.doorLocked, at: currentActionTriggerNodeThingy)
-    UISound.lockedA()
-    say(variations: [
-      "It's locked.",
-      "It's locked!",
-      "It's still locked.",
-      "It's really locked.",
-      "It's locked. I can't open it.",
-      "It's fucking locked and I'm really freaking out.",
-      "I'M TRAPPED AND I CAN'T GET OUT! HELP!",
-      "HELP! HELP! HELP!",
-    ])
+    go(toScene: "test")
+    // UISound.lockedA()
+    // say(variations: [
+    //   "It's locked.",
+    //   "It's locked!",
+    //   "It's still locked.",
+    //   "It's really locked.",
+    //   "It's locked. I can't open it.",
+    //   "It's fucking locked and I'm really freaking out.",
+    //   "I'M TRAPPED AND I CAN'T GET OUT! HELP!",
+    //   "HELP! HELP! HELP!",
+    // ])
   }
 
   func tables() {

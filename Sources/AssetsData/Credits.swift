@@ -83,6 +83,15 @@ enum CreditsData {
       // https://sketchfab.com/azamata2019
       // https://sketchfab.com/3d-models/fire-extinguisher-90c60e3bc9fb4fe9966e4cea3aac0e30
       "Azamat Jonikulov",
+
+      // https://sketchfab.com/mtcollings
+      // https://sketchfab.com/3d-models/antique-desk-c491f647da5947978ba8113951ee2efc
+      // Chief’s Desk
+      "Matthew Collings",
+
+      // https://sketchfab.com/subhashssimon
+      // https://sketchfab.com/3d-models/executive-office-chair-88e43eb5dc55498dace0bda014603b3d
+      "Subhash S. Simon",
     ],
 
     "Sound Designers": [

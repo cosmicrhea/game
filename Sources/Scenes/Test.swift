@@ -1,12 +1,7 @@
 @SceneScript
 class Test: Script {
 
-  var catStatue: Node!
-
-  override func sceneDidLoad() {
-    catStatue = findNode("CatStatue")
-    //catStatue.isHidden = true
-  }
+  @FindNode var catStatue: Node
 
   func showCat() {
     if catStatue.isHidden {
@@ -33,6 +28,10 @@ class Test: Script {
     // await say("A cat has appeared.")
     await say("There's a cat here.", more: true)
     await acquire(.catStatue)
+  }
+
+  func door() {
+    go(toScene: "shooting_range")
   }
 
 }
