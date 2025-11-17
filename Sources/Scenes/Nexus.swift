@@ -11,15 +11,9 @@ class Nexus: Script {
     }
   }
 
-  func door1() {
-    go(toScene: "shooting_range")
-  }
-
-  func door2() {
-    go(toScene: "shooting_range")
-  }
-
-  func door3() { UISound.lockedB() }
+  func door1() { go(toScene: "shooting_range", entry: "range") }
+  func door2() { go(toScene: "shooting_range", entry: "hallway") }
+  func door3() { go(toScene: "test") }
   func door4() { UISound.lockedB() }
   func door5() { UISound.lockedA() }
   func door6() { UISound.lockedB() }

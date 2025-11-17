@@ -1,21 +1,10 @@
 @SceneScript
 class ShootingRange: Script {
 
-  let locked = false
-
   @FindNode var catStatue: Node
 
-  func door() {
-    if locked {
-      frontDoor()
-    } else {
-      // Toggle between hallway and Entry_1 based on current area
-      if currentArea == "hallway" {
-        go(to: "Entry_1")
-      } else {
-        go(to: "hallway")
-      }
-    }
+  func rangeDoor() {
+    go(to: currentArea == "hallway" ? "range" : "hallway")
   }
 
   func frontDoor() {
