@@ -54,10 +54,12 @@ public struct Item: Sendable {
   public let id: String
   public let kind: ItemKind
   public let name: String
-  public let image: Image?
   public let description: String?
+  public let image: Image?
   public let modelPath: String?
   public let inspectionDistance: Float
+  public let inspectionYaw: Float?
+  public let inspectionPitch: Float?
   public let requiresWideSlot: Bool
   public let wideImage: Image?
 
@@ -65,20 +67,24 @@ public struct Item: Sendable {
     id: String,
     kind: ItemKind = .key,
     name: String,
-    image: Image? = nil,
     description: String? = nil,
+    image: Image? = nil,
     modelPath: String? = nil,
     inspectionDistance: Float? = nil,
+    inspectionYaw: Float? = nil,
+    inspectionPitch: Float? = nil,
     requiresWideSlot: Bool = false,
     wideImage: Image? = nil
   ) {
     self.id = id
     self.kind = kind
     self.name = name
-    self.image = image ?? Image("Items/Weapons/\(id).png")
     self.description = description
+    self.image = image ?? Image("Items/Weapons/\(id).png")
     self.modelPath = modelPath ?? "Items/Weapons/\(id)"
     self.inspectionDistance = inspectionDistance ?? (requiresWideSlot == true ? 0.69 : 0.23)
+    self.inspectionYaw = inspectionYaw
+    self.inspectionPitch = inspectionPitch
     self.requiresWideSlot = requiresWideSlot
     self.wideImage = requiresWideSlot ? wideImage ?? Image("Items/Weapons/\(id)_wide.png") : wideImage
   }

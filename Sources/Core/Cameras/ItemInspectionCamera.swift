@@ -71,7 +71,7 @@ class ItemInspectionCamera {
   private var resetStartDistance: Float = 0.0
   private var resetStartPanOffset: vec3 = vec3(0, 0, 0)
   private var resetTargetYaw: Float = 0.0
-  private let resetTargetPitch: Float = 0.0
+  private var resetTargetPitch: Float = 0.0
   private var resetTargetDistance: Float = 0.0
   private let initialTarget: vec3
 
@@ -92,6 +92,7 @@ class ItemInspectionCamera {
     self.mouseSensitivity = defaultSensitivity
 
     self.resetTargetYaw = modelYaw
+    self.resetTargetPitch = modelPitch
     self.resetTargetDistance = distance
     self.initialTarget = target
 

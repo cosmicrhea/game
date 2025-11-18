@@ -2,10 +2,11 @@ import Assimp
 import CJolt
 import Foundation
 import Jolt
-//import ObjectiveC.runtime
 
-private let startingScene = "shooting_range"
-private let startingEntry = "range"
+private let startingScene = "chiefs_office"
+private let startingEntry = "1"
+// private let startingScene = "shooting_range"
+// private let startingEntry = "range"
 
 @Editable final class MainLoop: RenderLoop {
   static var shared: MainLoop?
@@ -81,6 +82,7 @@ private let startingEntry = "range"
   @Editor var visualizePhysics: Bool = false
   @Editor var visualizeEntries: Bool = false
   @Editor var disableDepth: Bool = false
+  private var showDebugText: Bool = true
 
   @Editor func shakeScreen() { ScreenShake.shared.shake(.subtle) }
   @Editor func shakeScreenMore() { ScreenShake.shared.shake(.heavy) }
@@ -125,6 +127,10 @@ private let startingEntry = "range"
   private var pickupView: PickupView?
   private var showingPickupView: Bool = false
 
+  // Pause screen system
+  private let pauseScreenStack: PauseScreenStack
+  private var showingPauseScreen: Bool = false
+
   // Dialog system
   private(set) var dialogView: DialogView!
   // Scene script instance
@@ -142,6 +148,9 @@ private let startingEntry = "range"
 
     // Initialize main menu
     mainMenu = MainMenu()
+
+    // Initialize pause screen
+    pauseScreenStack = PauseScreenStack()
 
     // Initialize weapon system
     weaponSystem = WeaponSystem(
@@ -430,62 +439,6 @@ private let startingEntry = "range"
     return mat4(row1, row2, row3, row4)
   }
 
-  func update(window: Window, deltaTime: Float) {
-    if showingPickupView {
-      // Update pickup view
-      pickupView?.update(window: window, deltaTime: deltaTime)
-    } else if showingMainMenu {
-      // Update main menu
-      mainMenu.update(window: window, deltaTime: deltaTime)
-    } else {
-      // Only handle movement if dialog is not active and input is enabled
-      if !dialogView.isActive && Input.player1.isEnabled {
-        // Handle WASD movement
-        handleMovement(window.keyboard, deltaTime)
-
-        // Handle weapon system hold mode and firing
-        // Update weapon system (for rate of fire timing)
-        weaponSystem.update(deltaTime: deltaTime)
-
-        // Handle hold mode for Space
-        if !weaponSystem.usesToggledAiming {
-          if window.keyboard.state(of: .space) == .pressed {
-            // Space is held - enter ready aim, then aim
-            if weaponSystem.currentAimState == .idle {
-              weaponSystem.enterReadyAim()
-            } else if weaponSystem.currentAimState == .readyAim {
-              weaponSystem.enterAim()
-            }
-          } else {
-            // Space released - exit aim
-            if weaponSystem.currentAimState != .idle {
-              weaponSystem.exitAim()
-            }
-          }
-        }
-
-        // Handle firing with Ctrl (hold to fire)
-        if window.keyboard.state(of: .leftControl) == .pressed || window.keyboard.state(of: .rightControl) == .pressed {
-          if weaponSystem.isAiming {
-            _ = weaponSystem.fire()
-          }
-        }
-      }
-
-      // Update prerendered environment animation
-      prerenderedEnvironment?.update()
-    }
-
-    // Update dialog view
-    dialogView.update(deltaTime: deltaTime)
-
-    // Update FPS (EMA)
-    if deltaTime > 0 {
-      let inst = 1.0 / deltaTime
-      smoothedFPS = smoothedFPS * 0.9 + inst * 0.1
-    }
-  }
-
   // MARK: Input
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -494,6 +447,25 @@ private let startingEntry = "range"
     if showingPickupView {
       // Forward input to pickup view
       pickupView?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      return
+    }
+
+    if showingPauseScreen {
+      // Don't process input if we're fading out
+      if pauseScreenStack.isFadingOut {
+        return
+      }
+      // Handle escape key to close pause screen (only if at root)
+      if key == .escape {
+        // Check if NavigationStack is at root - if not, let it handle going back
+        if pauseScreenStack.isAtRoot {
+          UISound.cancel()
+          hidePauseScreen()
+          return
+        }
+      }
+      // Forward input to pause screen (including escape if not at root)
+      pauseScreenStack.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
       return
     }
 
@@ -507,14 +479,14 @@ private let startingEntry = "range"
           return
         }
         // No nested view, close the main menu
-        UISound.select()
+        UISound.cancel()
         hideMainMenu()
         return
       }
 
       // Handle I, M, and Tab to close main menu (always close, no nested check)
       if key == .i || key == .m || key == .tab {
-        UISound.select()
+        UISound.cancel()
         hideMainMenu()
         return
       }
@@ -584,6 +556,12 @@ private let startingEntry = "range"
         if isDebugCameraOverrideMode {
           UISound.select()
           isDebugCameraOverrideMode = false
+        } else {
+          // Show pause screen if no other UI is showing and dialog is not active
+          if !dialogView.isActive {
+            UISound.select()
+            showPauseScreen()
+          }
         }
         break
 
@@ -643,6 +621,10 @@ private let startingEntry = "range"
         visualizePhysics.toggle()
         logger.trace("Debug renderer: \(visualizePhysics ? "ON" : "OFF")")
 
+      case .backspace:
+        UISound.select()
+        showDebugText.toggle()
+
       case .leftControl, .rightControl:
         // Fire weapon (Ctrl)
         guard weaponSystem.isAiming else { break }
@@ -660,6 +642,8 @@ private let startingEntry = "range"
 
     if showingPickupView {
       pickupView?.onMouseMove(window: window, x: x, y: y)
+    } else if showingPauseScreen {
+      pauseScreenStack.onMouseMove(window: window, x: x, y: y)
     } else if showingMainMenu {
       mainMenu.onMouseMove(window: window, x: x, y: y)
     }
@@ -670,6 +654,8 @@ private let startingEntry = "range"
 
     if showingPickupView {
       pickupView?.onMouseButton(window: window, button: button, state: state, mods: mods)
+    } else if showingPauseScreen {
+      pauseScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
     } else if showingMainMenu {
       mainMenu.onMouseButton(window: window, button: button, state: state, mods: mods)
     }
@@ -683,6 +669,15 @@ private let startingEntry = "range"
       return
     }
 
+    if showingPauseScreen {
+      // Don't process input if we're fading out
+      if pauseScreenStack.isFadingOut {
+        return
+      }
+      pauseScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
+      return
+    }
+
     if showingMainMenu {
       // Handle right-click with nested view support (same as Escape)
       if button == .right {
@@ -693,7 +688,7 @@ private let startingEntry = "range"
           return
         }
         // No nested view, close the main menu
-        UISound.select()
+        UISound.cancel()
         hideMainMenu()
         return
       }
@@ -714,9 +709,9 @@ private let startingEntry = "range"
             dialogView.dismiss()
             UISound.select()
           }
-        } else {
-          // No dialog showing, handle interaction with detected action
-          handleInteraction()
+          // } else {
+          //   // No dialog showing, handle interaction with detected action
+          //   handleInteraction()
         }
       }
     }
@@ -727,6 +722,8 @@ private let startingEntry = "range"
 
     if showingPickupView {
       // No-op for pickup view
+    } else if showingPauseScreen {
+      // No-op for pause screen
     } else if showingMainMenu {
       mainMenu.onMouseButtonReleased(window: window, button: button, mods: mods)
     }
@@ -737,6 +734,8 @@ private let startingEntry = "range"
 
     if showingPickupView {
       pickupView?.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
+    } else if showingPauseScreen {
+      // No-op for pause screen
     } else if showingMainMenu {
       mainMenu.onScroll(window: window, xOffset: xOffset, yOffset: yOffset)
     }
@@ -749,6 +748,17 @@ private let startingEntry = "range"
 
   private func hideMainMenu() {
     showingMainMenu = false
+  }
+
+  private func showPauseScreen() {
+    showingPauseScreen = true
+    pauseScreenStack.onAttach(window: Engine.shared.window)
+  }
+
+  func hidePauseScreen() {
+    // Start fade-out animation
+    pauseScreenStack.startFadeOut()
+    // Don't set showingPauseScreen = false yet - let it fade out first
   }
 
   private var pickupViewContinuation: CheckedContinuation<Bool, Never>?
@@ -1064,11 +1074,11 @@ private let startingEntry = "range"
       // Set the scene
       self.scene = scene
 
-//      // Clear old physics bodies if physics system is ready
-//      guard let physicsSystem = physicsSystem else {
-//        logger.error("⚠️ Physics system not ready, cannot load physics for scene '\(sceneName)'")
-//        return
-//      }
+      //      // Clear old physics bodies if physics system is ready
+      //      guard let physicsSystem = physicsSystem else {
+      //        logger.error("⚠️ Physics system not ready, cannot load physics for scene '\(sceneName)'")
+      //        return
+      //      }
 
       logger.trace("🔄 Loading physics for scene '\(sceneName)'...")
       clearOldPhysicsBodies()
@@ -1190,9 +1200,9 @@ private let startingEntry = "range"
 
     // Check if player is in the correct area
     let currentArea = sceneScript?.currentArea
-//    if currentArea == nil {
-//      sceneScript?.currentArea = triggerArea
-//    } else
+    //    if currentArea == nil {
+    //      sceneScript?.currentArea = triggerArea
+    //    } else
     if let currentArea, currentArea != triggerArea {
       logger.trace(
         "📷 Camera trigger '\(cameraName)' ignored: player is in area '\(currentArea)', trigger requires '\(triggerArea)'"
@@ -1310,504 +1320,6 @@ private let startingEntry = "range"
     } else {
       logger.error("❌ Failed to create capsule sensor")
     }
-  }
-
-  private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
-    // Tank controls: A/D rotate, W/S move forward/backward
-    let rotationDelta = rotationSpeed * deltaTime
-
-    // Always allow rotation, even while aiming
-    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
-      playerRotation += rotationDelta
-    }
-    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
-      playerRotation -= rotationDelta
-    }
-
-    // Don't allow forward/backward movement while aiming
-    if weaponSystem.isAiming { return }
-
-    // Calculate forward direction from rotation
-    let forwardX = GLMath.sin(playerRotation)
-    let forwardZ = GLMath.cos(playerRotation)
-    let forward = vec3(forwardX, 0, forwardZ)
-
-    // Update character controller if it exists
-    if let characterController {
-      // Check for speed boost (Shift key)
-      let speedMultiplier: Float
-      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
-        speedMultiplier = 2.5  // 2.5x speed when holding Shift
-      } else {
-        speedMultiplier = 1.0
-      }
-      let currentMoveSpeed = moveSpeed * speedMultiplier
-
-      // Calculate desired horizontal velocity from input
-      var desiredVelocity = Vec3(x: 0, y: 0, z: 0)
-
-      if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
-        desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
-      } else if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
-        desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
-      }
-
-      // Get current velocity and preserve Y component (gravity)
-      var currentVelocity = characterController.linearVelocity
-      let currentYVelocity = currentVelocity.y
-
-      // Set horizontal velocity directly (no smoothing - character controller handles it)
-      currentVelocity.x = desiredVelocity.x
-      currentVelocity.z = desiredVelocity.z
-      // Apply gravity if not on ground
-      if !characterController.isSupported {
-        currentVelocity.y = currentYVelocity + physicsSystem.getGravity().y * deltaTime
-      } else {
-        currentVelocity.y = 0  // On ground, no vertical velocity
-      }
-
-      characterController.linearVelocity = currentVelocity
-
-      // Update character rotation
-      let rotationQuat = Quat(x: 0, y: sin(playerRotation / 2), z: 0, w: cos(playerRotation / 2))
-      characterController.rotation = rotationQuat
-
-      // Only update character controller and physics system if ready
-      if physicsSystemReady {
-        // Update physics system FIRST (jobSystem is required)
-        // This internally waits for all jobs to complete, so it's synchronous
-        // This ensures the physics world is in a consistent state before character controller updates
-          physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: jobSystem)
-
-        // Update character controller (this does the physics movement)
-        let characterLayer: ObjectLayer = 2  // Dynamic layer
-        characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
-
-        // Read position immediately after character controller update
-        // This gives us the position from the character controller's internal state
-        let characterPos = characterController.position
-        let newPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
-
-        // Calculate horizontal distance moved (ignore vertical movement)
-        let horizontalDelta = vec3(
-          newPosition.x - previousPlayerPosition.x,
-          0,
-          newPosition.z - previousPlayerPosition.z
-        )
-        let distanceMoved = length(horizontalDelta)
-
-        // Check if player is moving (has input)
-        let isMoving =
-          keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
-          || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
-
-        // Only accumulate distance and play footsteps if moving and on ground
-        if isMoving && characterController.isSupported {
-          footstepAccumulatedDistance += distanceMoved
-
-          // Determine footstep rate based on running vs walking
-          let footstepThreshold = speedMultiplier > 1.0 ? footstepDistanceRun : footstepDistanceWalk
-
-          // Play footstep when threshold is reached
-          if footstepAccumulatedDistance >= footstepThreshold {
-            UISound.footstep()
-            footstepAccumulatedDistance = 0.0  // Reset accumulator
-          }
-        } else {
-          // Not moving or not on ground - reset accumulator
-          footstepAccumulatedDistance = 0.0
-        }
-
-        // Update previous position for next frame
-        previousPlayerPosition = newPosition
-        playerPosition = newPosition
-      }
-
-      // FIX 3: Cache collision queries - only run every N frames
-      queryFrameCounter += 1
-      let shouldUpdateQueries = (queryFrameCounter % queryCacheInterval) == 0
-
-      // Check for action body contacts (sensor bodies)
-      detectedActionName = nil
-
-      // Also check character controller contacts (always check these, they're fast)
-      let contacts = characterController.activeContacts()
-      for contact in contacts {
-        if contact.isSensorB, let actionName = actionBodyNames[contact.bodyID] {
-          detectedActionName = actionName.replacing(/-action$/, with: "")
-          break  // Just show first detected action
-        }
-      }
-
-      // Update capsule sensor position to follow the capsule in front
-      // And check for action body overlaps using collision query
-      if let sensorBodyID = capsuleSensorBodyID {
-        let bodyInterface = physicsSystem.bodyInterface()
-
-        // Calculate position in front of capsule based on current rotation
-        let forwardX = GLMath.sin(playerRotation)
-        let forwardZ = GLMath.cos(playerRotation)
-        let sensorDistance: Float = 1.2
-        let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
-        let sensorPosition = playerPosition + sensorOffset
-
-        // Update sensor position using Body wrapper
-        var sensorBody = bodyInterface.body(sensorBodyID, in: physicsSystem)
-        sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
-
-        // FIX 3: Only query for overlapping action bodies every N frames
-        if shouldUpdateQueries {
-          let sensorShape = SphereShape(radius: 0.5)
-          var baseOffset = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
-          cachedActionQueryResults = physicsSystem.collideShapeAll(
-            shape: sensorShape,
-            scale: Vec3(x: 1, y: 1, z: 1),
-            baseOffset: &baseOffset
-          )
-        }
-
-        // Check if any of the colliding bodies are action bodies (use cached results)
-        for result in cachedActionQueryResults {
-          let bodyID = result.bodyID2
-          if let actionName = actionBodyNames[bodyID] {
-            detectedActionName = actionName.replacing(/-action$/, with: "")
-            break  // Just show first detected action
-          }
-        }
-      }
-
-      // Check for trigger body contacts
-      // Triggers fire immediately when player enters them
-      currentTriggers.removeAll()
-      currentCameraTriggers.removeAll()
-      var newTriggers: Set<String> = []
-
-      // Check character controller contacts for triggers (always check these, they're fast)
-      for contact in contacts {
-        if contact.isSensorB, let triggerName = triggerBodyNames[contact.bodyID] {
-          // Handle camera triggers
-          if triggerName.hasPrefix("CameraTrigger_") {
-            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
-            currentCameraTriggers.append(cameraName)
-            // Check if we're not already on this camera - switch if needed
-            let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-            if currentCamera != cameraName {
-              handleCameraTrigger(cameraName: cameraName)
-            }
-          } else {
-            let cleanName = triggerName.replacing(/-trigger$/, with: "")
-            currentTriggers.append(cleanName)
-            newTriggers.insert(cleanName)
-          }
-        }
-      }
-
-      // FIX 3: Only check using collision query every N frames
-      if shouldUpdateQueries {
-        let triggerCheckRadius: Float = 0.5  // Radius to check around player
-        let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
-        var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
-        cachedTriggerQueryResults = physicsSystem.collideShapeAll(
-          shape: triggerCheckShape,
-          scale: Vec3(x: 1, y: 1, z: 1),
-          baseOffset: &playerBaseOffset
-        )
-      }
-
-      // Check for trigger bodies (use cached results)
-      for result in cachedTriggerQueryResults {
-        let bodyID = result.bodyID2
-        if let triggerName = triggerBodyNames[bodyID] {
-          // Handle camera triggers
-          if triggerName.hasPrefix("CameraTrigger_") {
-            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
-            currentCameraTriggers.append(cameraName)
-            // Check if we're not already on this camera - switch if needed
-            let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-            if currentCamera != cameraName {
-              handleCameraTrigger(cameraName: cameraName)
-            }
-          } else {
-            let cleanName = triggerName.replacing(/-trigger$/, with: "")
-            currentTriggers.append(cleanName)
-            newTriggers.insert(cleanName)
-          }
-        }
-      }
-
-      // Call trigger methods for newly entered triggers
-      let newlyEnteredTriggers = newTriggers.subtracting(previousTriggers)
-      for triggerName in newlyEnteredTriggers {
-        callTriggerMethod(triggerName: triggerName)
-      }
-
-      // Update previous triggers for next frame
-      previousTriggers = newTriggers
-    }
-  }
-
-  func draw() {
-    if showingPickupView {
-      // Draw pickup view
-      pickupView?.draw()
-    } else if showingMainMenu {
-      // Draw main menu
-      mainMenu.draw()
-    } else {
-      // Set up 3D rendering
-      let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
-
-      // Use Camera_1 projection if available, otherwise fallback to default
-      let projection: mat4
-      if let camera {
-        // Check if camera is orthographic (FOV is 0 or orthographicWidth is set)
-        let isOrthographic = camera.horizontalFOV == 0.0 || camera.orthographicWidth > 0.0
-
-        if isOrthographic {
-          // Orthographic camera: use orthographicWidth (half width) and aspect ratio
-          let orthoWidth = camera.orthographicWidth > 0.0 ? camera.orthographicWidth : 1.0
-
-          // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
-          let finalAspect: Float
-          if camera.aspect > 0 {
-            finalAspect = camera.aspect
-          } else {
-            finalAspect = aspectRatio
-          }
-
-          // Calculate orthographic bounds
-          // orthographicWidth is half the horizontal width
-          let left = -orthoWidth
-          let right = orthoWidth
-          // Height = width / aspect, so halfHeight = orthoWidth / aspect
-          let bottom = -orthoWidth / finalAspect
-          let top = orthoWidth / finalAspect
-
-          projection = GLMath.ortho(left, right, bottom, top, camera.clipPlaneNear, camera.clipPlaneFar)
-
-          logger.trace(
-            "📐 Using orthographic camera: width=\(orthoWidth * 2), aspect=\(finalAspect), near=\(camera.clipPlaneNear), far=\(camera.clipPlaneFar)"
-          )
-        } else {
-          // Perspective camera: use existing FOV calculation
-          // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
-          // The prerendered images were rendered with a specific aspect ratio, so we should match it
-          let finalAspect: Float
-          if camera.aspect > 0 {
-            // Use camera's aspect ratio (this is what the prerendered images were rendered with)
-            finalAspect = camera.aspect
-          } else {
-            // Fallback to viewport aspect ratio
-            finalAspect = aspectRatio
-          }
-
-          // Convert horizontal FOV to vertical FOV
-          // GLMath.perspective expects vertical FOV (fovy), but Assimp gives us horizontal FOV
-          // Formula: verticalFOV = 2 * atan(tan(horizontalFOV / 2) / aspectRatio)
-          let horizontalFOVHalf = camera.horizontalFOV / 2.0
-          let verticalFOV = 2.0 * atan(tan(horizontalFOVHalf) / finalAspect)
-
-          projection = GLMath.perspective(verticalFOV, finalAspect, camera.clipPlaneNear, camera.clipPlaneFar)
-
-          // Debug: Print aspect ratio mismatch if significant
-          if abs(finalAspect - aspectRatio) > 0.01 {
-            logger.warning("⚠️ Aspect ratio mismatch: camera=\(finalAspect), viewport=\(aspectRatio)")
-          }
-        }
-      } else {
-        projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
-      }
-
-      GraphicsContext.current?.renderer.withUIContext {
-        // Render prerendered environment first (as background)
-        prerenderedEnvironment?.render(projectionMatrix: projection)
-
-        // Clear depth buffer after rendering if debug flag is set
-        if disableDepth {
-          glClear(GL_DEPTH_BUFFER_BIT)
-        }
-      }
-
-      // Get view matrix from camera node's world transform
-      // In glTF/Assimp, the camera node's transform IS the camera-to-world transform
-      // To get the view matrix (world-to-camera), we simply invert it
-      var view: mat4
-      let cameraWorld: mat4
-      // Check if camera world transform is valid (not identity)
-      if cameraWorldTransform != mat4(1) {
-        cameraWorld = cameraWorldTransform
-        // The view matrix is the inverse of the camera's world transform
-        // This matches how the prerendered images were rendered
-        view = inverse(cameraWorld)
-      } else {
-        // Fallback: use identity view matrix if camera not available
-        cameraWorld = mat4(1)
-        view = mat4(1)
-      }
-
-      // Apply screen shake offset to view matrix
-      let shakeOffset = ScreenShake.shared.offset
-      if shakeOffset.x != 0.0 || shakeOffset.y != 0.0 {
-        // Translate view matrix by shake offset
-        // Convert screen space offset to world space (approximate using viewport size)
-        // Scale factor determines how much world space movement corresponds to screen pixels
-        let viewportSize = Engine.viewportSize
-        let worldOffsetX = shakeOffset.x / viewportSize.width * 10.0  // Scale factor
-        let worldOffsetY = shakeOffset.y / viewportSize.height * 10.0  // Scale factor
-        view = GLMath.translate(view, vec3(worldOffsetX, worldOffsetY, 0.0))
-      }
-
-      // Do not clear depth; we rely on PrerenderedEnvironment writing correct depth
-
-      // Draw capsule mesh
-      if !capsuleMeshInstances.isEmpty {
-        // Ensure depth testing/writes are enabled for 3D integration
-        glEnable(GL_DEPTH_TEST)
-        glDepthMask(true)
-        glDepthFunc(GL_LEQUAL)
-
-        // Create model matrix: translate to player position, then rotate around Y axis
-        // Offset Y downward so capsule sits on floor (assuming origin is at center)
-        var adjustedPosition = playerPosition
-        adjustedPosition.y -= capsuleHeightOffset
-        var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
-        modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
-
-        for meshInstance in capsuleMeshInstances {
-          // Combine the mesh's original transform with player transform
-          let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
-
-          // Extract camera position from world transform (4th column)
-          let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
-
-          // Get lighting from scene lights
-          let lighting = getSceneLighting()
-
-          meshInstance.draw(
-            projection: projection,
-            view: view,
-            modelMatrix: combinedModelMatrix,
-            cameraPosition: cameraPosition,
-            lightDirection: lighting.mainLight.direction,
-            lightColor: lighting.mainLight.color,
-            lightIntensity: lighting.mainLight.intensity,
-            fillLightDirection: lighting.fillLight.direction,
-            fillLightColor: lighting.fillLight.color,
-            fillLightIntensity: lighting.fillLight.intensity,
-            diffuseOnly: false
-          )
-        }
-      }
-
-      // Draw foreground meshes (nodes with -fg suffix)
-      if !foregroundMeshInstances.isEmpty {
-        glEnable(GL_DEPTH_TEST)
-        glDepthMask(true)
-        glDepthFunc(GL_LEQUAL)
-
-        let lighting = getSceneLighting()
-        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
-
-        for meshInstance in foregroundMeshInstances {
-          // Skip if not visible (node is hidden)
-          guard meshInstance.isVisible() else { continue }
-
-          meshInstance.draw(
-            projection: projection,
-            view: view,
-            modelMatrix: meshInstance.transformMatrix,
-            cameraPosition: cameraPosition,
-            lightDirection: lighting.mainLight.direction,
-            lightColor: lighting.mainLight.color,
-            lightIntensity: lighting.mainLight.intensity,
-            fillLightDirection: lighting.fillLight.direction,
-            fillLightColor: lighting.fillLight.color,
-            fillLightIntensity: lighting.fillLight.intensity,
-            diffuseOnly: false
-          )
-        }
-      }
-
-      // Always call nextFrame to maintain consistent timing (even when not visualizing)
-      // This might help with synchronization/timing issues
-      if let debugRenderer {
-        debugRenderer.nextFrame()
-      }
-
-      // Update debug renderer camera and draw if enabled
-      if let debugRenderer {
-        currentProjection = projection
-        currentView = view
-
-        // Set camera position for debug renderer (extract from view matrix)
-        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
-        debugRenderer.setCameraPosition(RVec3(x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z))
-
-        if visualizePhysics {
-          debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF00FF, size: 2.0)
-          physicsSystem.drawBodies(debugRenderer: debugRenderer)
-        }
-
-        // Draw entry arrows using Jolt debug renderer
-        if let loadedScene = scene {
-          drawEntryArrows(scene: loadedScene, debugRenderer: debugRenderer)
-        }
-      }
-
-      // Debug overlay (top-left)
-      drawDebugInfo()
-
-      // Draw dialog view (on top of everything)
-      GraphicsContext.current?.renderer.withUIContext {
-        dialogView.draw()
-      }
-    }
-  }
-
-  private func drawDebugInfo() {
-    // Show "(override)" suffix when in debug camera override mode
-    let cameraDisplayName = isDebugCameraOverrideMode ? "\(selectedCamera) (override)" : selectedCamera
-
-    var overlayLines = [
-      //String(format: "FPS: %.0f", smoothedFPS),
-      //"Scene: \(sceneName)",
-      "Camera: \(cameraDisplayName)",
-
-      String(
-        format: "Position: %.2f, %.2f, %.2f",
-        playerPosition.x,
-        playerPosition.y,
-        playerPosition.z
-      ),
-
-      String(
-        format: "Rotation: %.0f° (%.2f rad)",
-        playerRotation * 180.0 / .pi,
-        playerRotation
-      ),
-
-      detectedActionName != nil
-        ? "Actions: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Actions: none",
-
-      currentTriggers.isEmpty
-        ? "Triggers: none"
-        : "Triggers: \(currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
-    ]
-
-    // Add camera triggers line if there are any
-    if !currentCameraTriggers.isEmpty {
-      overlayLines.append(
-        "Camera Triggers: \(currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
-      )
-    }
-
-    let overlay = overlayLines.joined(separator: "\n")
-
-    overlay.draw(
-      at: Point(20, Engine.viewportSize.height - 20),
-      style: .itemDescription.withMonospacedDigits(true),
-      anchor: .topLeft
-    )
   }
 
   private func createGroundPlane() {
@@ -2089,4 +1601,576 @@ private let startingEntry = "range"
     }
     traverse(scene.rootNode)
   }
+
+  private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
+    // Tank controls: A/D rotate, W/S move forward/backward
+    let rotationDelta = rotationSpeed * deltaTime
+
+    // Always allow rotation, even while aiming
+    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
+      playerRotation += rotationDelta
+    }
+    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
+      playerRotation -= rotationDelta
+    }
+
+    // Don't allow forward/backward movement while aiming
+    if weaponSystem.isAiming { return }
+
+    // Calculate forward direction from rotation
+    let forwardX = GLMath.sin(playerRotation)
+    let forwardZ = GLMath.cos(playerRotation)
+    let forward = vec3(forwardX, 0, forwardZ)
+
+    // Update character controller if it exists
+    if let characterController {
+      // Check for speed boost (Shift key)
+      let speedMultiplier: Float
+      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
+        speedMultiplier = 2.5  // 2.5x speed when holding Shift
+      } else {
+        speedMultiplier = 1.0
+      }
+      let currentMoveSpeed = moveSpeed * speedMultiplier
+
+      // Calculate desired horizontal velocity from input
+      var desiredVelocity = Vec3(x: 0, y: 0, z: 0)
+
+      if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
+        desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
+      } else if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
+        desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
+      }
+
+      // Get current velocity and preserve Y component (gravity)
+      var currentVelocity = characterController.linearVelocity
+      let currentYVelocity = currentVelocity.y
+
+      // Set horizontal velocity directly (no smoothing - character controller handles it)
+      currentVelocity.x = desiredVelocity.x
+      currentVelocity.z = desiredVelocity.z
+      // Apply gravity if not on ground
+      if !characterController.isSupported {
+        currentVelocity.y = currentYVelocity + physicsSystem.getGravity().y * deltaTime
+      } else {
+        currentVelocity.y = 0  // On ground, no vertical velocity
+      }
+
+      characterController.linearVelocity = currentVelocity
+
+      // Update character rotation
+      let rotationQuat = Quat(x: 0, y: sin(playerRotation / 2), z: 0, w: cos(playerRotation / 2))
+      characterController.rotation = rotationQuat
+
+      // Only update character controller and physics system if ready
+      if physicsSystemReady {
+        // Update physics system FIRST (jobSystem is required)
+        // This internally waits for all jobs to complete, so it's synchronous
+        // This ensures the physics world is in a consistent state before character controller updates
+        physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: jobSystem)
+
+        // Update character controller (this does the physics movement)
+        let characterLayer: ObjectLayer = 2  // Dynamic layer
+        characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
+
+        // Read position immediately after character controller update
+        // This gives us the position from the character controller's internal state
+        let characterPos = characterController.position
+        let newPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
+
+        // Calculate horizontal distance moved (ignore vertical movement)
+        let horizontalDelta = vec3(
+          newPosition.x - previousPlayerPosition.x,
+          0,
+          newPosition.z - previousPlayerPosition.z
+        )
+        let distanceMoved = length(horizontalDelta)
+
+        // Check if player is moving (has input)
+        let isMoving =
+          keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
+          || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
+
+        // Only accumulate distance and play footsteps if moving and on ground
+        if isMoving && characterController.isSupported {
+          footstepAccumulatedDistance += distanceMoved
+
+          // Determine footstep rate based on running vs walking
+          let footstepThreshold = speedMultiplier > 1.0 ? footstepDistanceRun : footstepDistanceWalk
+
+          // Play footstep when threshold is reached
+          if footstepAccumulatedDistance >= footstepThreshold {
+            UISound.footstep()
+            footstepAccumulatedDistance = 0.0  // Reset accumulator
+          }
+        } else {
+          // Not moving or not on ground - reset accumulator
+          footstepAccumulatedDistance = 0.0
+        }
+
+        // Update previous position for next frame
+        previousPlayerPosition = newPosition
+        playerPosition = newPosition
+      }
+
+      // FIX 3: Cache collision queries - only run every N frames
+      queryFrameCounter += 1
+      let shouldUpdateQueries = (queryFrameCounter % queryCacheInterval) == 0
+
+      // Check for action body contacts (sensor bodies)
+      detectedActionName = nil
+
+      // Also check character controller contacts (always check these, they're fast)
+      let contacts = characterController.activeContacts()
+      for contact in contacts {
+        if contact.isSensorB, let actionName = actionBodyNames[contact.bodyID] {
+          detectedActionName = actionName.replacing(/-action$/, with: "")
+          break  // Just show first detected action
+        }
+      }
+
+      // Update capsule sensor position to follow the capsule in front
+      // And check for action body overlaps using collision query
+      if let sensorBodyID = capsuleSensorBodyID {
+        let bodyInterface = physicsSystem.bodyInterface()
+
+        // Calculate position in front of capsule based on current rotation
+        let forwardX = GLMath.sin(playerRotation)
+        let forwardZ = GLMath.cos(playerRotation)
+        let sensorDistance: Float = 1.2
+        let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
+        let sensorPosition = playerPosition + sensorOffset
+
+        // Update sensor position using Body wrapper
+        var sensorBody = bodyInterface.body(sensorBodyID, in: physicsSystem)
+        sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
+
+        // FIX 3: Only query for overlapping action bodies every N frames
+        if shouldUpdateQueries {
+          let sensorShape = SphereShape(radius: 0.5)
+          var baseOffset = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
+          cachedActionQueryResults = physicsSystem.collideShapeAll(
+            shape: sensorShape,
+            scale: Vec3(x: 1, y: 1, z: 1),
+            baseOffset: &baseOffset
+          )
+        }
+
+        // Check if any of the colliding bodies are action bodies (use cached results)
+        for result in cachedActionQueryResults {
+          let bodyID = result.bodyID2
+          if let actionName = actionBodyNames[bodyID] {
+            detectedActionName = actionName.replacing(/-action$/, with: "")
+            break  // Just show first detected action
+          }
+        }
+      }
+
+      // Check for trigger body contacts
+      // Triggers fire immediately when player enters them
+      currentTriggers.removeAll()
+      currentCameraTriggers.removeAll()
+      var newTriggers: Set<String> = []
+
+      // Check character controller contacts for triggers (always check these, they're fast)
+      for contact in contacts {
+        if contact.isSensorB, let triggerName = triggerBodyNames[contact.bodyID] {
+          // Handle camera triggers
+          if triggerName.hasPrefix("CameraTrigger_") {
+            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
+            currentCameraTriggers.append(cameraName)
+            // Check if we're not already on this camera - switch if needed
+            let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
+            if currentCamera != cameraName {
+              handleCameraTrigger(cameraName: cameraName)
+            }
+          } else {
+            let cleanName = triggerName.replacing(/-trigger$/, with: "")
+            currentTriggers.append(cleanName)
+            newTriggers.insert(cleanName)
+          }
+        }
+      }
+
+      // FIX 3: Only check using collision query every N frames
+      if shouldUpdateQueries {
+        let triggerCheckRadius: Float = 0.5  // Radius to check around player
+        let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
+        var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
+        cachedTriggerQueryResults = physicsSystem.collideShapeAll(
+          shape: triggerCheckShape,
+          scale: Vec3(x: 1, y: 1, z: 1),
+          baseOffset: &playerBaseOffset
+        )
+      }
+
+      // Check for trigger bodies (use cached results)
+      for result in cachedTriggerQueryResults {
+        let bodyID = result.bodyID2
+        if let triggerName = triggerBodyNames[bodyID] {
+          // Handle camera triggers
+          if triggerName.hasPrefix("CameraTrigger_") {
+            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
+            currentCameraTriggers.append(cameraName)
+            // Check if we're not already on this camera - switch if needed
+            let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
+            if currentCamera != cameraName {
+              handleCameraTrigger(cameraName: cameraName)
+            }
+          } else {
+            let cleanName = triggerName.replacing(/-trigger$/, with: "")
+            currentTriggers.append(cleanName)
+            newTriggers.insert(cleanName)
+          }
+        }
+      }
+
+      // Call trigger methods for newly entered triggers
+      let newlyEnteredTriggers = newTriggers.subtracting(previousTriggers)
+      for triggerName in newlyEnteredTriggers {
+        callTriggerMethod(triggerName: triggerName)
+      }
+
+      // Update previous triggers for next frame
+      previousTriggers = newTriggers
+    }
+  }
+
+  func update(window: Window, deltaTime: Float) {
+    if showingPickupView {
+      // Update pickup view
+      pickupView?.update(window: window, deltaTime: deltaTime)
+    } else if showingPauseScreen {
+      // Update pause screen
+      pauseScreenStack.update(deltaTime: deltaTime)
+      // Check if fade-out is complete and actually hide the pause screen
+      if pauseScreenStack.isFadeOutComplete {
+        showingPauseScreen = false
+        pauseScreenStack.onDetach(window: Engine.shared.window)
+      }
+    } else if showingMainMenu {
+      // Update main menu
+      mainMenu.update(window: window, deltaTime: deltaTime)
+    } else {
+      // Only handle movement if dialog is not active and input is enabled
+      if !dialogView.isActive && Input.player1.isEnabled {
+        // Handle WASD movement
+        handleMovement(window.keyboard, deltaTime)
+
+        // Handle weapon system hold mode and firing
+        // Update weapon system (for rate of fire timing)
+        weaponSystem.update(deltaTime: deltaTime)
+
+        // Handle hold mode for Space
+        if !weaponSystem.usesToggledAiming {
+          if window.keyboard.state(of: .space) == .pressed {
+            // Space is held - enter ready aim, then aim
+            if weaponSystem.currentAimState == .idle {
+              weaponSystem.enterReadyAim()
+            } else if weaponSystem.currentAimState == .readyAim {
+              weaponSystem.enterAim()
+            }
+          } else {
+            // Space released - exit aim
+            if weaponSystem.currentAimState != .idle {
+              weaponSystem.exitAim()
+            }
+          }
+        }
+
+        // Handle firing with Ctrl (hold to fire)
+        if window.keyboard.state(of: .leftControl) == .pressed || window.keyboard.state(of: .rightControl) == .pressed {
+          if weaponSystem.isAiming {
+            _ = weaponSystem.fire()
+          }
+        }
+      }
+
+      // Update prerendered environment animation
+      prerenderedEnvironment?.update()
+    }
+
+    // Update dialog view
+    dialogView.update(deltaTime: deltaTime)
+
+    // Update FPS (EMA)
+    if deltaTime > 0 {
+      let inst = 1.0 / deltaTime
+      smoothedFPS = smoothedFPS * 0.9 + inst * 0.1
+    }
+  }
+
+  func draw() {
+    if showingPickupView {
+      // Draw pickup view
+      pickupView?.draw()
+    } else if showingMainMenu {
+      // Draw main menu
+      mainMenu.draw()
+    } else {
+      // Draw game scene (always, even when paused - pause screen will overlay on top)
+      // Set up 3D rendering
+      let aspectRatio = Float(Engine.viewportSize.width) / Float(Engine.viewportSize.height)
+
+      // Use Camera_1 projection if available, otherwise fallback to default
+      let projection: mat4
+      if let camera {
+        // Check if camera is orthographic (FOV is 0 or orthographicWidth is set)
+        let isOrthographic = camera.horizontalFOV == 0.0 || camera.orthographicWidth > 0.0
+
+        if isOrthographic {
+          // Orthographic camera: use orthographicWidth (half width) and aspect ratio
+          let orthoWidth = camera.orthographicWidth > 0.0 ? camera.orthographicWidth : 1.0
+
+          // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
+          let finalAspect: Float
+          if camera.aspect > 0 {
+            finalAspect = camera.aspect
+          } else {
+            finalAspect = aspectRatio
+          }
+
+          // Calculate orthographic bounds
+          // orthographicWidth is half the horizontal width
+          let left = -orthoWidth
+          let right = orthoWidth
+          // Height = width / aspect, so halfHeight = orthoWidth / aspect
+          let bottom = -orthoWidth / finalAspect
+          let top = orthoWidth / finalAspect
+
+          projection = GLMath.ortho(left, right, bottom, top, camera.clipPlaneNear, camera.clipPlaneFar)
+
+          logger.trace(
+            "📐 Using orthographic camera: width=\(orthoWidth * 2), aspect=\(finalAspect), near=\(camera.clipPlaneNear), far=\(camera.clipPlaneFar)"
+          )
+        } else {
+          // Perspective camera: use existing FOV calculation
+          // IMPORTANT: Use camera's stored aspect ratio if available, otherwise viewport aspect
+          // The prerendered images were rendered with a specific aspect ratio, so we should match it
+          let finalAspect: Float
+          if camera.aspect > 0 {
+            // Use camera's aspect ratio (this is what the prerendered images were rendered with)
+            finalAspect = camera.aspect
+          } else {
+            // Fallback to viewport aspect ratio
+            finalAspect = aspectRatio
+          }
+
+          // Convert horizontal FOV to vertical FOV
+          // GLMath.perspective expects vertical FOV (fovy), but Assimp gives us horizontal FOV
+          // Formula: verticalFOV = 2 * atan(tan(horizontalFOV / 2) / aspectRatio)
+          let horizontalFOVHalf = camera.horizontalFOV / 2.0
+          let verticalFOV = 2.0 * atan(tan(horizontalFOVHalf) / finalAspect)
+
+          projection = GLMath.perspective(verticalFOV, finalAspect, camera.clipPlaneNear, camera.clipPlaneFar)
+
+          // Debug: Print aspect ratio mismatch if significant
+          if abs(finalAspect - aspectRatio) > 0.01 {
+            logger.warning("⚠️ Aspect ratio mismatch: camera=\(finalAspect), viewport=\(aspectRatio)")
+          }
+        }
+      } else {
+        projection = GLMath.perspective(45.0, aspectRatio, 0.1, 100.0)
+      }
+
+      GraphicsContext.current?.renderer.withUIContext {
+        // Render prerendered environment first (as background)
+        prerenderedEnvironment?.render(projectionMatrix: projection)
+
+        // Clear depth buffer after rendering if debug flag is set
+        if disableDepth {
+          glClear(GL_DEPTH_BUFFER_BIT)
+        }
+      }
+
+      // Get view matrix from camera node's world transform
+      // In glTF/Assimp, the camera node's transform IS the camera-to-world transform
+      // To get the view matrix (world-to-camera), we simply invert it
+      var view: mat4
+      let cameraWorld: mat4
+      // Check if camera world transform is valid (not identity)
+      if cameraWorldTransform != mat4(1) {
+        cameraWorld = cameraWorldTransform
+        // The view matrix is the inverse of the camera's world transform
+        // This matches how the prerendered images were rendered
+        view = inverse(cameraWorld)
+      } else {
+        // Fallback: use identity view matrix if camera not available
+        cameraWorld = mat4(1)
+        view = mat4(1)
+      }
+
+      // Apply screen shake offset to view matrix
+      let shakeOffset = ScreenShake.shared.offset
+      if shakeOffset.x != 0.0 || shakeOffset.y != 0.0 {
+        // Translate view matrix by shake offset
+        // Convert screen space offset to world space (approximate using viewport size)
+        // Scale factor determines how much world space movement corresponds to screen pixels
+        let viewportSize = Engine.viewportSize
+        let worldOffsetX = shakeOffset.x / viewportSize.width * 10.0  // Scale factor
+        let worldOffsetY = shakeOffset.y / viewportSize.height * 10.0  // Scale factor
+        view = GLMath.translate(view, vec3(worldOffsetX, worldOffsetY, 0.0))
+      }
+
+      // Do not clear depth; we rely on PrerenderedEnvironment writing correct depth
+
+      // Draw capsule mesh
+      if !capsuleMeshInstances.isEmpty {
+        // Ensure depth testing/writes are enabled for 3D integration
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(true)
+        glDepthFunc(GL_LEQUAL)
+
+        // Create model matrix: translate to player position, then rotate around Y axis
+        // Offset Y downward so capsule sits on floor (assuming origin is at center)
+        var adjustedPosition = playerPosition
+        adjustedPosition.y -= capsuleHeightOffset
+        var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
+        modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
+
+        for meshInstance in capsuleMeshInstances {
+          // Combine the mesh's original transform with player transform
+          let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
+
+          // Extract camera position from world transform (4th column)
+          let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+
+          // Get lighting from scene lights
+          let lighting = getSceneLighting()
+
+          meshInstance.draw(
+            projection: projection,
+            view: view,
+            modelMatrix: combinedModelMatrix,
+            cameraPosition: cameraPosition,
+            lightDirection: lighting.mainLight.direction,
+            lightColor: lighting.mainLight.color,
+            lightIntensity: lighting.mainLight.intensity,
+            fillLightDirection: lighting.fillLight.direction,
+            fillLightColor: lighting.fillLight.color,
+            fillLightIntensity: lighting.fillLight.intensity,
+            diffuseOnly: false
+          )
+        }
+      }
+
+      // Draw foreground meshes (nodes with -fg suffix)
+      if !foregroundMeshInstances.isEmpty {
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(true)
+        glDepthFunc(GL_LEQUAL)
+
+        let lighting = getSceneLighting()
+        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+
+        for meshInstance in foregroundMeshInstances {
+          // Skip if not visible (node is hidden)
+          guard meshInstance.isVisible() else { continue }
+
+          meshInstance.draw(
+            projection: projection,
+            view: view,
+            modelMatrix: meshInstance.transformMatrix,
+            cameraPosition: cameraPosition,
+            lightDirection: lighting.mainLight.direction,
+            lightColor: lighting.mainLight.color,
+            lightIntensity: lighting.mainLight.intensity,
+            fillLightDirection: lighting.fillLight.direction,
+            fillLightColor: lighting.fillLight.color,
+            fillLightIntensity: lighting.fillLight.intensity,
+            diffuseOnly: false
+          )
+        }
+      }
+
+      // Always call nextFrame to maintain consistent timing (even when not visualizing)
+      if let debugRenderer {
+        debugRenderer.nextFrame()
+      }
+
+      if !showingPauseScreen {
+        // Update debug renderer camera and draw if enabled
+        if let debugRenderer {
+          currentProjection = projection
+          currentView = view
+
+          // Set camera position for debug renderer (extract from view matrix)
+          let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+          debugRenderer.setCameraPosition(RVec3(x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z))
+
+          if visualizePhysics {
+            debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF00FF, size: 2.0)
+            physicsSystem.drawBodies(debugRenderer: debugRenderer)
+          }
+
+          // Draw entry arrows using Jolt debug renderer
+          if visualizeEntries, let loadedScene = scene {
+            drawEntryArrows(scene: loadedScene, debugRenderer: debugRenderer)
+          }
+        }
+
+        // Debug overlay (top-left)
+        if showDebugText {
+          drawDebugInfo()
+        }
+
+        // Draw dialog view (on top of everything)
+        GraphicsContext.current?.renderer.withUIContext {
+          dialogView.draw()
+        }
+      }
+    }
+
+    // Draw pause screen as overlay on top of game (if showing)
+    if showingPauseScreen {
+      pauseScreenStack.draw()
+    }
+  }
+
+  private func drawDebugInfo() {
+    // Show "(override)" suffix when in debug camera override mode
+    let cameraDisplayName = isDebugCameraOverrideMode ? "\(selectedCamera) (override)" : selectedCamera
+
+    var overlayLines = [
+      //String(format: "FPS: %.0f", smoothedFPS),
+      //"Scene: \(sceneName)",
+      "Camera: \(cameraDisplayName)",
+
+      String(
+        format: "Position: %.2f, %.2f, %.2f",
+        playerPosition.x,
+        playerPosition.y,
+        playerPosition.z
+      ),
+
+      String(
+        format: "Rotation: %.0f° (%.2f rad)",
+        playerRotation * 180.0 / .pi,
+        playerRotation
+      ),
+
+      detectedActionName != nil
+        ? "Actions: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Actions: none",
+
+      currentTriggers.isEmpty
+        ? "Triggers: none"
+        : "Triggers: \(currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
+    ]
+
+    // Add camera triggers line if there are any
+    if !currentCameraTriggers.isEmpty {
+      overlayLines.append(
+        "Camera Triggers: \(currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
+      )
+    }
+
+    let overlay = overlayLines.joined(separator: "\n")
+
+    overlay.draw(
+      at: Point(20, Engine.viewportSize.height - 20),
+      style: .itemDescription.withMonospacedDigits(true),
+      anchor: .topLeft
+    )
+  }
+
 }

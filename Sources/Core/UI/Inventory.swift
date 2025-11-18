@@ -25,12 +25,14 @@ public final class Inventory {
         //        ItemSlotData(item: .grenadeRounds, quantity: 9),
         ItemSlotData(item: nil, quantity: nil),
         ItemSlotData(item: nil, quantity: nil),
+        ItemSlotData(item: nil, quantity: nil),
 
+        ItemSlotData(item: .lighter, quantity: nil),
+        ItemSlotData(item: .lighterFluid, quantity: nil),
+        //ItemSlotData(item: .lighterWithFuel, quantity: nil),
         ItemSlotData(item: nil, quantity: nil),
         ItemSlotData(item: nil, quantity: nil),
-        ItemSlotData(item: nil, quantity: nil),
-        ItemSlotData(item: nil, quantity: nil),
-        ItemSlotData(item: nil, quantity: nil),
+
         ItemSlotData(item: nil, quantity: nil),
         ItemSlotData(item: nil, quantity: nil),
         ItemSlotData(item: nil, quantity: nil),
@@ -99,7 +101,7 @@ public final class Inventory {
     if _storage == nil {
       // Create storage inventory with one of each available item
       var storageSlots: [ItemSlotData?] = []
-      
+
       // Add all available items
       let allItems: [Item] = [
         // Recovery
@@ -129,9 +131,10 @@ public final class Inventory {
         // Other
         .cryoGloves,
         .lighter,
+        .lighterFluid,
         .catStatue,
       ]
-      
+
       // Add one of each item
       for item in allItems {
         // For weapons, add with default ammo quantity if applicable
@@ -143,13 +146,13 @@ public final class Inventory {
         }()
         storageSlots.append(ItemSlotData(item: item, quantity: quantity))
       }
-      
+
       // Fill remaining slots with nil (empty)
       let totalSlots = 6 * 4  // 6 columns * 4 rows = 24 slots
       while storageSlots.count < totalSlots {
         storageSlots.append(nil)
       }
-      
+
       _storage = Inventory(slots: storageSlots)
     }
 

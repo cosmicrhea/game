@@ -123,6 +123,7 @@
       return
     }
 
+    // Forward to active view (which will handle nested views like ItemView/DocumentView)
     activeView.onMouseButtonPressed(window: window, button: button, mods: mods)
   }
 

@@ -130,17 +130,17 @@ final class InventoryView: RenderLoop {
   }
 
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    if isShowingItem {
+    if isShowingItem, let itemView = currentItemView {
       // Forward mouse input to ItemView
-      currentItemView?.onMouseButton(window: window, button: button, state: state, mods: mods)
+      itemView.onMouseButton(window: window, button: button, state: state, mods: mods)
       return
     }
   }
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
-    if isShowingItem {
+    if isShowingItem, let itemView = currentItemView {
       // Forward mouse input to ItemView
-      currentItemView?.onMouseButtonPressed(window: window, button: button, mods: mods)
+      itemView.onMouseButtonPressed(window: window, button: button, mods: mods)
       return
     }
 

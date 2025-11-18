@@ -37,8 +37,8 @@ final class HealthDisplay {
     // Status text
     let status: (text: String, color: Color) = {
       switch health {
-      case let h where h >= 0.50: return ("Clear", Color(0.65, 0.88, 0.95, 1.0))  // OK? Fine? Clear?
-      case let h where h >= 0.33: return ("Caution", Color.amber)
+      case let h where h >= 0.50: return ("Nominal", Color(0.65, 0.88, 0.95, 1.0))  // OK? Fine? Clear? Nominal?
+      case let h where h >= 0.33: return ("Warning", Color.amber) // Warning? Caution?
       default: return ("Critical", Color.rose)
       }
     }()

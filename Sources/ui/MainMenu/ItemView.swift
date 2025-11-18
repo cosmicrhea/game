@@ -28,7 +28,11 @@ import Assimp
 
   init(item: Item) {
     self.item = item
-    self.camera = ItemInspectionCamera(distance: item.inspectionDistance)
+    self.camera = ItemInspectionCamera(
+      distance: item.inspectionDistance,
+      modelYaw: item.inspectionYaw ?? 90.0,
+      modelPitch: item.inspectionPitch ?? 0.0
+    )
     self.itemDescriptionView.title = item.name
     self.itemDescriptionView.descriptionText = item.description ?? ""
 
@@ -125,11 +129,18 @@ import Assimp
       } else if state == .released {
         camera.stopDragging()
       }
-    } else if button == .right && state == .pressed {
-      // Right-click to close item view
+    }
+  }
+
+  func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    // Handle right-click to close item view
+    if button == .right {
       UISound.cancel()
       onItemFinished?()
+      return
     }
+    // Forward other buttons to onMouseButton with pressed state
+    // onMouseButton(window: window, button: button, state: .pressed, mods: mods)
   }
 
   func onMouseMove(window: Window, x: Double, y: Double) {

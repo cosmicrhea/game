@@ -21,7 +21,7 @@ final class DebugRendererImplementation: DebugRendererProcs {
         projection: renderLoop.currentProjection,
         view: renderLoop.currentView,
         lineThickness: 0.005,  // Thin line for wireframe
-        depthTest: false  // Always on top for debug overlay
+        depthTest: true  // Always on top for debug overlay
       )
     }
   }

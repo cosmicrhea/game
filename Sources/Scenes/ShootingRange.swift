@@ -9,7 +9,8 @@ class ShootingRange: Script {
 
   func frontDoor() {
     //play(.doorLocked, at: currentActionTriggerNodeThingy)
-    go(toScene: "test")
+//    go(toScene: "test")
+    go(toScene: "nexus")
     // UISound.lockedA()
     // say(variations: [
     //   "It's locked.",

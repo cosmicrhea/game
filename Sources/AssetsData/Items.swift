@@ -103,6 +103,8 @@ extension Item {
     kind: .ammo,
     name: "9mm Ammunition",
     description: "Standard 9 millimeter rounds for handguns.",
+    inspectionYaw: 30,
+    inspectionPitch: 40,
   )
 
   static let grenadeRounds = Item(
@@ -146,8 +148,22 @@ extension Item {
 
   static let lighter = Item(
     id: "lighter",
+    name: "Empty Lighter",
+    description: "It needs fuel. It's of no use in this state.",
+  )
+
+  static let lighterWithFuel = Item(
+    id: "lighter_with_fuel",
     name: "Lighter",
     description: "Simple butane lighter for lighting fires.",
+    image: Image("Items/Weapons/lighter.png"),
+    modelPath: "Items/Weapons/lighter.glb",
+  )
+
+  static let lighterFluid = Item(
+    id: "lighter_fluid",
+    name: "Lighter Fluid",
+    description: "A liquid fuel for butane lighters.",
   )
 
   static let catStatue = Item(
