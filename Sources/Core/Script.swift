@@ -69,7 +69,7 @@ class Script: SceneLoadingDelegate {
     sayCallCounters[actionName] = 0
   }
 
-  //private var storageView = ItemStorageView()
+  //private var storageView = StorageView()
 
   var hasAliveEnemies: Bool { false }
 

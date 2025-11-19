@@ -146,24 +146,26 @@ extension Item {
     inspectionDistance: 0.4,
   )
 
-  static let lighter = Item(
-    id: "lighter",
-    name: "Empty Lighter",
-    description: "It needs fuel. It's of no use in this state.",
-  )
-
   static let lighterWithFuel = Item(
     id: "lighter_with_fuel",
     name: "Lighter",
     description: "Simple butane lighter for lighting fires.",
     image: Image("Items/Weapons/lighter.png"),
-    modelPath: "Items/Weapons/lighter.glb",
+    modelPath: "Items/Weapons/lighter",
   )
 
   static let lighterFluid = Item(
     id: "lighter_fluid",
     name: "Lighter Fluid",
     description: "A liquid fuel for butane lighters.",
+    combinations: ["lighter": .lighterWithFuel],
+  )
+
+  static let lighter = Item(
+    id: "lighter",
+    name: "Empty Lighter",
+    description: "Simple butane lighter. It's empty and needs fuel.",
+    combinations: ["lighter_fluid": .lighterWithFuel],
   )
 
   static let catStatue = Item(
@@ -172,4 +174,52 @@ extension Item {
     description: "A concrete statue of a cat. Cuuute! ^-^",
     inspectionDistance: 0.4,
   )
+}
+
+// MARK: - Item Registry
+
+extension Item {
+  /// All available items in the game
+  private static let allItems: [Item] = [
+    // Recovery
+    .morphine,
+    // Melee
+    .knife,
+    // Handguns
+    .glock17,
+    .glock18,
+    .sigp320,
+    .beretta92,
+    .fnx45,
+    // Shotguns
+    .remington870,
+    .spas12,
+    // SMGs
+    .mp5sd,
+    // Launchers
+    .m32,
+    // Ammo
+    .handgunAmmo,
+    .grenadeRounds,
+    // Keys
+    .utilityKey,
+    .metroKey,
+    .tagKey,
+    // Other
+    .cryoGloves,
+    .lighter,
+    .lighterFluid,
+    .lighterWithFuel,
+    .catStatue,
+  ]
+
+  /// Cached dictionary of items by ID for fast lookups
+  private static let itemsByID: [String: Item] = {
+    Dictionary(uniqueKeysWithValues: allItems.map { ($0.id, $0) })
+  }()
+
+  /// Look up an item by its ID string
+  static func itemByID(_ id: String) -> Item? {
+    return itemsByID[id]
+  }
 }

@@ -45,6 +45,19 @@ public final class ItemSlotGrid {
   /// When in moving mode, the source slot currently selected for moving
   private var movingSourceIndex: Int? = nil
 
+  // MARK: - Combine Support
+  /// True while the grid is in combine mode
+  public private(set) var isCombineModeActive: Bool = false
+  /// When in combine mode, the source slot currently selected for combining
+  private var _combineSourceIndex: Int? = nil
+  /// Get the combine source index (public accessor)
+  public var combineSourceIndex: Int? {
+    return _combineSourceIndex
+  }
+  /// Animation time for dimming opacity (0.0 = fully dimmed, 1.0 = fully visible)
+  private var combineDimmingProgress: Float = 1.0
+  private let combineDimmingSpeed: Float = 1.0 / 0.15  // Speed of dimming animation (0.15 seconds to complete)
+
   // MARK: - Highlighting Support
   /// Slot index to highlight (for take out/retrieve modes, etc.)
   /// This provides visual highlighting similar to move mode but without activating move mode
@@ -231,6 +244,45 @@ public final class ItemSlotGrid {
   /// Cancel any pending move selection without leaving move mode
   public func cancelPendingMove() {
     movingSourceIndex = nil
+  }
+
+  /// Enable/disable combine mode
+  /// Disabling clears any pending combine source and hides the menu.
+  public func setCombineModeActive(_ active: Bool) {
+    if isCombineModeActive == active { return }
+    isCombineModeActive = active
+    // Never show the context menu while combining
+    slotMenu.hide()
+    if active {
+      // Start dimming animation from fully visible when entering combine mode
+      combineDimmingProgress = 1.0
+      // When entering combine mode, the currently selected item becomes the source
+      if let data = getSlotData(at: selectedIndex), let item = data.item {
+        _combineSourceIndex = selectedIndex
+        logger.trace("SlotGrid: Entered combine mode with item \(item.name) at slot \(selectedIndex)")
+      } else {
+        logger.trace("SlotGrid: Entered combine mode but no item in selected slot \(selectedIndex)")
+      }
+    } else {
+      _combineSourceIndex = nil
+      // Don't reset progress here - let it animate back to 1.0 naturally
+    }
+  }
+
+  /// Cancel any pending combine selection without leaving combine mode
+  public func cancelPendingCombine() {
+    _combineSourceIndex = nil
+  }
+
+  /// Check if an item at the given slot index can combine with the combine source item
+  private func canCombineSlot(at index: Int) -> Bool {
+    guard let sourceIndex = _combineSourceIndex,
+      let sourceData = getSlotData(at: sourceIndex),
+      let sourceItem = sourceData.item,
+      let targetData = getSlotData(at: index),
+      let targetItem = targetData.item
+    else { return false }
+    return sourceItem.canCombine(with: targetItem) != nil
   }
 
   /// Set placement mode with an item to place
@@ -429,6 +481,41 @@ public final class ItemSlotGrid {
         return false
       }
     }
+    // While in combine mode, handle navigation and combine confirmation
+    if isCombineModeActive {
+      switch key {
+      case .w, .up:
+        return moveSelection(direction: .down)
+      case .s, .down:
+        return moveSelection(direction: .up)
+      case .a, .left:
+        return moveSelection(direction: .left)
+      case .d, .right:
+        return moveSelection(direction: .right)
+      case .f, .space, .enter, .numpadEnter:
+        // Confirm combine with current selection
+        if let sourceIndex = _combineSourceIndex {
+          logger.trace("SlotGrid: Confirming combine from \(sourceIndex) to \(selectedIndex)")
+          if performCombine(from: sourceIndex, to: selectedIndex) {
+            setCombineModeActive(false)  // Exit combine mode after successful combine
+            return true
+          } else {
+            // Failed to combine (incompatible items)
+            UISound.error()
+            return true
+          }
+        }
+        return false
+      case .escape:
+        // Cancel combine and exit combine mode
+        cancelPendingCombine()
+        setCombineModeActive(false)
+        UISound.cancel()
+        return true
+      default:
+        return false
+      }
+    }
     // While in moving mode, handle navigation and move confirmation
     if isMovingModeActive {
       switch key {
@@ -507,6 +594,40 @@ public final class ItemSlotGrid {
 
   /// Handle mouse click for selection and menu
   public func handleMouseClick(at position: Point) -> Bool {
+    // Combine mode takes precedence over moving mode
+    if isCombineModeActive {
+      logger.trace("SlotGrid: In combine mode, clicked at position \(position)")
+      guard let clickedIndex = slotIndex(at: position) else {
+        logger.trace("SlotGrid: No slot at clicked position")
+        return false
+      }
+      logger.trace("SlotGrid: Clicked slot index: \(clickedIndex)")
+
+      if let sourceIndex = _combineSourceIndex {
+        logger.trace("SlotGrid: Combining from source \(sourceIndex) to target \(clickedIndex)")
+        // Perform combine to the target index
+        if performCombine(from: sourceIndex, to: clickedIndex) {
+          setSelected(clickedIndex)
+          setCombineModeActive(false)  // Exit combine mode after successful combine
+          return true
+        } else {
+          // Failed to combine (incompatible items)
+          UISound.error()
+          return true
+        }
+      } else {
+        // Pick up from clicked slot only if it contains an item
+        if let data = getSlotData(at: clickedIndex), data.item != nil {
+          logger.trace("SlotGrid: Picking up item \(data.item!.name) from slot \(clickedIndex) for combining")
+          _combineSourceIndex = clickedIndex
+          setSelected(clickedIndex)
+          UISound.select()
+          return true
+        }
+        logger.trace("SlotGrid: No item in slot \(clickedIndex) to pick up for combining")
+        return false
+      }
+    }
     // Moving mode takes precedence over context menu behavior
     if isMovingModeActive {
       logger.trace("SlotGrid: In moving mode, clicked at position \(position)")
@@ -639,6 +760,15 @@ public final class ItemSlotGrid {
     if isPlacementModeActive {
       placementBlinkTime += deltaTime * placementBlinkSpeed
     }
+    // Update combine dimming animation
+    if isCombineModeActive {
+      // Fade in dimming: animate from 1.0 (fully visible) to 0.0 (fully dimmed)
+      combineDimmingProgress = max(0.0, combineDimmingProgress - deltaTime * combineDimmingSpeed)
+    } else {
+      // Fade out dimming: animate back to fully visible when not in combine mode
+      // Always animate when not in combine mode (will stop at 1.0 due to min())
+      combineDimmingProgress = min(1.0, combineDimmingProgress + deltaTime * combineDimmingSpeed)
+    }
   }
 
   // MARK: - Rendering
@@ -654,7 +784,62 @@ public final class ItemSlotGrid {
 
       // Determine slot color based on state
       var currentSlotColor = slotColor
-      if isMovingModeActive, let sourceIndex = movingSourceIndex, i == sourceIndex {
+      var slotDimmed = false
+
+      // In combine mode (or fading out), dim slots that are not combinable
+      if isCombineModeActive || combineDimmingProgress < 1.0 {
+        if isCombineModeActive, let sourceIndex = _combineSourceIndex, i == sourceIndex {
+          // Source slot gets amber tint (similar to move mode) - only when actively in combine mode
+          let amberTintStrength: Float = 0.6
+          currentSlotColor = Color(
+            slotColor.red + amberTintStrength * 0.3,
+            slotColor.green + amberTintStrength * 0.24,
+            slotColor.blue + amberTintStrength * 0.15,
+            slotColor.alpha
+          )
+        } else if isCombineModeActive && i == selectedIndex {
+          // Selected slot in combine mode gets rose/red tint - only when actively in combine mode
+          let roseTintStrength: Float = 0.6
+          currentSlotColor = Color(
+            slotColor.red + roseTintStrength * 0.4,
+            slotColor.green + roseTintStrength * 0.15,
+            slotColor.blue + roseTintStrength * 0.2,
+            slotColor.alpha
+          )
+        } else {
+          // Dim slots that are not combinable (or all slots during fade-out)
+          let shouldDim: Bool
+          if isCombineModeActive {
+            // In active combine mode, check if slot can combine
+            let slotData = getSlotData(at: i)
+            if let data = slotData, let _ = data.item {
+              shouldDim = !canCombineSlot(at: i)
+            } else {
+              shouldDim = true  // Empty slots are always dimmed
+            }
+          } else {
+            // During fade-out, dim all slots that aren't source or selected
+            // (This maintains the dimmed state during fade-out)
+            shouldDim = true
+          }
+
+          if shouldDim {
+            slotDimmed = true
+            // Interpolate between full brightness and dimmed based on animation progress
+            // Dimmed values: 0.6 multiplier, 0.7 alpha (less intense than before)
+            let dimmedMultiplier: Float = 0.6
+            let dimmedAlpha: Float = 0.7
+            let brightness = 1.0 - (1.0 - combineDimmingProgress) * (1.0 - dimmedMultiplier)
+            let alpha = 1.0 - (1.0 - combineDimmingProgress) * (1.0 - dimmedAlpha)
+            currentSlotColor = Color(
+              slotColor.red * brightness,
+              slotColor.green * brightness,
+              slotColor.blue * brightness,
+              slotColor.alpha * alpha
+            )
+          }
+        }
+      } else if isMovingModeActive, let sourceIndex = movingSourceIndex, i == sourceIndex {
         // Apply amber tint to the picked-up source slot
         let amberTintStrength: Float = 0.6
         currentSlotColor = Color(
@@ -690,8 +875,9 @@ public final class ItemSlotGrid {
         return true
       }()
       let isSource = isMovingModeActive && ((movingSourceIndex ?? -1) == i)
+      let isCombineSource = isCombineModeActive && ((_combineSourceIndex ?? -1) == i)
       let isHighlighted = highlightedSlotIndex == i
-      let applyEquippedBorderTint = isEquippedSlot && !isSource && !isHighlighted
+      let applyEquippedBorderTint = isEquippedSlot && !isSource && !isCombineSource && !isHighlighted
 
       // Apply tint if specified
       if let tint = tint {
@@ -705,12 +891,13 @@ public final class ItemSlotGrid {
 
       // Draw the slot
       slotEffect.draw { shader in
-        // Drive subtle pulse only for selected (when focused) or moving source (equipped border does not pulse)
+        // Drive subtle pulse only for selected (when focused), moving source, or combine source (equipped border does not pulse)
         let pulses: Float = {
           let isSelected = isFocused && (i == selectedIndex)
           let isMoving = isSource
+          let isCombining = isCombineSource
           let isHighlighted = highlightedSlotIndex == i
-          return (isSelected || isMoving || isHighlighted) ? 1.0 : 0.0
+          return (isSelected || isMoving || isCombining || isHighlighted) ? 1.0 : 0.0
         }()
         shader.setFloat("uPulse", value: pulses)
         if applyEquippedBorderTint {
@@ -739,7 +926,12 @@ public final class ItemSlotGrid {
         shader.setFloat("uCornerRadius", value: cornerRadius)
         shader.setFloat("uNoiseScale", value: noiseScale)
         shader.setFloat("uNoiseStrength", value: noiseStrength)
-        shader.setFloat("uRadialGradientStrength", value: radialGradientStrength)
+        // Show radial gradient on slots with items, or on blank slots that are selected/hovered
+        let data = effectiveSlotData
+        let hasItem = (i < data.count) && (data[i]?.item != nil)
+        let isSelectedOrHovered = (isFocused && i == selectedIndex) || (isFocused && i == hoveredIndex)
+        shader.setFloat(
+          "uRadialGradientStrength", value: (hasItem || isSelectedOrHovered) ? radialGradientStrength : 0.0)
 
         // Set colors
         shader.setVec3(
@@ -761,7 +953,15 @@ public final class ItemSlotGrid {
           width: imageSize,
           height: imageSize
         )
-        image.draw(in: imageRect)
+        // Dim image if slot is dimmed (non-combinable in combine mode)
+        if slotDimmed {
+          // Animate image dimming to match slot dimming
+          let dimmedAlpha: Float = 0.6
+          let imageAlpha = 1.0 - (1.0 - combineDimmingProgress) * (1.0 - dimmedAlpha)
+          image.draw(in: imageRect, tint: Color.white.withAlphaComponent(imageAlpha))
+        } else {
+          image.draw(in: imageRect)
+        }
 
         // Draw quantity number with configurable bottom anchor if should show quantity
         if slotData.shouldShowQuantity {
@@ -810,6 +1010,75 @@ public final class ItemSlotGrid {
     if isPlacementModeActive {
       drawPlacementItem()
     }
+  }
+
+  // MARK: - Combine helpers
+
+  /// Perform a combine operation from source to target slot
+  /// Returns true if the combine was successful, false otherwise
+  private func performCombine(from sourceIndex: Int, to targetIndex: Int) -> Bool {
+    guard sourceIndex != targetIndex else {
+      logger.trace("SlotGrid: Cannot combine item with itself")
+      return false
+    }
+
+    let sourceData = getSlotData(at: sourceIndex)
+    let targetData = getSlotData(at: targetIndex)
+
+    guard let sourceSlotData = sourceData,
+      let sourceItem = sourceSlotData.item,
+      let targetSlotData = targetData,
+      let targetItem = targetSlotData.item
+    else {
+      logger.trace("SlotGrid: Cannot combine - one or both slots are empty")
+      return false
+    }
+
+    // Check if items can combine
+    guard let resultItem = sourceItem.canCombine(with: targetItem) else {
+      logger.trace("SlotGrid: Items \(sourceItem.name) and \(targetItem.name) cannot combine")
+      return false
+    }
+
+    logger.trace("SlotGrid: Combining \(sourceItem.name) with \(targetItem.name) -> \(resultItem.name)")
+
+    // Place result item in target slot, remove source item
+    // For now, we'll use the target slot's quantity if it has one, otherwise nil
+    let resultQuantity: Int? = {
+      // If result is a weapon with capacity, use that
+      if case .weapon(_, _, let capacity, _) = resultItem.kind, let capacity = capacity {
+        return capacity
+      }
+      // Otherwise, preserve target quantity if it exists and result supports quantities
+      return targetSlotData.quantity
+    }()
+
+    if let inventory = inventory {
+      inventory.slots[targetIndex] = ItemSlotData(item: resultItem, quantity: resultQuantity)
+      inventory.slots[sourceIndex] = nil
+    } else {
+      slotData[targetIndex] = ItemSlotData(item: resultItem, quantity: resultQuantity)
+      slotData[sourceIndex] = nil
+    }
+
+    // Update equipped weapon index if source was equipped
+    if equippedWeaponIndex == sourceIndex {
+      // If result is a weapon, equip it at target slot, otherwise unequip
+      if resultItem.kind.isWeapon {
+        equippedWeaponIndex = targetIndex
+      } else {
+        equippedWeaponIndex = nil
+      }
+    } else if equippedWeaponIndex == targetIndex {
+      // If result is a weapon, keep it equipped, otherwise unequip
+      if !resultItem.kind.isWeapon {
+        equippedWeaponIndex = nil
+      }
+    }
+
+    // Play success sound
+    UISound.combine()
+    return true
   }
 
   // MARK: - Moving helpers

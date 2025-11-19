@@ -26,6 +26,11 @@ final class InventoryView: RenderLoop {
     return slotGrid.slotMenu.isVisible
   }
 
+  // Public property to check if in combine or move mode
+  public var isInSpecialMode: Bool {
+    return slotGrid.isCombineModeActive || slotGrid.isMovingModeActive
+  }
+
   init() {
     slotGrid = ItemSlotGrid(
       columns: 4,
@@ -149,8 +154,12 @@ final class InventoryView: RenderLoop {
     if button == .left {
       _ = slotGrid.handleMouseClick(at: mousePosition)
     } else if button == .right {
-      // Right click cancels move mode
-      if slotGrid.isMovingModeActive {
+      // Right click cancels move mode or combine mode
+      if slotGrid.isCombineModeActive {
+        slotGrid.cancelPendingCombine()
+        slotGrid.setCombineModeActive(false)
+        UISound.cancel()
+      } else if slotGrid.isMovingModeActive {
         slotGrid.cancelPendingMove()
         slotGrid.setMovingModeActive(false)
       }
@@ -194,7 +203,7 @@ final class InventoryView: RenderLoop {
       itemDescriptionView.draw()
 
       // Draw the prompt list
-      promptList.group = slotGrid.isMovingModeActive ? .confirmCancel : .inventory
+      promptList.group = (slotGrid.isMovingModeActive || slotGrid.isCombineModeActive) ? .confirmCancel : .inventory
       promptList.draw()
     }
   }
@@ -203,12 +212,32 @@ final class InventoryView: RenderLoop {
 
   private func updateItemDescription() {
     let selectedIndex = slotGrid.selectedIndex
-    if let slotData = slotGrid.getSlotData(at: selectedIndex), let item = slotData.item {
-      itemDescriptionView.title = item.name
-      itemDescriptionView.descriptionText = item.description ?? ""
+    // In combine mode, only show description for combinable items
+    if slotGrid.isCombineModeActive {
+      if let slotData = slotGrid.getSlotData(at: selectedIndex),
+        let item = slotData.item,
+        let sourceIndex = slotGrid.combineSourceIndex,
+        let sourceData = slotGrid.getSlotData(at: sourceIndex),
+        let sourceItem = sourceData.item,
+        sourceItem.canCombine(with: item) != nil
+      {
+        // Item can combine - show name and description
+        itemDescriptionView.title = item.name
+        itemDescriptionView.descriptionText = item.description ?? ""
+      } else {
+        // Item cannot combine or slot is empty - hide description
+        itemDescriptionView.title = ""
+        itemDescriptionView.descriptionText = ""
+      }
     } else {
-      itemDescriptionView.title = ""
-      itemDescriptionView.descriptionText = ""
+      // Normal mode - show description for any item
+      if let slotData = slotGrid.getSlotData(at: selectedIndex), let item = slotData.item {
+        itemDescriptionView.title = item.name
+        itemDescriptionView.descriptionText = item.description ?? ""
+      } else {
+        itemDescriptionView.title = ""
+        itemDescriptionView.descriptionText = ""
+      }
     }
   }
 
@@ -255,9 +284,10 @@ final class InventoryView: RenderLoop {
       }
       break
     case .combine:
-      // Handle item combination
+      // Handle item combination - enter combine mode
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
-        logger.trace("Combining item: \(item.name)")
+        logger.trace("Entering combine mode with item: \(item.name)")
+        slotGrid.setCombineModeActive(true)
       }
       break
     case .exchange:
@@ -271,7 +301,7 @@ final class InventoryView: RenderLoop {
       }
       break
     case .store, .retrieve:
-      // These actions are handled in ItemStorageView, not InventoryView
+      // These actions are handled in StorageView, not InventoryView
       break
     }
   }

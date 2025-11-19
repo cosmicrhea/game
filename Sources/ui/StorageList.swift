@@ -1,6 +1,6 @@
-/// A scrolling list view for storage inventory items (RE-style)
+/// A scrolling list view for storage inventory items.
 @MainActor
-final class ItemStorageListView {
+final class StorageList {
   // MARK: - Configuration
   private let scrollView: ScrollView
   internal let rowHeight: Float = 60.0  // Adjusted for proper sizing

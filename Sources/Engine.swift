@@ -269,7 +269,7 @@ public final class Engine: NSObject {
       MapView(),
       ItemView(item: .sigp320),
       PickupView(item: .catStatue),
-      ItemStorageView(),
+      StorageView(),
       //MainMenu(),
       UIDemo(),
       DocumentDemo(),

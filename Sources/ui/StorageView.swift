@@ -1,5 +1,5 @@
 @MainActor
-final class ItemStorageView: RenderLoop {
+final class StorageView: RenderLoop {
   // MARK: - Storage View Style
   enum StorageViewStyle {
     case grid
@@ -17,12 +17,12 @@ final class ItemStorageView: RenderLoop {
   public var showingItem: Bool { isShowingItem }
 
   // MARK: - Storage View Style
-  private var storageViewStyle: StorageViewStyle = .list  // Default to list
+  private var storageViewStyle: StorageViewStyle = .list
 
   // MARK: - Grids
   private let playerGrid: ItemSlotGrid
   private var storageGrid: ItemSlotGrid?
-  private var storageListView: ItemStorageListView?
+  private var storageListView: StorageList?
 
   // MARK: - State
   private enum GridId { case player, storage }
@@ -104,7 +104,7 @@ final class ItemStorageView: RenderLoop {
     case .list:
       // Storage list view
       let listFrame = Rect(x: 0, y: 0, width: 440, height: 400)  // Will be positioned in recenterGrids
-      let list = ItemStorageListView(frame: listFrame)
+      let list = StorageList(frame: listFrame)
       list.setInventory(Inventory.storage)
       list.onSelectionChanged = { [weak self] index in
         self?.updateItemDescription()

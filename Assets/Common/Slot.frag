@@ -115,8 +115,13 @@ void main() {
   // Panel color with radial gradient and inner shadow
   vec3 panelColor = uPanelColor;
   // Apply radial gradient - more visible effect
-  panelColor *= (0.7 + 0.3 * uRadialGradientStrength * radialGradient);
+  if (uRadialGradientStrength > 0.0) {
+    panelColor *= (0.7 + 0.3 * uRadialGradientStrength * radialGradient);
+  } else {
+    panelColor *= 0.6;
+  }
   panelColor *= (0.8 + 0.2 * (1.0 - innerShadow)); // Inner shadow effect
+
 
   // Silver-ish border with metallic appearance
   vec3 silverBase = vec3(0.6, 0.65, 0.7);      // Silver base color
@@ -176,10 +181,12 @@ void main() {
   finalColor *= pulse;
 
   // Add subtle vignette to central area
-  float vignette =
-      1.0 - smoothstep(0.0, length(halfSize) * 0.9, length(uv - center));
-  vignette = mix(0.9, 1.0, vignette);
-  finalColor *= vignette;
+  if (uRadialGradientStrength > 0.0) {
+    float vignette =
+        1.0 - smoothstep(0.0, length(halfSize) * 0.9, length(uv - center));
+    vignette = mix(0.9, 1.0, vignette);
+    finalColor *= vignette;
+  }
 
   // Apply panel mask with alpha multiplier
   float alpha = panelMask * uPanelAlpha;

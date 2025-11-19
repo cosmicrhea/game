@@ -6,7 +6,7 @@ public enum WeaponKind: String, Sendable {
   case launcher
 }
 
-public enum ItemKind: Sendable {
+public enum ItemKind: Sendable, Hashable {
   case key
   case weapon(WeaponKind, ammo: [Item] = [], capacity: Int? = nil, rateOfFire: Float? = nil)
   case ammo
@@ -50,7 +50,7 @@ public enum ItemKind: Sendable {
 }
 
 /// Represents an item that can be stored in inventory slots
-public struct Item: Sendable {
+public struct Item: Sendable, Hashable {
   public let id: String
   public let kind: ItemKind
   public let name: String
@@ -62,6 +62,9 @@ public struct Item: Sendable {
   public let inspectionPitch: Float?
   public let requiresWideSlot: Bool
   public let wideImage: Image?
+  /// Dictionary mapping other item IDs to result items when combined with this item
+  /// Uses string IDs for keys to avoid circular reference issues during initialization
+  public let combinations: [String: Item]
 
   public init(
     id: String,
@@ -74,7 +77,8 @@ public struct Item: Sendable {
     inspectionYaw: Float? = nil,
     inspectionPitch: Float? = nil,
     requiresWideSlot: Bool = false,
-    wideImage: Image? = nil
+    wideImage: Image? = nil,
+    combinations: [String: Item] = [:]
   ) {
     self.id = id
     self.kind = kind
@@ -87,6 +91,7 @@ public struct Item: Sendable {
     self.inspectionPitch = inspectionPitch
     self.requiresWideSlot = requiresWideSlot
     self.wideImage = requiresWideSlot ? wideImage ?? Image("Items/Weapons/\(id)_wide.png") : wideImage
+    self.combinations = combinations
   }
 
   // MARK: - Convenience Properties
@@ -94,5 +99,33 @@ public struct Item: Sendable {
   /// Get weapon kind if this is a weapon
   public var weaponKind: WeaponKind? {
     return kind.weaponKind
+  }
+
+  /// Check if this item can combine with another item, and return the result item if so
+  /// Checks combinations bidirectionally (both items' combination dictionaries)
+  public func canCombine(with other: Item) -> Item? {
+    // Check if this item has a combination with the other item
+    if let resultItem = combinations[other.id] {
+      return resultItem
+    }
+    // Check if the other item has a combination with this item (bidirectional)
+    if let resultItem = other.combinations[id] {
+      return resultItem
+    }
+    return nil
+  }
+}
+
+// MARK: - Hashable Conformance
+
+extension Item {
+  public func hash(into hasher: inout Hasher) {
+    // Use id for hashing (Images are excluded)
+    hasher.combine(id)
+  }
+
+  public static func == (lhs: Item, rhs: Item) -> Bool {
+    // Compare by id (Images are excluded)
+    return lhs.id == rhs.id
   }
 }

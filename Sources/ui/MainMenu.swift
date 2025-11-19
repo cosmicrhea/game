@@ -65,6 +65,10 @@
     if tabs.activeTab == .library && libraryView.showingDocument {
       return true
     }
+    // Check for combine/move mode in inventory
+    if tabs.activeTab == .inventory && inventoryView.isInSpecialMode {
+      return true
+    }
     return false
   }
 

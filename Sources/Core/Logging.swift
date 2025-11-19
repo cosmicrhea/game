@@ -1,6 +1,6 @@
 import Logging
 
-let logger = Logger(label: "local.Game")
+let logger = Logger(label: "local.cosmicrhea.Game")
 
 extension Logger {
   func error(_ cString: [GLchar]) {

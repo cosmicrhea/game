@@ -137,8 +137,6 @@ final class PauseScreenStack: RenderLoop {
   }
 
   func draw() {
-    let screenWidth = Float(Engine.viewportSize.width)
-    let screenHeight = Float(Engine.viewportSize.height)
     let screenSize = Engine.viewportSize
 
     // Draw semi-transparent black overlay that fades in

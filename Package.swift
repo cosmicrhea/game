@@ -91,8 +91,6 @@ let package = Package(
         "Sources/Core/Build",
         "Sources/Core/Macros",
         //"Sources/Core/Shell",
-        "NOTES.md",
-        "TODO.md",
         "README.md",
       ],
 

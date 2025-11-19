@@ -6,7 +6,7 @@ final class ConfigStore {
   private var store: [String: Any] = [:]
 
   init() {
-    // Create Application Support directory path: ~/Library/Application Support/local.game/
+    // Create Application Support directory path: ~/Library/Application Support/local.cosmicrhea.Game/
     let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     let appDirectory = appSupportURL.appendingPathComponent("local.cosmicrhea.Game")
 

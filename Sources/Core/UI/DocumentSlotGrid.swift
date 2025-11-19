@@ -289,7 +289,10 @@ public final class DocumentSlotGrid {
         shader.setFloat("uCornerRadius", value: cornerRadius)
         shader.setFloat("uNoiseScale", value: noiseScale)
         shader.setFloat("uNoiseStrength", value: noiseStrength)
-        shader.setFloat("uRadialGradientStrength", value: radialGradientStrength)
+        // Show radial gradient on slots with documents, or on blank slots that are selected/hovered
+        let hasDocument = (i < slotData.count) && (slotData[i]?.document != nil)
+        let isSelectedOrHovered = (i == selectedIndex) || (i == hoveredIndex)
+        shader.setFloat("uRadialGradientStrength", value: (hasDocument || isSelectedOrHovered) ? radialGradientStrength : 0.0)
 
         // Set colors
         shader.setVec3(
