@@ -42,12 +42,13 @@ public final class DocumentSlotGrid {
   // MARK: - Slot Data
   public var slotData: [DocumentSlotData?] = []
 
+  // FIXME: don't have all these parameters here
   public init(
     columns: Int,
     rows: Int,
     slotSize: Float = 128.0,
     spacing: Float = 8.0,
-    cornerRadius: Float = 8.0,
+    cornerRadius: Float = 5.0,
     radialGradientStrength: Float = 0.6,
     selectionWraps: Bool = false
   ) {
@@ -292,7 +293,8 @@ public final class DocumentSlotGrid {
         // Show radial gradient on slots with documents, or on blank slots that are selected/hovered
         let hasDocument = (i < slotData.count) && (slotData[i]?.document != nil)
         let isSelectedOrHovered = (i == selectedIndex) || (i == hoveredIndex)
-        shader.setFloat("uRadialGradientStrength", value: (hasDocument || isSelectedOrHovered) ? radialGradientStrength : 0.0)
+        shader.setFloat(
+          "uRadialGradientStrength", value: (hasDocument || isSelectedOrHovered) ? radialGradientStrength : 0.0)
 
         // Set colors
         shader.setVec3(

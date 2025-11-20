@@ -158,14 +158,12 @@ extension Item {
     id: "lighter_fluid",
     name: "Lighter Fluid",
     description: "A liquid fuel for butane lighters.",
-    combinations: ["lighter": .lighterWithFuel],
   )
 
   static let lighter = Item(
     id: "lighter",
     name: "Empty Lighter",
     description: "Simple butane lighter. It's empty and needs fuel.",
-    combinations: ["lighter_fluid": .lighterWithFuel],
   )
 
   static let catStatue = Item(
@@ -174,52 +172,10 @@ extension Item {
     description: "A concrete statue of a cat. Cuuute! ^-^",
     inspectionDistance: 0.4,
   )
-}
 
-// MARK: - Item Registry
+  // MARK: - Combinations
 
-extension Item {
-  /// All available items in the game
-  private static let allItems: [Item] = [
-    // Recovery
-    .morphine,
-    // Melee
-    .knife,
-    // Handguns
-    .glock17,
-    .glock18,
-    .sigp320,
-    .beretta92,
-    .fnx45,
-    // Shotguns
-    .remington870,
-    .spas12,
-    // SMGs
-    .mp5sd,
-    // Launchers
-    .m32,
-    // Ammo
-    .handgunAmmo,
-    .grenadeRounds,
-    // Keys
-    .utilityKey,
-    .metroKey,
-    .tagKey,
-    // Other
-    .cryoGloves,
-    .lighter,
-    .lighterFluid,
-    .lighterWithFuel,
-    .catStatue,
+  static let combinations: [Set<Item>: Item] = [
+    [.lighterFluid, .lighter]: .lighterWithFuel
   ]
-
-  /// Cached dictionary of items by ID for fast lookups
-  private static let itemsByID: [String: Item] = {
-    Dictionary(uniqueKeysWithValues: allItems.map { ($0.id, $0) })
-  }()
-
-  /// Look up an item by its ID string
-  static func itemByID(_ id: String) -> Item? {
-    return itemsByID[id]
-  }
 }

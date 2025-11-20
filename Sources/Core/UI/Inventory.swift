@@ -132,6 +132,7 @@ public final class Inventory {
         .cryoGloves,
         .lighter,
         .lighterFluid,
+        .lighterWithFuel,
         .catStatue,
       ]
 

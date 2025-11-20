@@ -62,9 +62,6 @@ public struct Item: Sendable, Hashable {
   public let inspectionPitch: Float?
   public let requiresWideSlot: Bool
   public let wideImage: Image?
-  /// Dictionary mapping other item IDs to result items when combined with this item
-  /// Uses string IDs for keys to avoid circular reference issues during initialization
-  public let combinations: [String: Item]
 
   public init(
     id: String,
@@ -77,8 +74,7 @@ public struct Item: Sendable, Hashable {
     inspectionYaw: Float? = nil,
     inspectionPitch: Float? = nil,
     requiresWideSlot: Bool = false,
-    wideImage: Image? = nil,
-    combinations: [String: Item] = [:]
+    wideImage: Image? = nil
   ) {
     self.id = id
     self.kind = kind
@@ -91,7 +87,6 @@ public struct Item: Sendable, Hashable {
     self.inspectionPitch = inspectionPitch
     self.requiresWideSlot = requiresWideSlot
     self.wideImage = requiresWideSlot ? wideImage ?? Image("Items/Weapons/\(id)_wide.png") : wideImage
-    self.combinations = combinations
   }
 
   // MARK: - Convenience Properties
@@ -102,17 +97,9 @@ public struct Item: Sendable, Hashable {
   }
 
   /// Check if this item can combine with another item, and return the result item if so
-  /// Checks combinations bidirectionally (both items' combination dictionaries)
   public func canCombine(with other: Item) -> Item? {
-    // Check if this item has a combination with the other item
-    if let resultItem = combinations[other.id] {
-      return resultItem
-    }
-    // Check if the other item has a combination with this item (bidirectional)
-    if let resultItem = other.combinations[id] {
-      return resultItem
-    }
-    return nil
+    let itemSet: Set<Item> = [self, other]
+    return Item.combinations[itemSet]
   }
 }
 

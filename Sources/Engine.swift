@@ -263,17 +263,17 @@ public final class Engine: NSObject {
       MainLoop(),
       TitleScreenStack(),
 
-      PauseScreenStack(),
+      //PauseScreenStack(),
 
-      DialogDemo(),
+      //DialogDemo(),
       MapView(),
       ItemView(item: .sigp320),
-      PickupView(item: .catStatue),
+      //PickupView(item: .catStatue),
       StorageView(),
       //MainMenu(),
-      UIDemo(),
-      DocumentDemo(),
-      MovieDemo(),
+      //UIDemo(),
+      //DocumentDemo(),
+      //MovieDemo(),
       ModelViewer(),
       CreditsScreen(),
 

@@ -92,7 +92,7 @@ class NodeAnimator {
           let currentTransform = nodeTransforms[boneName] ?? mat4(1)
 
           // Convert Assimp offset matrix to GLMath mat4
-          let offsetMatrix = convertAssimpMatrix(bone.offsetMatrix)
+          let offsetMatrix = bone.offsetMatrix.mat4Representation
 
           // The final bone matrix is: currentTransform * offsetMatrix
           let finalBoneMatrix = currentTransform * offsetMatrix
@@ -115,7 +115,7 @@ class NodeAnimator {
     boneTransforms: inout [String: mat4]
   ) {
     // Get the node's local transform
-    let nodeTransform = convertAssimpMatrix(node.transformation)
+    let nodeTransform = node.transformation.mat4Representation
 
     // Get animated transform if available
     let animatedTransform = nodeTransforms[node.name ?? ""] ?? mat4(1)
@@ -139,13 +139,6 @@ class NodeAnimator {
   }
 
   /// Convert Assimp matrix to GLMath mat4
-  private func convertAssimpMatrix(_ matrix: Assimp.Matrix4x4) -> mat4 {
-    let row1 = vec4(Float(matrix.a1), Float(matrix.b1), Float(matrix.c1), Float(matrix.d1))
-    let row2 = vec4(Float(matrix.a2), Float(matrix.b2), Float(matrix.c2), Float(matrix.d2))
-    let row3 = vec4(Float(matrix.a3), Float(matrix.b3), Float(matrix.c3), Float(matrix.d3))
-    let row4 = vec4(Float(matrix.a4), Float(matrix.b4), Float(matrix.c4), Float(matrix.d4))
-    return mat4(row1, row2, row3, row4)
-  }
 
   private func updateNodeTransforms() {
     guard let animation = animation else { return }

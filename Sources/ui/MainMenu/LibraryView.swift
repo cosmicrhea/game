@@ -11,6 +11,7 @@ final class LibraryView: RenderLoop {
   // Document display state
   private var currentDocumentView: DocumentView? = nil
   private var isShowingDocument: Bool = false
+  private var isTransitioning: Bool = false
 
   // Public property to check if showing a document
   public var showingDocument: Bool {
@@ -41,6 +42,7 @@ final class LibraryView: RenderLoop {
   ]
 
   init() {
+    // FIXME: specify elsewhere
     slotGrid = DocumentSlotGrid(
       columns: 4,
       rows: 4,
@@ -95,7 +97,9 @@ final class LibraryView: RenderLoop {
       // Handle escape to return to library view
       if key == .escape {
         UISound.cancel()
-        hideDocument()
+        Task { @MainActor in
+          await hideDocument()
+        }
         return
       }
 
@@ -193,30 +197,60 @@ final class LibraryView: RenderLoop {
   private func handleDocumentSelection(_ document: Document?) {
     if let document = document {
       logger.trace("Selected document: \(document.displayName ?? "Unknown")")
-      showDocument(document)
+      Task { @MainActor in
+        await showDocument(document)
+      }
     } else {
       logger.trace("Selected empty slot")
       UISound.error()
     }
   }
 
-  private func showDocument(_ document: Document) {
-    // Create new DocumentView
+  private func showDocument(_ document: Document) async {
+    // Prevent multiple simultaneous transitions
+    guard !isTransitioning else { return }
+    isTransitioning = true
+
     UISound.select()
+
+    // Fade to black
+    await ScreenFade.shared.fadeToBlack(duration: 0.3)
+
+    // Create new DocumentView
     currentDocumentView = DocumentView(document: document)
 
     // Set up completion callback to return to library view
     currentDocumentView?.onDocumentFinished = { [weak self] in
-      self?.hideDocument()
+      Task { @MainActor in
+        await self?.hideDocument()
+      }
     }
 
     // Switch to document view
     isShowingDocument = true
+
+    // Fade from black
+    await ScreenFade.shared.fadeFromBlack(duration: 0.3)
+
+    isTransitioning = false
   }
 
-  private func hideDocument() {
+  private func hideDocument() async {
+    // Prevent multiple simultaneous transitions
+    guard !isTransitioning else { return }
+    isTransitioning = true
+
+    // Fade to black
+    await ScreenFade.shared.fadeToBlack(duration: 0.3)
+
+    // Hide document view
     currentDocumentView = nil
     isShowingDocument = false
+
+    // Fade from black
+    await ScreenFade.shared.fadeFromBlack(duration: 0.3)
+
+    isTransitioning = false
   }
 
   private func updateDocumentLabel() {

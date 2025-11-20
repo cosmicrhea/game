@@ -250,7 +250,7 @@ class MapView: RenderLoop {
     // Find and set up Camera_0 (debug/orthographic camera)
     if let cameraNode = scene.rootNode.findNode(named: "Camera_0") {
       debugCameraNode = cameraNode
-      debugCameraWorldTransform = calculateNodeWorldTransform(cameraNode, in: scene)
+      debugCameraWorldTransform = cameraNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
     }
 
     if let camera = scene.cameras.first(where: { $0.name == "Camera_0" }) {
@@ -279,8 +279,8 @@ class MapView: RenderLoop {
 
     // Store area data for labels (only actual area nodes)
     for node in areaNodes {
-      let worldTransform = calculateNodeWorldTransform(node, in: scene)
-      let boundingBox = calculateNodeBoundingBox(node, transform: worldTransform, in: scene)
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let boundingBox = node.assimpNode.calculateBoundingBox(transform: worldTransform, in: scene.assimpScene)
 
       // Find the Floor node within this area node's children
       let floorNode = findFloorNode(in: node)
@@ -289,7 +289,7 @@ class MapView: RenderLoop {
 
     // Create mesh instances for floors
     for node in floorNodes {
-      let worldTransform = calculateNodeWorldTransform(node, in: scene)
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
       // Find which area this floor belongs to
       var areaIndex: Int? = nil
@@ -328,7 +328,7 @@ class MapView: RenderLoop {
 
     // Create mesh instances for door actions
     for node in doorActionNodes {
-      let worldTransform = calculateNodeWorldTransform(node, in: scene)
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
       for meshIndex in node.meshes {
         guard meshIndex < scene.meshes.count else { continue }
         let mesh = scene.meshes[Int(meshIndex)]
@@ -569,7 +569,7 @@ class MapView: RenderLoop {
 
     for (doorIndex, doorInstance) in doorMeshInstances.enumerated() {
       // Get door's current center position
-      let doorBounds = calculateMeshBoundingBox(mesh: doorInstance.mesh, transform: doorInstance.transformMatrix)
+      let doorBounds = doorInstance.mesh.calculateBoundingBox(transform: doorInstance.transformMatrix)
       let doorCenter = vec3(
         (doorBounds.min.x + doorBounds.max.x) * 0.5,
         (doorBounds.min.y + doorBounds.max.y) * 0.5,
@@ -640,7 +640,7 @@ class MapView: RenderLoop {
     var doorBoundingBoxes: [(min: vec3, max: vec3)] = []
     for meshInstance in doorMeshInstances {
       let transform = meshInstance.transformMatrix
-      let boundingBox = calculateMeshBoundingBox(mesh: meshInstance.mesh, transform: transform)
+      let boundingBox = meshInstance.mesh.calculateBoundingBox(transform: transform)
       doorBoundingBoxes.append(boundingBox)
     }
 
@@ -868,34 +868,6 @@ class MapView: RenderLoop {
       VBO: VBO,
       EBO: EBO
     )
-  }
-
-  /// Calculate bounding box for a mesh with a transform
-  private func calculateMeshBoundingBox(mesh: Assimp.Mesh, transform: mat4) -> (min: vec3, max: vec3) {
-    var minX: Float = Float.infinity
-    var maxX: Float = -Float.infinity
-    var minY: Float = Float.infinity
-    var maxY: Float = -Float.infinity
-    var minZ: Float = Float.infinity
-    var maxZ: Float = -Float.infinity
-
-    let vertices = mesh.vertices
-    for i in 0..<mesh.numberOfVertices {
-      let localPos = vec3(
-        Float(vertices[i * 3 + 0]),
-        Float(vertices[i * 3 + 1]),
-        Float(vertices[i * 3 + 2])
-      )
-      let worldPos = transform * vec4(localPos.x, localPos.y, localPos.z, 1.0)
-      minX = min(minX, worldPos.x)
-      maxX = max(maxX, worldPos.x)
-      minY = min(minY, worldPos.y)
-      maxY = max(maxY, worldPos.y)
-      minZ = min(minZ, worldPos.z)
-      maxZ = max(maxZ, worldPos.z)
-    }
-
-    return (min: vec3(minX, minY, minZ), max: vec3(maxX, maxY, maxZ))
   }
 
   private func calculateBaseSceneBounds() {
@@ -1372,7 +1344,7 @@ class MapView: RenderLoop {
       shaderProgram.setBool("isWireframe", value: false)
 
       // Calculate mesh bounding box in world space for distance-based inner glow
-      let meshBounds = calculateMeshBoundingBox(mesh: meshInstance.mesh, transform: meshInstance.transformMatrix)
+      let meshBounds = meshInstance.mesh.calculateBoundingBox(transform: meshInstance.transformMatrix)
       shaderProgram.setVec3("meshBoundsMin", value: (meshBounds.min.x, meshBounds.min.y, meshBounds.min.z))
       shaderProgram.setVec3("meshBoundsMax", value: (meshBounds.max.x, meshBounds.max.y, meshBounds.max.z))
 
@@ -1430,7 +1402,7 @@ class MapView: RenderLoop {
       shaderProgram.setBool("isWireframe", value: false)
 
       // Calculate mesh bounding box in world space for distance-based inner glow
-      let meshBounds = calculateMeshBoundingBox(mesh: meshInstance.mesh, transform: doorTransform)
+      let meshBounds = meshInstance.mesh.calculateBoundingBox(transform: doorTransform)
       shaderProgram.setVec3("meshBoundsMin", value: (meshBounds.min.x, meshBounds.min.y, meshBounds.min.z))
       shaderProgram.setVec3("meshBoundsMax", value: (meshBounds.max.x, meshBounds.max.y, meshBounds.max.z))
 
@@ -1830,7 +1802,7 @@ class MapView: RenderLoop {
     let markerNodes = findNodesContaining(keywords: ["MapMarker"], in: scene.rootNode)
 
     for node in markerNodes {
-      let worldTransform = calculateNodeWorldTransform(node, in: scene)
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
       // Get position from transform matrix (translation component)
       let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
       mapMarkers.append((node: node, position: position))
@@ -1914,76 +1886,5 @@ class MapView: RenderLoop {
   }
 
   /// Calculate world transform for a node by traversing up the hierarchy
-  private func calculateNodeWorldTransform(_ node: Node, in scene: Scene) -> mat4 {
-    var transform = convertAssimpMatrix(node.transformation)
-    var currentNode = node.assimpNode
-
-    while let parent = currentNode.parent {
-      let parentTransform = convertAssimpMatrix(parent.transformation)
-      transform = parentTransform * transform
-      currentNode = parent
-    }
-
-    return transform
-  }
-
-  /// Convert Assimp matrix to GLMath mat4
-  /// Assimp stores matrices in row-major order (a1-a4 is first row)
-  private func convertAssimpMatrix(_ matrix: Assimp.Matrix4x4) -> mat4 {
-    let row1 = vec4(Float(matrix.a1), Float(matrix.b1), Float(matrix.c1), Float(matrix.d1))
-    let row2 = vec4(Float(matrix.a2), Float(matrix.b2), Float(matrix.c2), Float(matrix.d2))
-    let row3 = vec4(Float(matrix.a3), Float(matrix.b3), Float(matrix.c3), Float(matrix.d3))
-    let row4 = vec4(Float(matrix.a4), Float(matrix.b4), Float(matrix.c4), Float(matrix.d4))
-    return mat4(row1, row2, row3, row4)
-  }
-
-  /// Calculate bounding box for a node's meshes in world space
-  private func calculateNodeBoundingBox(_ node: Node, transform: mat4, in scene: Scene) -> (min: vec3, max: vec3) {
-    var minBounds = vec3(Float.infinity, Float.infinity, Float.infinity)
-    var maxBounds = vec3(-Float.infinity, -Float.infinity, -Float.infinity)
-
-    // Process all meshes attached to this node
-    for meshIndex in node.meshes {
-      guard meshIndex < scene.meshes.count else { continue }
-      let mesh = scene.meshes[Int(meshIndex)]
-
-      // Get vertices from mesh
-      let vertices = mesh.vertices
-      guard mesh.numberOfVertices > 0 else { continue }
-
-      // Transform each vertex to world space and expand bounding box
-      for i in 0..<mesh.numberOfVertices {
-        let localPos = vec3(
-          Float(vertices[i * 3 + 0]),
-          Float(vertices[i * 3 + 1]),
-          Float(vertices[i * 3 + 2])
-        )
-
-        // Transform to world space
-        let worldPos = transform * vec4(localPos.x, localPos.y, localPos.z, 1.0)
-        let worldVec = vec3(worldPos.x, worldPos.y, worldPos.z)
-
-        minBounds.x = min(minBounds.x, worldVec.x)
-        minBounds.y = min(minBounds.y, worldVec.y)
-        minBounds.z = min(minBounds.z, worldVec.z)
-
-        maxBounds.x = max(maxBounds.x, worldVec.x)
-        maxBounds.y = max(maxBounds.y, worldVec.y)
-        maxBounds.z = max(maxBounds.z, worldVec.z)
-      }
-    }
-
-    // If no meshes found, return a small default box around the position
-    if minBounds.x == Float.infinity {
-      let position = vec3(transform[3].x, transform[3].y, transform[3].z)
-      let defaultSize: Float = 1.0
-      return (
-        min: position - vec3(defaultSize, defaultSize, defaultSize),
-        max: position + vec3(defaultSize, defaultSize, defaultSize)
-      )
-    }
-
-    return (min: minBounds, max: maxBounds)
-  }
 
 }

@@ -8,6 +8,8 @@ import class Foundation.ProcessInfo
 let env = ProcessInfo.processInfo.environment
 let useLocalDependencies = env["USER"] == "fa"
 
+print("useLocalDependencies: \(useLocalDependencies)")
+
 let package = Package(
   name: "Game",
 

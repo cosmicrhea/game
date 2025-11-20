@@ -1,6 +1,6 @@
 enum CreditsData {
   static let credits: OrderedDictionary<String, [String]> = [
-    "Producer & Designer": ["cosmic_rhea"],
+    "Executive Producer": ["cosmic_rhea"],
 
     "Environment Artists": [
       // https://sketchfab.com/jintrim3

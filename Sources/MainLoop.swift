@@ -242,7 +242,7 @@ private let startingEntry = "1"
 
       // Find the node with the same name as the light
       if let lightNode = scene.rootNode.findNode(named: lightName) {
-        let worldTransform = calculateNodeWorldTransform(lightNode, scene: scene)
+        let worldTransform = lightNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
         sceneLights.append((light: light, worldTransform: worldTransform))
         logger.trace("💡 Loaded light '\(lightName)' type: \(light.type)")
       } else {
@@ -372,7 +372,7 @@ private let startingEntry = "1"
     let nodeName = name
     if let node = scene.rootNode.findNode(named: nodeName) {
       cameraNode = node
-      cameraWorldTransform = calculateNodeWorldTransform(node, scene: scene)
+      cameraWorldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
       logger.trace("✅ Active camera node: \(nodeName)")
       // Debug: Print camera transform
       let cameraPos = vec3(cameraWorldTransform[3].x, cameraWorldTransform[3].y, cameraWorldTransform[3].z)
@@ -413,30 +413,6 @@ private let startingEntry = "1"
         logger.error("Failed to load capsule mesh: \(error)")
       }
     }
-  }
-
-  /// Calculate world transform for a node by traversing up the hierarchy
-  private func calculateNodeWorldTransform(_ node: Node, scene: Scene) -> mat4 {
-    var transform = convertAssimpMatrix(node.transformation)
-    var currentNode = node.assimpNode
-
-    while let parent = currentNode.parent {
-      let parentTransform = convertAssimpMatrix(parent.transformation)
-      transform = parentTransform * transform
-      currentNode = parent
-    }
-
-    return transform
-  }
-
-  /// Convert Assimp matrix to GLMath mat4
-  /// Assimp stores matrices in row-major order (a1-a4 is first row)
-  private func convertAssimpMatrix(_ matrix: Assimp.Matrix4x4) -> mat4 {
-    let row1 = vec4(Float(matrix.a1), Float(matrix.b1), Float(matrix.c1), Float(matrix.d1))
-    let row2 = vec4(Float(matrix.a2), Float(matrix.b2), Float(matrix.c2), Float(matrix.d2))
-    let row3 = vec4(Float(matrix.a3), Float(matrix.b3), Float(matrix.c3), Float(matrix.d3))
-    let row4 = vec4(Float(matrix.a4), Float(matrix.b4), Float(matrix.c4), Float(matrix.d4))
-    return mat4(row1, row2, row3, row4)
   }
 
   // MARK: Input
@@ -484,8 +460,15 @@ private let startingEntry = "1"
         return
       }
 
-      // Handle I, M, and Tab to close main menu (always close, no nested check)
+      // Handle I, M, and Tab to close main menu (check for nested views first)
       if key == .i || key == .m || key == .tab {
+        // If there's a nested view (item/document), let MainMenu handle it first
+        if mainMenu.hasNestedViewOpen {
+          // Forward to main menu, which will forward to the nested view
+          mainMenu.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+          return
+        }
+        // No nested view, close the main menu
         UISound.cancel()
         hideMainMenu()
         return
@@ -881,7 +864,7 @@ private let startingEntry = "1"
       return
     }
 
-    let entryWorld = calculateNodeWorldTransform(entryNode, scene: scene)
+    let entryWorld = entryNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
     let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
     let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
     let yaw = atan2(fwd.x, fwd.z)
@@ -1362,7 +1345,7 @@ private let startingEntry = "1"
 
     func traverse(_ node: Node) {
       if let name = node.name, name.contains("-col") {
-        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
         // Get mesh from this node
         if node.numberOfMeshes > 0 {
@@ -1418,7 +1401,7 @@ private let startingEntry = "1"
 
     func traverse(_ node: Node) {
       if let name = node.name, name.contains("-action") {
-        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
         // Get mesh from this node
         if node.numberOfMeshes > 0 {
@@ -1476,7 +1459,7 @@ private let startingEntry = "1"
 
     func traverse(_ node: Node) {
       if let name = node.name, name.contains("-trigger") || name.hasPrefix("CameraTrigger_") {
-        let worldTransform = calculateNodeWorldTransform(node, scene: scene)
+        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
         // Get mesh from this node
         if node.numberOfMeshes > 0 {
@@ -1578,7 +1561,7 @@ private let startingEntry = "1"
   private func drawEntryArrows(scene: Scene, debugRenderer: DebugRenderer) {
     func traverse(_ node: Node) {
       if let name = node.name, name.hasPrefix("Entry_") {
-        let world = calculateNodeWorldTransform(node, scene: scene)
+        let world = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
         let origin = vec3(world[3].x, world[3].y, world[3].z)
         // Extract forward direction from Z basis vector
         let forwardZ = vec3(world[2].x, world[2].y, world[2].z)

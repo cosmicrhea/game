@@ -14,8 +14,8 @@ extension Document {
       They say it’s “natural.”
       But glass doesn’t grow inside people.
 
-      Blood tests from 2019 already showed crystalization markers. Nobody asked why.
-      
+      Blood tests from 2001 already showed crystalization markers. Nobody asked why.
+
       What if it isn’t disease? What if it’s design?
       """,
 
@@ -34,9 +34,9 @@ extension Document {
 
       """
       MILITARY EXPERIMENTS
-      
+
       1980s NATO memos spoke of “mirror soldiers.” Troops that couldn’t bleed, couldn’t feel pain. Project never officially existed.
-      
+
       But ex-soldiers in Østerbro speak of exercises where recruits “shone in the dark.”
 
       Coincidence?
@@ -65,11 +65,11 @@ extension Document {
       And the cure?
       There is none.
       """,
-      
+
       """
       [Photocopied by The Watchers, 
       Amager Underground Press, October 2025]
-      """
+      """,
     ]
   )
 }
