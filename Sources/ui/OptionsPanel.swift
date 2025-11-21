@@ -98,6 +98,7 @@ public class OptionsPanel: Screen {
   public var rowRects: [Rect] = []
   private var focusedIndex: Int? { didSet { updateFocus() } }
   private var focusViaKeyboard: Bool = false
+  private let focusRing = FocusRing(isInterior: false)
 
   // MARK: - Configuration
   func setRows(_ rows: [Row]) {
@@ -111,10 +112,9 @@ public class OptionsPanel: Screen {
     for (i, row) in rows.enumerated() {
       guard i < rowRects.count else { continue }
       let r = rowRects[i]
-      // Draw focus border only when navigating via keyboard
+      // Draw focus ring only when navigating via keyboard
       if focusViaKeyboard, let focusedIndex, focusedIndex == i, rows[i].control.isFocusable {
-        let focusRect = Rect(x: r.origin.x - 8, y: r.origin.y - 6, width: r.size.width + 16, height: r.size.height + 12)
-        focusRect.frame(with: Color.gray500.withAlphaComponent(0.35), lineWidth: 2)
+        focusRing.draw(around: r, intensity: 1.0, paddingX: 8, paddingY: 4)
       }
       let labelSize = row.label.size(with: labelStyle)
       let labelY = r.origin.y + (rowHeight - labelSize.height) * 0.5

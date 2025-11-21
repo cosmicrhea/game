@@ -14,7 +14,7 @@ uniform vec3 uRingColor;
 uniform vec3 uGlowColor;
 uniform float uPulseStrength;
 uniform float uNoiseStrength;
-uniform float uIsInside;
+uniform float uIsInterior;
 
 uniform float iTime;
 
@@ -37,31 +37,41 @@ void main() {
   float ringMask = 0.0;
   float glowMask = 0.0;
 
-  if (uIsInside > 0.5) {
+  // Calculate pulsed glow thickness
+  float pulse = 1.0 + sin(iTime * 2.2) * uPulseStrength;
+  float pulsedGlowThickness = uGlowThickness * pulse;
+
+  if (uIsInterior > 0.5) {
     // Inner shadow/glow: draw from the edge inward
     if (distance > 0.0) {
       discard;
     }
     float innerDistance = -distance;  // positive inside
     ringMask = smoothstep(uRingThickness, 0.0, innerDistance);
-    glowMask = smoothstep(uRingThickness + uGlowThickness, uRingThickness, innerDistance);
+    glowMask = smoothstep(uRingThickness + pulsedGlowThickness, uRingThickness, innerDistance);
   } else {
     // Outer glow: draw from the edge outward
     if (distance < 0.0) {
       discard;
     }
     float outerDistance = distance;  // positive outside
-    ringMask = smoothstep(0.0, uRingThickness, outerDistance);
     float glowStart = uRingThickness;
-    float glowEnd = uRingThickness + max(0.5, uGlowThickness);
-    glowMask = smoothstep(glowStart, glowEnd, outerDistance);
+    float glowEnd = uRingThickness + max(0.5, pulsedGlowThickness);
+    
+    // Discard pixels beyond the maximum glow range
+    if (outerDistance > glowEnd) {
+      discard;
+    }
+    
+    // Ring fades from 1.0 at edge (distance=0) to 0.0 at uRingThickness
+    ringMask = 1.0 - smoothstep(0.0, uRingThickness, outerDistance);
+    // Glow fades from 1.0 at glowStart to 0.0 at glowEnd
+    glowMask = 1.0 - smoothstep(glowStart, glowEnd, outerDistance);
   }
 
   // Procedural noise for subtle shimmer (slowed down 15x)
   float noiseSample = hash21(uv * 0.35 + iTime * 0.01);
   float noiseFactor = 1.0 + (noiseSample - 0.5) * uNoiseStrength;
-
-  float pulse = 1.0 + sin(iTime * 2.2) * uPulseStrength;
 
   float ringAlpha = ringMask * uRingAlpha * pulse * noiseFactor;
   float glowAlpha = glowMask * uGlowAlpha * pulse;

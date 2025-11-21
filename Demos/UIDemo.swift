@@ -1,7 +1,7 @@
 @Editable final class UIDemo: RenderLoop {
   @Editor var autohideScrollbars: Bool = true
   @Editor var showColorPicker: Bool = true
-  @Editor var showSliderValues: Bool = true
+  @Editor var showSliderValues: Bool = false
 
   private let indicator = ProgressIndicator()
   private let textField = TextField(frame: Rect(x: 20, y: 90, width: 360, height: 36), text: "Hello")
