@@ -1,13 +1,17 @@
-
-
 /// A navigation stack that manages multiple RenderLoops with smooth transitions
 @MainActor
 public class NavigationStack: RenderLoop {
 
   // MARK: - Properties
-  private var screens: [RenderLoop] = []
+  private struct Entry {
+    let screen: Screen
+    let usesFullScreen: Bool
+  }
+
+  private var entries: [Entry] = []
   private var currentIndex: Int = 0
   private var isTransitioning: Bool = false
+  private var isFullScreenTransition: Bool = false
 
   // MARK: - Transition Animation
   private var transitionProgress: Float = 0.0
@@ -24,7 +28,22 @@ public class NavigationStack: RenderLoop {
 
   /// Whether we're at the root screen (only one screen in the stack, or transitioning back to root)
   var isAtRoot: Bool {
-    return screens.count <= 1 || (isTransitioning && transitionDirection == .backward && screens.count <= 2)
+    let count = entries.count
+    return count <= 1 || (isTransitioning && transitionDirection == .backward && count <= 2)
+  }
+
+  /// Indicates whether the active screen wants exclusive/full-screen presentation.
+  var usesFullScreenContent: Bool {
+    return activeEntry?.usesFullScreen ?? false
+  }
+
+  var activeScreen: Screen? {
+    return activeEntry?.screen
+  }
+
+  private var activeEntry: Entry? {
+    guard entries.indices.contains(currentIndex) else { return nil }
+    return entries[currentIndex]
   }
 
   public enum TransitionDirection {
@@ -40,69 +59,108 @@ public class NavigationStack: RenderLoop {
   // MARK: - Navigation Methods
 
   /// Push a new screen onto the stack
-  func push(_ screen: Screen, direction: TransitionDirection = .forward) {
+  func push(
+    _ screen: Screen,
+    direction: TransitionDirection = .forward,
+    usesFullScreen: Bool = false
+  ) {
     guard !isTransitioning else {
       return
     }
 
-    // Inject navigation stack into the screen
     screen.navigationStack = self
 
-    screens.append(screen)
+    let requiresFullScreenTransition = usesFullScreen || activeEntry?.usesFullScreen == true
+    if requiresFullScreenTransition {
+      let entry = Entry(screen: screen, usesFullScreen: usesFullScreen)
+      performFullScreenTransition(direction: direction) {
+        self.entries.append(entry)
+        self.currentIndex = self.entries.count - 1
+        entry.screen.onAttach(window: Engine.shared.window)
+      }
+      return
+    }
+
+    entries.append(Entry(screen: screen, usesFullScreen: usesFullScreen))
     transitionDirection = direction
     isTransitioning = true
+    isFullScreenTransition = false
     transitionProgress = 0.0
-
-    // Set up screen size for FBO
     screenSize = Engine.viewportSize
-
-    // Attach the new screen
     screen.onAttach(window: Engine.shared.window)
   }
 
   /// Pop the current screen and go back to the previous one
   public func pop() {
-    guard screens.count > 1 else {
+    guard entries.count > 1 else {
       return
     }
     guard !isTransitioning else {
       return
     }
 
-    // Start transition back (don't remove screen yet)
     transitionDirection = .backward
+
+    let requiresFullScreenTransition =
+      entries.last?.usesFullScreen == true
+      || entries[entries.count - 2].usesFullScreen == true
+    if requiresFullScreenTransition {
+      performFullScreenTransition(direction: .backward) {
+        let removedEntry = self.entries.removeLast()
+        removedEntry.screen.onDetach(window: Engine.shared.window)
+        self.currentIndex = max(0, self.entries.count - 1)
+      }
+      return
+    }
+
     isTransitioning = true
+    isFullScreenTransition = false
     transitionProgress = 0.0
   }
 
   /// Replace the current screen with a new one
-  func replace(_ screen: Screen) {
+  func replace(_ screen: Screen, usesFullScreen: Bool = false) {
     guard !isTransitioning else {
       return
     }
 
-    // Inject navigation stack into the screen
     screen.navigationStack = self
 
-    // Replace the current screen
-    if currentIndex < screens.count {
-      screens[currentIndex] = screen
-    } else {
-      screens.append(screen)
+    let requiresFullScreenTransition = usesFullScreen || activeEntry?.usesFullScreen == true
+
+    if requiresFullScreenTransition {
+      performFullScreenTransition(direction: .forward) {
+        if self.entries.indices.contains(self.currentIndex) {
+          let oldEntry = self.entries[self.currentIndex]
+          oldEntry.screen.onDetach(window: Engine.shared.window)
+          self.entries[self.currentIndex] = Entry(screen: screen, usesFullScreen: usesFullScreen)
+        } else {
+          self.entries.append(Entry(screen: screen, usesFullScreen: usesFullScreen))
+          self.currentIndex = self.entries.count - 1
+        }
+        screen.onAttach(window: Engine.shared.window)
+      }
+      return
     }
 
-    // Start transition
+    if entries.indices.contains(currentIndex) {
+      entries[currentIndex] = Entry(screen: screen, usesFullScreen: usesFullScreen)
+    } else {
+      entries.append(Entry(screen: screen, usesFullScreen: usesFullScreen))
+      currentIndex = entries.count - 1
+    }
+
     transitionDirection = .forward
     isTransitioning = true
+    isFullScreenTransition = false
     transitionProgress = 0.0
   }
 
   /// Set the initial screen
-  func setInitialScreen(_ screen: Screen) {
-    // Inject navigation stack into the initial screen
+  func setInitialScreen(_ screen: Screen, usesFullScreen: Bool = false) {
     screen.navigationStack = self
 
-    screens = [screen]
+    entries = [Entry(screen: screen, usesFullScreen: usesFullScreen)]
     currentIndex = 0
     screen.onAttach(window: Engine.shared.window)
   }
@@ -110,13 +168,11 @@ public class NavigationStack: RenderLoop {
   // MARK: - RenderLoop Implementation
 
   public func update(deltaTime: Float) {
-    // Update current screen
-    if currentIndex < screens.count {
-      screens[currentIndex].update(deltaTime: deltaTime)
+    if let entry = activeEntry {
+      entry.screen.update(deltaTime: deltaTime)
     }
 
-    // Update transition
-    if isTransitioning {
+    if isTransitioning && !isFullScreenTransition {
       transitionProgress += deltaTime / transitionDuration
 
       if transitionProgress >= 1.0 {
@@ -126,44 +182,38 @@ public class NavigationStack: RenderLoop {
   }
 
   public func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
-    if isTransitioning {
-      // Don't handle input during transitions
+    guard !isTransitioning, let entry = activeEntry else {
       return
     }
 
-    if currentIndex < screens.count {
-      screens[currentIndex].onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
-    }
+    entry.screen.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
   }
 
   public func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
-    if isTransitioning {
+    guard !isTransitioning, let entry = activeEntry else {
       return
     }
 
-    if currentIndex < screens.count {
-      screens[currentIndex].onMouseButtonPressed(window: window, button: button, mods: mods)
-    }
+    entry.screen.onMouseButtonPressed(window: window, button: button, mods: mods)
   }
 
   public func onMouseMove(window: Window, x: Double, y: Double) {
-    if isTransitioning {
+    guard !isTransitioning, let entry = activeEntry else {
       return
     }
 
-    if currentIndex < screens.count {
-      screens[currentIndex].onMouseMove(window: window, x: x, y: y)
-    }
+    entry.screen.onMouseMove(window: window, x: x, y: y)
   }
 
   public func draw() {
     if isTransitioning {
+      if isFullScreenTransition {
+        activeEntry?.screen.draw()
+        return
+      }
       drawTransition()
     } else {
-      // Draw current screen
-      if currentIndex < screens.count {
-        screens[currentIndex].draw()
-      }
+      activeEntry?.screen.draw()
     }
   }
 
@@ -181,41 +231,60 @@ public class NavigationStack: RenderLoop {
     nextScreenFBO = nil
 
     isTransitioning = false
+    isFullScreenTransition = false
     transitionProgress = 0.0
 
     if transitionDirection == .forward {
-      currentIndex = screens.count - 1
+      currentIndex = max(0, entries.count - 1)
     } else {
-      // Remove the current screen after backward transition
-      if screens.count > 1 {
-        let removedScreen = screens.removeLast()
-        removedScreen.onDetach(window: Engine.shared.window)
-        // Update currentIndex to point to the new last screen
-        currentIndex = screens.count - 1
+      if entries.count > 1 {
+        let removedEntry = entries.removeLast()
+        removedEntry.screen.onDetach(window: Engine.shared.window)
+        currentIndex = max(0, entries.count - 1)
       }
     }
   }
 
+  private func performFullScreenTransition(
+    direction: TransitionDirection,
+    transitionBlock: @escaping () -> Void
+  ) {
+    transitionDirection = direction
+    isTransitioning = true
+    isFullScreenTransition = true
+    transitionProgress = 0.0
+    screenSize = Engine.viewportSize
+
+    Task { @MainActor in
+      await ScreenFade.shared.fadeToBlack(duration: transitionDuration)
+      transitionBlock()
+      await ScreenFade.shared.fadeFromBlack(duration: transitionDuration)
+      isTransitioning = false
+      isFullScreenTransition = false
+      transitionProgress = 0.0
+    }
+  }
+
   private func drawTransition() {
-    guard screens.count >= 1 else {
+    guard entries.count >= 1 else {
       return
     }
 
-    let currentScreen: RenderLoop
-    let nextScreen: RenderLoop
+    let currentEntry: Entry
+    let nextEntry: Entry
 
     if transitionDirection == .forward {
-      guard screens.count >= 2 else {
+      guard entries.count >= 2 else {
         return
       }
-      currentScreen = screens[currentIndex]
-      nextScreen = screens.last!
+      currentEntry = entries[currentIndex]
+      nextEntry = entries.last!
     } else {
-      guard screens.count >= 2 else {
+      guard entries.count >= 2 else {
         return
       }
-      currentScreen = screens.last!  // Current screen (being removed)
-      nextScreen = screens[screens.count - 2]  // Previous screen (going back to)
+      currentEntry = entries.last!  // Current screen (being removed)
+      nextEntry = entries[entries.count - 2]  // Previous screen (going back to)
     }
 
     // Create FBOs if they don't exist
@@ -230,19 +299,19 @@ public class NavigationStack: RenderLoop {
     let easedProgress = transitionEasing.apply(transitionProgress)
 
     // Update next screen for live animations during transition
-    nextScreen.update(deltaTime: 0.016)  // Use a small delta time for animations
+    nextEntry.screen.update(deltaTime: 0.016)  // Use a small delta time for animations
 
     // Render current screen to FBO
     if let currentFBO = currentScreenFBO {
       Engine.shared.renderer.beginFramebuffer(currentFBO)
-      currentScreen.draw()
+      currentEntry.screen.draw()
       Engine.shared.renderer.endFramebuffer()
     }
 
     // Render next screen to FBO (live update for animations)
     if let nextFBO = nextScreenFBO {
       Engine.shared.renderer.beginFramebuffer(nextFBO)
-      nextScreen.draw()
+      nextEntry.screen.draw()
       Engine.shared.renderer.endFramebuffer()
     } else {
     }

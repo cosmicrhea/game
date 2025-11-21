@@ -24,6 +24,14 @@ public final class ColorPicker: OptionsControl {
   private var colorWheelSize: Float = 200
   private var isInitializing: Bool = true
 
+  /// The union of the layout frame and the currently visible interactive elements.
+  public var interactiveBounds: Rect {
+    guard isWheelVisible else { return frame }
+    let wellFrame = currentWellFrame()
+    let wheelFrame = currentWheelFrame(relativeTo: wellFrame)
+    return frame.union(wheelFrame)
+  }
+
   public init(frame: Rect = .zero, color: Color = .white) {
     self.frame = frame
     // Initialize well and wheel first
@@ -45,23 +53,13 @@ public final class ColorPicker: OptionsControl {
 
   public func draw() {
     // Calculate color well frame (centered vertically, full width)
-    let wellFrame = Rect(
-      x: frame.origin.x,
-      y: frame.origin.y + (frame.size.height - colorWellHeight) * 0.5,
-      width: frame.size.width,
-      height: colorWellHeight
-    )
+    let wellFrame = currentWellFrame()
     colorWell.frame = wellFrame
     colorWell.draw()
 
     // Draw color wheel if visible - anchored bottom-right to top-left of well
     if isWheelVisible {
-      let wheelFrame = Rect(
-        x: wellFrame.origin.x - colorWheelSize,  // Left of well
-        y: wellFrame.maxY - colorWheelSize,  // Above well (bottom-right of wheel at top-left of well)
-        width: colorWheelSize,
-        height: colorWheelSize
-      )
+      let wheelFrame = currentWheelFrame(relativeTo: wellFrame)
       colorWheel.frame = wheelFrame
       colorWheel.draw()
     }
@@ -72,34 +70,32 @@ public final class ColorPicker: OptionsControl {
 
   @discardableResult
   public func handleMouseDown(at position: Point) -> Bool {
-    let wellFrame = colorWell.frame
-    
+    let wellFrame = currentWellFrame()
+
     // Calculate wheel frame (same as in draw)
-    let wheelFrame = Rect(
-      x: wellFrame.origin.x - colorWheelSize,
-      y: wellFrame.maxY - colorWheelSize,
-      width: colorWheelSize,
-      height: colorWheelSize
-    )
-    
+    let wheelFrame = currentWheelFrame(relativeTo: wellFrame)
+
     // If wheel is visible, check clicks there first
-    if isWheelVisible && wheelFrame.contains(position) {
-      // Click is in the wheel area, forward it for interaction
-      return colorWheel.handleMouseDown(at: position)
+    if isWheelVisible {
+      colorWheel.frame = wheelFrame
+      if wheelFrame.contains(position) {
+        // Click is in the wheel area, forward it for interaction
+        return colorWheel.handleMouseDown(at: position)
+      }
     }
-    
+
     // If clicking the well, toggle wheel visibility
     if wellFrame.contains(position) {
       // Toggle wheel visibility
       isWheelVisible.toggle()
       return true
     }
-    
+
     // Click outside both well and wheel - hide wheel if visible
     if isWheelVisible {
       isWheelVisible = false
     }
-    
+
     return false
   }
 
@@ -117,5 +113,22 @@ public final class ColorPicker: OptionsControl {
       colorWheel.handleMouseUp()
     }
   }
-}
 
+  private func currentWellFrame() -> Rect {
+    Rect(
+      x: frame.origin.x,
+      y: frame.origin.y + (frame.size.height - colorWellHeight) * 0.5,
+      width: frame.size.width,
+      height: colorWellHeight
+    )
+  }
+
+  private func currentWheelFrame(relativeTo wellFrame: Rect) -> Rect {
+    Rect(
+      x: wellFrame.origin.x - colorWheelSize,
+      y: wellFrame.maxY - colorWheelSize,
+      width: colorWheelSize,
+      height: colorWheelSize
+    )
+  }
+}

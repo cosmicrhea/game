@@ -39,6 +39,8 @@ public final class SwatchPicker: OptionsControl {
   public var selectionRingWidth: Float = 3
   public var selectionDotDiameter: Float = 7
   public var labelStyle: TextStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 14, color: .gray400)
+  public var labelVerticalPadding: Float = 12
+  public var labelToSwatchGap: Float = 8
 
   // MARK: - Init
 
@@ -66,8 +68,8 @@ public final class SwatchPicker: OptionsControl {
   public func intrinsicSize() -> Size {
     let count = Float(swatches.count)
     let width = count * swatchDiameter + max(0, count - 1) * swatchSpacing
-    // Room for label below
-    let height = swatchDiameter + 18
+    // Room for label below plus gap to swatches
+    let height = labelAreaHeight + labelToSwatchGap + swatchDiameter
     return Size(width, height)
   }
 
@@ -89,10 +91,8 @@ public final class SwatchPicker: OptionsControl {
     frame.size.height = size.height
 
     // Draw swatches row
-    var x = frame.origin.x
-    let y = frame.origin.y + (frame.size.height - 18) - swatchDiameter  // keep 18pt space for label
     for (index, sw) in swatches.enumerated() {
-      let rect = Rect(x: x, y: y, width: swatchDiameter, height: swatchDiameter)
+      let rect = swatchRect(at: index)
       RoundedRect(rect, cornerRadius: swatchDiameter * 0.5).draw(color: sw.color)
 
       if index == selectedIndex {
@@ -108,14 +108,14 @@ public final class SwatchPicker: OptionsControl {
         )
         RoundedRect(dotRect, cornerRadius: dotSize * 0.5).draw(color: .white)
       }
-
-      x += swatchDiameter + swatchSpacing
     }
 
     // Label under the row aligned to left
     if swatches.indices.contains(selectedIndex) {
-      let name = swatches[selectedIndex].name
-      name.draw(at: Point(frame.origin.x, frame.origin.y), style: labelStyle, anchor: .bottomLeft)
+      let swatch = swatches[selectedIndex]
+      let selectedRect = swatchRect(at: selectedIndex)
+      let labelPoint = labelPosition(for: swatch.name, under: selectedRect)
+      swatch.name.draw(at: labelPoint, style: labelStyle, anchor: .topLeft)
     }
   }
 
@@ -163,12 +163,9 @@ public final class SwatchPicker: OptionsControl {
   }
 
   private func swatchIndex(at p: Point) -> Int? {
-    var x = frame.origin.x
-    let y = frame.origin.y + (frame.size.height - 18) - swatchDiameter
     for i in 0..<swatches.count {
-      let rect = Rect(x: x, y: y, width: swatchDiameter, height: swatchDiameter)
+      let rect = swatchRect(at: i)
       if rect.contains(p) { return i }
-      x += swatchDiameter + swatchSpacing
     }
     return nil
   }
@@ -178,6 +175,31 @@ public final class SwatchPicker: OptionsControl {
     guard count > 0 else { return }
     let newIndex = (selectedIndex + delta + count) % count
     selectedIndex = newIndex
+  }
+
+  private var swatchRowY: Float {
+    frame.origin.y + labelAreaHeight + labelToSwatchGap
+  }
+
+  private func swatchRect(at index: Int) -> Rect {
+    let x = frame.origin.x + Float(index) * (swatchDiameter + swatchSpacing)
+    return Rect(x: x, y: swatchRowY, width: swatchDiameter, height: swatchDiameter)
+  }
+
+  private func labelPosition(for name: String, under rect: Rect) -> Point {
+    let textSize = name.size(with: labelStyle)
+    let desiredLeft = rect.midX - textSize.width * 0.5
+    let minX = frame.origin.x
+    let maxX = frame.origin.x + frame.size.width
+    let availableMax = max(minX, maxX - textSize.width)
+    let clampedX = min(max(desiredLeft, minX), availableMax)
+    let labelTop = frame.origin.y + labelVerticalPadding + textSize.height
+    let maxLabelTop = frame.origin.y + labelAreaHeight
+    return Point(clampedX, min(labelTop, maxLabelTop))
+  }
+
+  private var labelAreaHeight: Float {
+    max(labelStyle.fontSize + labelVerticalPadding, labelVerticalPadding + 18)
   }
 
   // Default palette

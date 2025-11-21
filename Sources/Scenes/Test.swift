@@ -2,6 +2,7 @@
 class Test: Script {
 
   @FindNode var catStatue: Node
+  //@SceneReference var stoveCloseup: Camera
 
   func showCat() {
     if catStatue.isHidden {
@@ -26,8 +27,10 @@ class Test: Script {
 
   func cat() async {
     // await say("A cat has appeared.")
-    await say("There's a cat here.", more: true)
-    await acquire(.catStatue)
+    await withCloseup(on: "stove.001") {
+      await say("There's a cat here.", more: true)
+      await acquire(.catStatue)
+    }
   }
 
   func door() {

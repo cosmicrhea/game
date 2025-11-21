@@ -4,6 +4,7 @@
 @_exported import OrderedCollections
 
 @_exported import class Foundation.Bundle
+@_exported import struct Foundation.Calendar
 @_exported import struct Foundation.Data
 @_exported import struct Foundation.Date
 @_exported import class Foundation.DateFormatter

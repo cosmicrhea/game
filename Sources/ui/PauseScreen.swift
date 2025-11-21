@@ -18,7 +18,7 @@ final class PauseScreen: Screen {
       },
 
       ListMenu.MenuItem(id: "options", label: String(localized: "Options")) {
-        self.navigate(to: OptionsScreen())
+        self.navigate(to: OptionsScreen(presentationContext: .inGamePause))
       },
 
       ListMenu.MenuItem(id: "give_up", label: String(localized: "Give Up")) {
@@ -187,10 +187,11 @@ final class PauseScreenStack: RenderLoop {
       // Clean up framebuffer
       Engine.shared.renderer.destroyFramebuffer(menuFBO)
 
-      // Draw prompts outside framebuffer with menuOpacity (fades with menu)
-      promptList.group = navigationStack.isAtRoot ? .menuRoot : .menu
-      promptList.showCalloutBackground = false
-      promptList.draw(opacity: menuOpacity)
+      if !navigationStack.usesFullScreenContent {
+        promptList.group = navigationStack.isAtRoot ? .menuRoot : .menu
+        promptList.showCalloutBackground = false
+        promptList.draw(opacity: menuOpacity)
+      }
     }
   }
 }

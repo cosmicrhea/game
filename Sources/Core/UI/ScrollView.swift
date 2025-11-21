@@ -87,6 +87,11 @@ public final class ScrollView {
   // Cached ranges
   private var maxOffsetX: Float = 0
   private var maxOffsetY: Float = 0
+  private var hasInitializedOffset: Bool = false
+
+  // Animated scrolling
+  private var targetScrollOffset: Point?
+  private let scrollAnimationSpeed: Float = 8.0
 
   // MARK: - Init
 
@@ -98,9 +103,40 @@ public final class ScrollView {
 
   // MARK: - Public Methods
 
+  /// Scroll to the specified offset, optionally with animation.
+  public func scroll(to offset: Point, animated: Bool = false) {
+    let clamped = Point(
+      x: allowsHorizontalScroll ? max(0, min(offset.x, maxOffsetX)) : contentOffset.x,
+      y: allowsVerticalScroll ? max(0, min(offset.y, maxOffsetY)) : contentOffset.y
+    )
+    if animated {
+      targetScrollOffset = clamped
+    } else {
+      contentOffset = clamped
+      targetScrollOffset = nil
+    }
+  }
+
   public func update(deltaTime: Float) {
     // Integrate wheel-induced velocity and drag inertia
     applyInertia(deltaTime: deltaTime)
+
+    // Smooth scroll animation (apply after inertia to override it)
+    if let target = targetScrollOffset {
+      let current = contentOffset
+      let diff = Point(target.x - current.x, target.y - current.y)
+      if abs(diff.x) > 0.1 || abs(diff.y) > 0.1 {
+        let step = Point(
+          diff.x * min(1.0, scrollAnimationSpeed * deltaTime),
+          diff.y * min(1.0, scrollAnimationSpeed * deltaTime)
+        )
+        contentOffset = Point(current.x + step.x, current.y + step.y)
+      } else {
+        contentOffset = target
+        targetScrollOffset = nil
+      }
+    }
+
     // Update scrollbar fade
     updateScrollbar(deltaTime: deltaTime)
   }
@@ -132,6 +168,7 @@ public final class ScrollView {
   @discardableResult
   public func handleMouseDown(at position: Point) -> Bool {
     guard frame.contains(position) else { return false }
+    targetScrollOffset = nil  // Cancel animation on drag
     isDragging = true
     isHovered = true
     lastMouse = position
@@ -177,6 +214,7 @@ public final class ScrollView {
   public func handleScroll(xOffset: Double, yOffset: Double, mouse: Point? = nil) {
     // Route only if inside frame (when a point is provided)
     if let p = mouse, !frame.contains(p) { return }
+    targetScrollOffset = nil  // Cancel animation on manual scroll
 
     let now = GLFWSession.currentTime
     let rawDelta = Point(
@@ -231,9 +269,10 @@ public final class ScrollView {
     maxOffsetY = max(0, contentSize.height - frame.size.height)
     contentOffset.x = clamp(contentOffset.x, 0, maxOffsetX)
     // In Y-flipped coordinates, contentOffset.y = 0 means bottom, maxOffsetY means top
-    // Initialize to top if not already set (when contentOffset.y is still 0 and we have scrollable content)
-    if contentOffset.y == 0 && maxOffsetY > 0 {
+    // Initialize to top only once on first setup (when contentOffset.y is still 0 and we have scrollable content)
+    if !hasInitializedOffset && contentOffset.y == 0 && maxOffsetY > 0 {
       contentOffset.y = maxOffsetY
+      hasInitializedOffset = true
     } else {
       contentOffset.y = clamp(contentOffset.y, 0, maxOffsetY)
     }

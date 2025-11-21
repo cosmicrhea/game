@@ -1,4 +1,4 @@
-import ImageFormats
+import struct ImageFormats.Image
 
 private let nameStyle = TextStyle(
   fontName: "CreatoDisplay-Bold",
@@ -16,8 +16,9 @@ private let sectionGap: Float = 0
 private let initialScrollOffset = Engine.viewportSize.height * 1.2
 
 // FIXME: changing viewport size while playing credits should work
-final class CreditsScreen: RenderLoop {
+final class CreditsScreen: Screen {
   private let promptList = PromptList(.skip)
+  private var isExiting = false
 
   // Animation state
   private var scrollOffset: Float = initialScrollOffset
@@ -28,17 +29,42 @@ final class CreditsScreen: RenderLoop {
   // Offscreen rendering
   private var creditsImage: Image?
 
-  func onKey(window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
+  override func onAttach(window: Window) {
+    scrollOffset = initialScrollOffset
+    scrollTurbo = false
+    isExiting = false
+  }
+
+  override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    switch key {
+    case .escape, .enter, .numpadEnter, .space:
+      requestExit()
+    default:
+      break
+    }
+  }
+
+  func onKey(
+    window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier
+  ) {
     if key == .leftAlt || key == .rightAlt { scrollTurbo = state == .pressed }
   }
 
-  func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
+  func onMouseButton(
+    window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier
+  ) {
     #if DEBUG
       if button == .left { scrollTurbo = state == .pressed }
     #endif
   }
 
-  func update(deltaTime: Float) {
+  override func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    if button == .right {
+      requestExit()
+    }
+  }
+
+  override func update(deltaTime: Float) {
     // Create offscreen image if not exists
     if creditsImage == nil {
       // Calculate total content height only once when creating the image
@@ -79,17 +105,23 @@ final class CreditsScreen: RenderLoop {
     totalContentHeight = height + logoGridHeight
   }
 
-  func draw() {
-    // Set black background
+  override func draw() {
+    let screenSize = Engine.viewportSize
+
+    // Fill black background behind everything
+    let backgroundRect = Rect(origin: .zero, size: screenSize)
+    backgroundRect.fill(with: .black)
+
+    // Preserve existing clear color behavior for consistency
     GraphicsContext.current?.renderer.setClearColor(.black)
 
     // Draw the offscreen credits image with scrolling
     if let creditsImage = creditsImage {
-      let screenHeight = Engine.viewportSize.height
-      let screenWidth = Engine.viewportSize.width
+      let screenHeight = screenSize.height
+      let screenWidth = screenSize.width
       let yPosition = screenHeight - scrollOffset
       let drawY = yPosition.rounded(.down)
-      
+
       // Draw at natural size - the coordinate system will handle scaling correctly
       let drawWidth = creditsImage.naturalSize.width
       let drawHeight = creditsImage.naturalSize.height
@@ -255,4 +287,10 @@ final class CreditsScreen: RenderLoop {
     }
   }
 
+  private func requestExit() {
+    guard !isExiting else { return }
+    isExiting = true
+    UISound.cancel()
+    back()
+  }
 }

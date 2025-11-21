@@ -151,6 +151,30 @@ class Script: SceneLoadingDelegate {
     await mainLoop.transition(toScene: scene, entry: entry)
   }
 
+  /// Runs work while forcing the camera to a specific closeup.
+  /// Camera triggers are temporarily ignored until the closure finishes.
+  /// - Parameters:
+  ///   - cameraName: Name of the camera trigger/cut (e.g., "stove.001" or "Entry_1").
+  ///   - perform: The work to execute during the closeup.
+  @discardableResult
+  func withCloseup<T>(on cameraName: String, perform: () throws -> T) rethrows -> T {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot activate closeup '\(cameraName)': MainLoop.shared is nil")
+      return try perform()
+    }
+    return try mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
+  }
+
+  /// Async variant of `withCloseup(on:perform:)`.
+  @discardableResult
+  func withCloseup<T>(on cameraName: String, perform: () async throws -> T) async rethrows -> T {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot activate closeup '\(cameraName)': MainLoop.shared is nil")
+      return try await perform()
+    }
+    return try await mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
+  }
+
   @MainActor func say(_ string: String) { dialogView.print(chunks: [string]) }
   @MainActor func say(_ strings: [String]) { dialogView.print(chunks: strings) }
 

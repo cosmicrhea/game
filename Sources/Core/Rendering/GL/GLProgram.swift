@@ -10,106 +10,149 @@ enum GLProgramError: Error {
   case unknownShaderType(String)
 }
 
-/// Internal class to manage file watchers for shader hotloading
-private final class GLProgramFileWatcher: @unchecked Sendable {
-  private var vertexWatcher: DispatchSourceFileSystemObject?
-  private var fragmentWatcher: DispatchSourceFileSystemObject?
-  private let vertexPath: String
-  private let fragmentPath: String
-  private let vertexName: String
-  private let fragmentName: String
-  private var onFileChanged: (@Sendable () -> Void)?
-  private let queue = DispatchQueue(label: "local.cosmicrhea.Game.shaderHotload", qos: .utility)
-  nonisolated(unsafe) private var pendingRecompile: Bool = false
+#if HOTLOAD_SHADERS
+  /// Internal class to manage file watchers for shader hotloading
+  private final class GLProgramFileWatcher: @unchecked Sendable {
+    private var vertexWatcher: DispatchSourceFileSystemObject?
+    private var fragmentWatcher: DispatchSourceFileSystemObject?
+    private let vertexPath: String
+    private let fragmentPath: String
+    private let vertexName: String
+    private let fragmentName: String
+    private let queue = DispatchQueue(label: "local.cosmicrhea.Game.shaderHotload", qos: .utility)
+    nonisolated(unsafe) private var pendingRecompile: Bool = false
+    private var callbacks: [UUID: @Sendable () -> Void] = [:]
+    private let callbacksLock = NSLock()
 
-  init(
-    vertexPath: String, fragmentPath: String, vertexName: String, fragmentName: String,
-    onFileChanged: @escaping @Sendable () -> Void
-  ) {
-    self.vertexPath = vertexPath
-    self.fragmentPath = fragmentPath
-    self.vertexName = vertexName
-    self.fragmentName = fragmentName
-    self.onFileChanged = onFileChanged
+    init(
+      vertexPath: String, fragmentPath: String, vertexName: String, fragmentName: String
+    ) {
+      self.vertexPath = vertexPath
+      self.fragmentPath = fragmentPath
+      self.vertexName = vertexName
+      self.fragmentName = fragmentName
 
-    setupWatchers()
-  }
-
-  func updateCallback(_ callback: @escaping @Sendable () -> Void) {
-    onFileChanged = callback
-  }
-
-  private func setupWatchers() {
-    // Use platform-specific file open flags
-    // O_EVTONLY is macOS-specific, use O_RDONLY on Linux
-    #if os(macOS)
-      let openFlags = O_EVTONLY
-    #else
-      let openFlags = O_RDONLY
-    #endif
-
-    // Watch vertex shader
-    let vertexFileDescriptor = open(vertexPath, openFlags)
-    if vertexFileDescriptor >= 0 {
-      vertexWatcher = DispatchSource.makeFileSystemObjectSource(
-        fileDescriptor: vertexFileDescriptor,
-        eventMask: DispatchSource.FileSystemEvent.write,
-        queue: queue
-      )
-      vertexWatcher?.setEventHandler { @Sendable [weak self] in
-        guard let self = self else { return }
-        // Debounce: wait a bit for file writes to complete
-        let callback = self.onFileChanged
-        let currentPending = self.pendingRecompile
-        guard !currentPending else { return }
-        self.pendingRecompile = true
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(100)) {
-          @Sendable in
-          callback?()
-          // Reset flag after a delay
-          DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(500)) {
-            @Sendable in
-            self.pendingRecompile = false
-          }
-        }
-      }
-      vertexWatcher?.resume()
+      setupWatchers()
     }
 
-    // Watch fragment shader
-    let fragmentFileDescriptor = open(fragmentPath, openFlags)
-    if fragmentFileDescriptor >= 0 {
-      fragmentWatcher = DispatchSource.makeFileSystemObjectSource(
-        fileDescriptor: fragmentFileDescriptor,
-        eventMask: DispatchSource.FileSystemEvent.write,
-        queue: queue
-      )
-      fragmentWatcher?.setEventHandler { @Sendable [weak self] in
-        guard let self = self else { return }
-        // Debounce: wait a bit for file writes to complete
-        let callback = self.onFileChanged
-        let currentPending = self.pendingRecompile
-        guard !currentPending else { return }
-        self.pendingRecompile = true
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(100)) {
-          @Sendable in
-          callback?()
-          // Reset flag after a delay
-          DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(500)) {
+    func addCallback(_ callback: @escaping @Sendable () -> Void) -> UUID {
+      callbacksLock.lock()
+      defer { callbacksLock.unlock() }
+      let id = UUID()
+      callbacks[id] = callback
+      return id
+    }
+
+    func removeCallback(_ id: UUID) {
+      callbacksLock.lock()
+      callbacks.removeValue(forKey: id)
+      callbacksLock.unlock()
+    }
+
+    var hasCallbacks: Bool {
+      callbacksLock.lock()
+      defer { callbacksLock.unlock() }
+      return !callbacks.isEmpty
+    }
+
+    private func notifyCallbacks() {
+      callbacksLock.lock()
+      let current = Array(callbacks.values)
+      callbacksLock.unlock()
+      for callback in current {
+        callback()
+      }
+    }
+
+    private func setupWatchers() {
+      // Use platform-specific file open flags
+      // O_EVTONLY is macOS-specific, use O_RDONLY on Linux
+      #if os(macOS)
+        let openFlags = O_EVTONLY
+      #else
+        let openFlags = O_RDONLY
+      #endif
+
+      // Watch vertex shader
+      let vertexFileDescriptor = open(vertexPath, openFlags)
+      if vertexFileDescriptor >= 0 {
+        logger.debug("👁️ Watching vertex shader: \(vertexPath)")
+        vertexWatcher = DispatchSource.makeFileSystemObjectSource(
+          fileDescriptor: vertexFileDescriptor,
+          eventMask: DispatchSource.FileSystemEvent.write,
+          queue: queue
+        )
+        vertexWatcher?.setEventHandler { @Sendable [weak self] in
+          guard let self = self else { return }
+          logger.debug("📝 Vertex shader file changed: \(self.vertexPath)")
+          // Debounce: wait a bit for file writes to complete
+          let currentPending = self.pendingRecompile
+          guard !currentPending else { return }
+          self.pendingRecompile = true
+          DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(100)) {
             @Sendable in
-            self.pendingRecompile = false
+            self.notifyCallbacks()
+            // Reset flag after a delay
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(500)) {
+              @Sendable in
+              self.pendingRecompile = false
+            }
           }
         }
+        vertexWatcher?.resume()
+      } else {
+        logger.warning("⚠️ Could not open vertex shader for watching: \(vertexPath) (errno: \(errno))")
       }
-      fragmentWatcher?.resume()
+
+      // Watch fragment shader
+      let fragmentFileDescriptor = open(fragmentPath, openFlags)
+      if fragmentFileDescriptor >= 0 {
+        logger.debug("👁️ Watching fragment shader: \(fragmentPath)")
+        fragmentWatcher = DispatchSource.makeFileSystemObjectSource(
+          fileDescriptor: fragmentFileDescriptor,
+          eventMask: DispatchSource.FileSystemEvent.write,
+          queue: queue
+        )
+        fragmentWatcher?.setEventHandler { @Sendable [weak self] in
+          guard let self = self else { return }
+          logger.debug("📝 Fragment shader file changed: \(self.fragmentPath)")
+          // Debounce: wait a bit for file writes to complete
+          let currentPending = self.pendingRecompile
+          guard !currentPending else { return }
+          self.pendingRecompile = true
+          DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(100)) {
+            @Sendable in
+            self.notifyCallbacks()
+            // Reset flag after a delay
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + DispatchTimeInterval.milliseconds(500)) {
+              @Sendable in
+              self.pendingRecompile = false
+            }
+          }
+        }
+        fragmentWatcher?.resume()
+      } else {
+        logger.warning("⚠️ Could not open fragment shader for watching: \(fragmentPath) (errno: \(errno))")
+      }
+    }
+
+    func cancel() {
+      vertexWatcher?.cancel()
+      fragmentWatcher?.cancel()
+    }
+
+    deinit {
+      cancel()
     }
   }
+#endif
 
-  deinit {
-    vertexWatcher?.cancel()
-    fragmentWatcher?.cancel()
+#if HOTLOAD_SHADERS
+  private struct ShaderWatcherKey: Hashable {
+    let vertexPath: String
+    let fragmentPath: String
   }
-}
+#endif
 
 /// A shader program that loads, compiles, and links OpenGL shaders
 public final class GLProgram: @unchecked Sendable {
@@ -119,18 +162,16 @@ public final class GLProgram: @unchecked Sendable {
   private let vertexPath: String
   private let fragmentPath: String
 
-  // Static registry to track file watchers for each program
-  nonisolated(unsafe) private static var fileWatchers: [GLuint: GLProgramFileWatcher] = [:]
-  nonisolated(unsafe) private static var programInstances: [GLuint: Weak<GLProgram>] = [:]
-  private static let watcherLock = NSLock()
+  #if HOTLOAD_SHADERS
+    // Static registry to track file watchers for each shader pair
+    nonisolated(unsafe) private static var fileWatchers: [ShaderWatcherKey: GLProgramFileWatcher] = [:]
+    private static let watcherLock = NSLock()
 
-  // Helper class for weak references
-  private class Weak<T: AnyObject> {
-    weak var value: T?
-    init(_ value: T) {
-      self.value = value
-    }
-  }
+    private var watcherKey: ShaderWatcherKey?
+    private var watcherCallbackID: UUID?
+    private var hotloadVertexPath: String?
+    private var hotloadFragmentPath: String?
+  #endif
 
   /// Initialize shader program from shader base name
   /// Looks for vertex shader as "name.vert" and fragment shader as "name.frag"
@@ -156,10 +197,16 @@ public final class GLProgram: @unchecked Sendable {
     self.vertexPath = resolvedVertexPath
     self.fragmentPath = resolvedFragmentPath
 
+    #if HOTLOAD_SHADERS
+      // Prefer source files when available
+      hotloadVertexPath = findSourceShaderPath(name: vertexName, type: "vertex")
+      hotloadFragmentPath = findSourceShaderPath(name: fragmentName, type: "fragment")
+    #endif
+
     do {
       // Load source code
-      let vertexSource = try loadShaderSource(from: resolvedVertexPath)
-      let rawFragmentSource = try loadShaderSource(from: resolvedFragmentPath)
+      let vertexSource = try loadShaderSource(from: effectiveVertexPath)
+      let rawFragmentSource = try loadShaderSource(from: effectiveFragmentPath)
       let fragmentSource = wrapShaderToyIfNeeded(rawFragmentSource)
 
       //      print("# \(fragmentName).frag")
@@ -181,8 +228,10 @@ public final class GLProgram: @unchecked Sendable {
       glDeleteShader(vertexShader)
       glDeleteShader(fragmentShader)
 
-      // Set up file watching for hotloading
-      setupFileWatchers()
+      #if HOTLOAD_SHADERS
+        // Set up file watching for hotloading
+        setupFileWatchers()
+      #endif
 
     } catch let error as GLProgramError {
       // Clean up on error
@@ -200,35 +249,108 @@ public final class GLProgram: @unchecked Sendable {
   }
 
   /// Set up file watchers for shader hotloading
-  private func setupFileWatchers() {
-    Self.watcherLock.lock()
-    defer { Self.watcherLock.unlock() }
+  #if HOTLOAD_SHADERS
+    private func setupFileWatchers() {
+      // Try to find source files in Assets directory for hotloading during development
+      let sourceVertexPath = findSourceShaderPath(name: vertexName, type: "vertex") ?? vertexPath
+      let sourceFragmentPath = findSourceShaderPath(name: fragmentName, type: "fragment") ?? fragmentPath
 
-    // Remove any existing watcher for this programID
-    Self.fileWatchers[programID] = nil
+      let key = ShaderWatcherKey(vertexPath: sourceVertexPath, fragmentPath: sourceFragmentPath)
 
-    // Store weak reference to this instance for automatic recompilation
-    Self.programInstances[programID] = Weak(self)
+      Self.watcherLock.lock()
+      defer { Self.watcherLock.unlock() }
 
-    // Create new watcher with callback that will trigger recompilation
-    let watcher = GLProgramFileWatcher(
-      vertexPath: vertexPath,
-      fragmentPath: fragmentPath,
-      vertexName: vertexName,
-      fragmentName: fragmentName
-    ) { @Sendable [weak self] in
-      // This callback will be called when files change
-      // Automatically recompile the shader
-      guard let self = self else { return }
-      do {
-        try self.recompile()
-      } catch {
-        logger.error("❌ Automatic shader recompilation failed: \(error)")
+      // Reuse watcher if it already exists
+      let watcher: GLProgramFileWatcher
+      if let existing = Self.fileWatchers[key] {
+        logger.debug("🔁 Reusing shader watcher for '\(vertexName)'/'\(fragmentName)'")
+        watcher = existing
+      } else {
+        logger.debug(
+          "🔍 Setting up shader watcher '\(vertexName)'/'\(fragmentName)' (v=\(sourceVertexPath), f=\(sourceFragmentPath))"
+        )
+        watcher = GLProgramFileWatcher(
+          vertexPath: sourceVertexPath,
+          fragmentPath: sourceFragmentPath,
+          vertexName: vertexName,
+          fragmentName: fragmentName
+        )
+        Self.fileWatchers[key] = watcher
       }
+
+      let callbackID = watcher.addCallback { @Sendable [weak self] in
+        logger.debug("📝 Shader file changed, recompiling…")
+        guard let self = self else { return }
+        do {
+          try self.recompile()
+          logger.info("✅ Shader recompiled successfully")
+        } catch {
+          logger.error("❌ Automatic shader recompilation failed: \(error)")
+        }
+      }
+
+      watcherKey = key
+      watcherCallbackID = callbackID
+      hotloadVertexPath = sourceVertexPath
+      hotloadFragmentPath = sourceFragmentPath
     }
 
-    Self.fileWatchers[programID] = watcher
-  }
+    /// Find source shader file in Assets directory during development
+    private func findSourceShaderPath(name: String, type: String) -> String? {
+      let fileExtension = type == "vertex" ? "vert" : "frag"
+      let fileManager = FileManager.default
+
+      // Get the current working directory (usually project root when running from Xcode/terminal)
+      let cwd = fileManager.currentDirectoryPath
+      let cwdNS = cwd as NSString
+
+      // Try various possible paths to find the Assets directory
+      let bundlePath = Bundle.main.bundlePath as NSString
+      let possibleBasePaths = [
+        cwd,  // Current working directory
+        cwdNS.appendingPathComponent(".."),  // Parent of cwd
+        cwdNS.appendingPathComponent("../.."),  // Two levels up
+        // Also try relative to the bundle location
+        bundlePath.deletingLastPathComponent,
+        (bundlePath.deletingLastPathComponent as NSString).deletingLastPathComponent,
+      ]
+
+      // The shader name might include a path like "UI/HealthDisplay"
+      // So we need to construct "Assets/UI/HealthDisplay.frag"
+      let shaderFileName = "\(name).\(fileExtension)"
+
+      for basePath in possibleBasePaths {
+        let basePathNS = basePath as NSString
+        let assetsPath = basePathNS.appendingPathComponent("Assets")
+        let shaderPath = (assetsPath as NSString).appendingPathComponent(shaderFileName)
+
+        if fileManager.fileExists(atPath: shaderPath) {
+          let resolvedPath = (shaderPath as NSString).standardizingPath
+          return resolvedPath
+        }
+      }
+
+      return nil
+    }
+
+    private func removeWatcherCallback() {
+      guard let key = watcherKey, let callbackID = watcherCallbackID else { return }
+
+      Self.watcherLock.lock()
+      if let watcher = Self.fileWatchers[key] {
+        watcher.removeCallback(callbackID)
+        if !watcher.hasCallbacks {
+          watcher.cancel()
+          Self.fileWatchers.removeValue(forKey: key)
+          logger.trace("🧹 Removed file watcher for shader paths \(key.vertexPath) / \(key.fragmentPath)")
+        }
+      }
+      Self.watcherLock.unlock()
+
+      watcherKey = nil
+      watcherCallbackID = nil
+    }
+  #endif
 
   /// Manually trigger recompilation of the shader
   public func recompile() throws {
@@ -243,8 +365,8 @@ public final class GLProgram: @unchecked Sendable {
 
     do {
       // Load source code
-      let vertexSource = try loadShaderSource(from: vertexPath)
-      let rawFragmentSource = try loadShaderSource(from: fragmentPath)
+      let vertexSource = try loadShaderSource(from: effectiveVertexPath)
+      let rawFragmentSource = try loadShaderSource(from: effectiveFragmentPath)
       let fragmentSource = wrapShaderToyIfNeeded(rawFragmentSource)
 
       // Compile shaders
@@ -262,18 +384,6 @@ public final class GLProgram: @unchecked Sendable {
       // Clean up shaders
       glDeleteShader(vertexShader)
       glDeleteShader(fragmentShader)
-
-      // Update file watcher registration
-      Self.watcherLock.lock()
-      if let watcher = Self.fileWatchers[oldProgramID] {
-        Self.fileWatchers.removeValue(forKey: oldProgramID)
-        Self.fileWatchers[programID] = watcher
-      }
-      if let weakRef = Self.programInstances[oldProgramID] {
-        Self.programInstances.removeValue(forKey: oldProgramID)
-        Self.programInstances[programID] = weakRef
-      }
-      Self.watcherLock.unlock()
 
       logger.info("✅ Shader recompiled successfully")
     } catch {
@@ -464,21 +574,17 @@ public final class GLProgram: @unchecked Sendable {
 
   /// Clean up the shader program
   func delete() {
-    // Remove file watcher and instance reference
-    Self.watcherLock.lock()
-    Self.fileWatchers.removeValue(forKey: programID)
-    Self.programInstances.removeValue(forKey: programID)
-    Self.watcherLock.unlock()
+    #if HOTLOAD_SHADERS
+      removeWatcherCallback()
+    #endif
 
     glDeleteProgram(programID)
   }
 
   deinit {
-    // Clean up watchers if delete() wasn't called
-    Self.watcherLock.lock()
-    Self.fileWatchers.removeValue(forKey: programID)
-    Self.programInstances.removeValue(forKey: programID)
-    Self.watcherLock.unlock()
+    #if HOTLOAD_SHADERS
+      removeWatcherCallback()
+    #endif
 
     if programID != 0 {
       glDeleteProgram(programID)
@@ -508,4 +614,17 @@ public final class GLProgram: @unchecked Sendable {
 
     return shaderPath
   }
+
+  #if HOTLOAD_SHADERS
+    private var effectiveVertexPath: String {
+      hotloadVertexPath ?? vertexPath
+    }
+
+    private var effectiveFragmentPath: String {
+      hotloadFragmentPath ?? fragmentPath
+    }
+  #else
+    private var effectiveVertexPath: String { vertexPath }
+    private var effectiveFragmentPath: String { fragmentPath }
+  #endif
 }

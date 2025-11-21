@@ -1,4 +1,9 @@
 final class OptionsScreen: Screen {
+  enum PresentationContext {
+    case titleScreen
+    case inGamePause
+  }
+
   enum Panel {
     case controls
     case camera
@@ -8,6 +13,7 @@ final class OptionsScreen: Screen {
     case graphics
   }
 
+  private let presentationContext: PresentationContext
   private let listMenu = ListMenu()
   private let controlsPanel = ControlsOptionsPanel()
   private let cameraPanel = CameraOptionsPanel()
@@ -29,10 +35,11 @@ final class OptionsScreen: Screen {
     }
   }
 
-  override init() {
+  init(presentationContext: PresentationContext) {
+    self.presentationContext = presentationContext
     super.init()
 
-    let menuItems = [
+    var menuItems = [
       ListMenu.MenuItem(id: "controls", label: "Controls") {
         UISound.select()
         self.currentPanel = .controls
@@ -59,6 +66,15 @@ final class OptionsScreen: Screen {
       },
     ]
 
+    if shouldShowCreditsOption {
+      menuItems.append(
+        ListMenu.MenuItem(id: "credits", label: "Credits") {
+          UISound.select()
+          self.presentCredits()
+        }
+      )
+    }
+
     listMenu.setItems(menuItems)
   }
 
@@ -78,7 +94,6 @@ final class OptionsScreen: Screen {
 
     switch key {
     case .escape:
-      // ESC key to go back
       UISound.select()
       back()
 
@@ -99,7 +114,6 @@ final class OptionsScreen: Screen {
       }
 
     case .right:
-      // Right click to go back
       if currentPanel != nil {
         UISound.select()
         currentPanel = nil
@@ -123,20 +137,27 @@ final class OptionsScreen: Screen {
   }
 
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
-    if let activePanel {
-      if state == .released {
-        activePanel.onMouseButtonReleased(window: window, button: button, mods: mods)
-      }
+    if let activePanel, state == .released {
+      activePanel.onMouseButtonReleased(window: window, button: button, mods: mods)
     }
   }
 
   override func draw() {
-    // Left column menu
     listMenu.draw()
 
-    // Right panel when showing a panel
     if let activePanel {
       activePanel.draw()
     }
+  }
+
+  private var shouldShowCreditsOption: Bool {
+    return presentationContext == .titleScreen
+  }
+
+  private func presentCredits() {
+    guard shouldShowCreditsOption else { return }
+    currentPanel = nil
+
+    navigate(to: CreditsScreen(), usesFullScreen: true)
   }
 }

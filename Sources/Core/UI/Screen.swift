@@ -37,7 +37,15 @@ public class Screen: RenderLoop {
     // Override in subclasses
   }
 
+  func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+    // Override in subclasses
+  }
+
   func onMouseMove(window: Window, x: Double, y: Double) {
+    // Override in subclasses
+  }
+
+  func onScroll(window: Window, xOffset: Double, yOffset: Double) {
     // Override in subclasses
   }
 
@@ -52,9 +60,13 @@ public class Screen: RenderLoop {
   // MARK: - Navigation Methods
 
   /// Navigate to a new screen
-  func navigate(to screen: Screen, direction: NavigationStack.TransitionDirection = .forward) {
+  func navigate(
+    to screen: Screen,
+    direction: NavigationStack.TransitionDirection = .forward,
+    usesFullScreen: Bool = false
+  ) {
     //print("🎯 Screen.navigate() called - navigationStack: \(navigationStack != nil ? "present" : "nil")")
-    navigationStack?.push(screen, direction: direction)
+    navigationStack?.push(screen, direction: direction, usesFullScreen: usesFullScreen)
     //print("🎯 Screen.navigate() - push() called")
   }
 
@@ -64,7 +76,7 @@ public class Screen: RenderLoop {
   }
 
   /// Replace current screen with a new one
-  func replace(with screen: Screen) {
-    navigationStack?.replace(screen)
+  func replace(with screen: Screen, usesFullScreen: Bool = false) {
+    navigationStack?.replace(screen, usesFullScreen: usesFullScreen)
   }
 }

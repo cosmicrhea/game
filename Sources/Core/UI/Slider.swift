@@ -79,12 +79,21 @@ public final class Slider: OptionsControl, AltClickable {
 
   // MARK: - Private State
 
+  private static let shouldAnimateThumbOnClick: Bool = true
+
   private var isDragging: Bool = false
   private let initialValue: Float
   private var mouseDownPoint: Point = .zero
   private var draggedBeyondClickThreshold: Bool = false
   private var inlineEditor: TextField? = nil
   private var dragStartValue: Float = 0
+
+  // Animation state for thumb movement on track click
+  private var isAnimating: Bool = false
+  private var animationStartTime: Double = 0
+  private var animationStartValue: Float = 0
+  private var animationTargetValue: Float = 0
+  private let animationDuration: Double = 0.1  // 100ms
 
   // MARK: - Init
 
@@ -126,6 +135,11 @@ public final class Slider: OptionsControl, AltClickable {
   // MARK: - Drawing
 
   public func draw() {
+    // Update animation if active and enabled
+    if Self.shouldAnimateThumbOnClick {
+      updateAnimation()
+    }
+
     // Metrics for current style
     let m = metricsForCurrentStyle()
 
@@ -139,7 +153,9 @@ public final class Slider: OptionsControl, AltClickable {
     RoundedRect(trackRect, cornerRadius: m.trackCornerRadius).draw(color: trackColor)
 
     // Draw filled portion of the track from neutralValue to current value
-    let valueRatio = normalizedValue()
+    // Use animated value for fill if animating, otherwise use actual value
+    let displayValue = (Self.shouldAnimateThumbOnClick && isAnimating) ? getAnimatedValue() : value
+    let valueRatio = (maximumValue == minimumValue) ? 0 : (displayValue - minimumValue) / (maximumValue - minimumValue)
     let clampedNeutral = Self.clamp(neutralValue, minimumValue, maximumValue)
     let neutralRatio: Float =
       (maximumValue == minimumValue)
@@ -174,7 +190,10 @@ public final class Slider: OptionsControl, AltClickable {
 
     // Thumb (skip for inspector style)
     if style != .inspector {
-      let thumbCenterX = trackRect.origin.x + trackRect.size.width * valueRatio
+      // Use animated value for thumb position if animating, otherwise use actual value
+      let thumbValue = (Self.shouldAnimateThumbOnClick && isAnimating) ? getAnimatedValue() : value
+      let thumbRatio = (maximumValue == minimumValue) ? 0 : (thumbValue - minimumValue) / (maximumValue - minimumValue)
+      let thumbCenterX = trackRect.origin.x + trackRect.size.width * thumbRatio
       let thumbRect = Rect(
         x: floor(thumbCenterX - m.thumbSize.width * 0.5),
         y: floor(frame.midY - m.thumbSize.height * 0.5),
@@ -197,7 +216,9 @@ public final class Slider: OptionsControl, AltClickable {
     // Inspector: draw centered value text inside the control
     if style == .inspector && inlineEditor == nil {
       let text = (valueFormatter ?? { String(format: "%.2f", $0) })(value)
-      text.draw(at: Point(frame.midX, frame.midY), style: valueLabelStyle.withMonospacedDigits(true), anchor: .center)
+      text.draw(
+        at: Point(frame.midX, frame.midY), style: valueLabelStyle.withMonospacedDigits(true).withLineHeight(1),
+        anchor: .center)
     }
 
     // Draw inline editor on top if active
@@ -249,13 +270,25 @@ public final class Slider: OptionsControl, AltClickable {
       height: max(trackRect.size.height, thumbRect.size.height)
     )
     if thumbRect.contains(position) || expandedHit.contains(position) {
+      // Cancel any ongoing animation when starting interaction
+      isAnimating = false
       isDragging = true
       draggedBeyondClickThreshold = false
       mouseDownPoint = position
       if style == .inspector {
         dragStartValue = value
       } else {
-        value = valueForPoint(position, within: trackRect)
+        // For non-inspector sliders, check if clicking on track (not thumb)
+        // If clicking on track, we'll animate; if on thumb, we'll drag
+        let clickedOnTrack = !thumbRect.contains(position) && expandedHit.contains(position)
+        if clickedOnTrack {
+          // Store target value for animation (will start in handleMouseUp if not dragged)
+          animationTargetValue = valueForPoint(position, within: trackRect)
+          // Don't update value yet - will update in handleMouseUp when starting animation
+        } else {
+          // Clicked on thumb, update immediately (will drag)
+          value = valueForPoint(position, within: trackRect)
+        }
       }
       return true
     }
@@ -292,6 +325,9 @@ public final class Slider: OptionsControl, AltClickable {
     }
     if style == .inspector && isDragging && !draggedBeyondClickThreshold {
       beginInlineEdit()
+    } else if style != .inspector && isDragging && !draggedBeyondClickThreshold && Self.shouldAnimateThumbOnClick {
+      // Clicked on track (not dragged), animate thumb to target position
+      startThumbAnimation(to: animationTargetValue)
     }
   }
 
@@ -370,6 +406,37 @@ public final class Slider: OptionsControl, AltClickable {
 
   private static func clamp(_ v: Float, _ a: Float, _ b: Float) -> Float {
     return max(min(v, b), a)
+  }
+
+  // MARK: - Animation Helpers
+
+  private func startThumbAnimation(to targetValue: Float) {
+    guard style != .inspector else { return }
+    isAnimating = true
+    animationStartTime = GLFWSession.currentTime
+    animationStartValue = value  // Store current value as start
+    animationTargetValue = targetValue
+    // Update actual value immediately so filled track updates, but thumb will animate
+    value = targetValue
+  }
+
+  private func updateAnimation() {
+    guard isAnimating else { return }
+    let currentTime = GLFWSession.currentTime
+    let elapsed = currentTime - animationStartTime
+    if elapsed >= animationDuration {
+      // Animation complete
+      isAnimating = false
+    }
+  }
+
+  private func getAnimatedValue() -> Float {
+    guard isAnimating else { return value }
+    let currentTime = GLFWSession.currentTime
+    let elapsed = currentTime - animationStartTime
+    let progress = Float(min(1.0, elapsed / animationDuration))
+    let easedProgress = Easing.easeOutCubic.apply(progress)
+    return lerp(animationStartValue, animationTargetValue, easedProgress)
   }
 
   private struct StyleMetrics {

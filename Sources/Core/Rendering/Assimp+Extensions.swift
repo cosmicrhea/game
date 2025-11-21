@@ -22,30 +22,30 @@ extension Assimp.Node {
   func calculateWorldTransform(scene: Assimp.Scene) -> mat4 {
     var transform = transformation.mat4Representation
     var currentNode: Assimp.Node? = self
-    
+
     while let parent = currentNode?.parent {
       let parentTransform = parent.transformation.mat4Representation
       transform = parentTransform * transform
       currentNode = parent
     }
-    
+
     return transform
   }
-  
+
   /// Calculate bounding box for a node's meshes in world space
   func calculateBoundingBox(transform: mat4, in scene: Assimp.Scene) -> (min: vec3, max: vec3) {
     var minBounds = vec3(Float.infinity, Float.infinity, Float.infinity)
     var maxBounds = vec3(-Float.infinity, -Float.infinity, -Float.infinity)
-    
+
     // Process all meshes attached to this node
     for meshIndex in meshes {
       guard meshIndex < scene.meshes.count else { continue }
       let mesh = scene.meshes[meshIndex]
-      
+
       // Get vertices from mesh
       let vertices = mesh.vertices
       guard mesh.numberOfVertices > 0 else { continue }
-      
+
       // Transform each vertex to world space and expand bounding box
       for i in 0..<mesh.numberOfVertices {
         let localPos = vec3(
@@ -53,21 +53,21 @@ extension Assimp.Node {
           Float(vertices[i * 3 + 1]),
           Float(vertices[i * 3 + 2])
         )
-        
+
         // Transform to world space
         let worldPos = transform * vec4(localPos.x, localPos.y, localPos.z, 1.0)
         let worldVec = vec3(worldPos.x, worldPos.y, worldPos.z)
-        
+
         minBounds.x = min(minBounds.x, worldVec.x)
         minBounds.y = min(minBounds.y, worldVec.y)
         minBounds.z = min(minBounds.z, worldVec.z)
-        
+
         maxBounds.x = max(maxBounds.x, worldVec.x)
         maxBounds.y = max(maxBounds.y, worldVec.y)
         maxBounds.z = max(maxBounds.z, worldVec.z)
       }
     }
-    
+
     // If no meshes found, return a small default box around the position
     if minBounds.x == Float.infinity {
       let position = vec3(transform[3].x, transform[3].y, transform[3].z)
@@ -77,7 +77,7 @@ extension Assimp.Node {
         max: position + vec3(defaultSize, defaultSize, defaultSize)
       )
     }
-    
+
     return (min: minBounds, max: maxBounds)
   }
 }
@@ -93,7 +93,7 @@ extension Assimp.Mesh {
     var maxY: Float = -Float.infinity
     var minZ: Float = Float.infinity
     var maxZ: Float = -Float.infinity
-    
+
     let vertices = self.vertices
     for i in 0..<numberOfVertices {
       let localPos = vec3(
@@ -109,8 +109,9 @@ extension Assimp.Mesh {
       minZ = min(minZ, worldPos.z)
       maxZ = max(maxZ, worldPos.z)
     }
-    
+
     return (min: vec3(minX, minY, minZ), max: vec3(maxX, maxY, maxZ))
   }
 }
+
 

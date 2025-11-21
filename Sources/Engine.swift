@@ -97,7 +97,7 @@ public final class Engine: NSObject {
     //    print("Bundle.module: \(Bundle.module)")
     //    print("#bundle: \(#bundle)")
 
-    LoggingSystem.bootstrap { OSLogHandler(label: $0) }
+    //LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 
     cli = CLIOptions.parseOrExit()
 
@@ -270,8 +270,10 @@ public final class Engine: NSObject {
       ItemView(item: .sigp320),
       //PickupView(item: .catStatue),
       StorageView(),
+      SaveScreen(),
+      LoadScreen(),
       //MainMenu(),
-      //UIDemo(),
+      UIDemo(),
       //DocumentDemo(),
       //MovieDemo(),
       ModelViewer(),

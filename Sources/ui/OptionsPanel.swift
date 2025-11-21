@@ -194,7 +194,7 @@ public class OptionsPanel: Screen {
     rows.forEach { $0.control.handleMouseMove(at: p) }
   }
 
-  func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
+  override func onMouseButtonReleased(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     guard button == .left else { return }
     rows.forEach { $0.control.handleMouseUp() }
   }

@@ -341,6 +341,7 @@ final class StorageList {
     let itemCount = displayList.count
     let contentHeight = Float(itemCount) * rowHeight
     let viewportHeight = scrollView.frame.size.height
+    guard viewportHeight > 0 else { return }  // Don't scroll if frame not set yet
 
     // ScrollView uses Y-flipped coordinates: contentOffset.y = 0 means bottom, maxOffsetY means top
     // We draw from bottom to top: index 0 at bottom, highest index at top
@@ -363,9 +364,20 @@ final class StorageList {
 
     // Clamp to valid range (0 = bottom of content, maxOffset = top of content in Y-flipped coords)
     let maxOffset = max(0, contentHeight - viewportHeight)
-    let clampedOffset = max(0, min(idealOffset, maxOffset))
 
-    scrollView.contentOffset.y = clampedOffset
+    let clampedOffset: Float
+    if idealOffset < 0 {
+      // Can't center - item is past the bottom, scroll to bottom (0)
+      clampedOffset = 0
+    } else if idealOffset > maxOffset {
+      // Can't center - item is past the top, scroll to top (maxOffset)
+      clampedOffset = maxOffset
+    } else {
+      // Can center - use ideal
+      clampedOffset = idealOffset
+    }
+
+    scrollView.scroll(to: Point(scrollView.contentOffset.x, clampedOffset), animated: false)
   }
 
   private func drawContent(origin: Point) {

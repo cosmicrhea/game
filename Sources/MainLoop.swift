@@ -15,13 +15,7 @@ private let startingEntry = "1"
   private(set) var sceneName: String = startingScene
 
   // Gameplay state
-  private(set) var playerPosition: vec3 = vec3(0, 0, 0)
-  private(set) var playerRotation: Float = 0.0
-  private var moveSpeed: Float = 3.0
-  private var rotationSpeed: Float = 2.0  // radians per second
   private var smoothedFPS: Float = 60.0
-  private var spawnPosition: vec3 = vec3(0, 0, 0)
-  private var spawnRotation: Float = 0.0
 
   // Capsule mesh from GLB file
   private var capsuleMeshInstances: [MeshInstance] = []
@@ -32,52 +26,22 @@ private let startingEntry = "1"
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
   @Editor(0.0...2.0) var capsuleHeightOffset: Float = 1.2
 
-  // Footstep tracking
-  private var footstepAccumulatedDistance: Float = 0.0
-  private var previousPlayerPosition: vec3 = vec3(0, 0, 0)
-  private let footstepDistanceWalk: Float = 1.2  // Distance between footsteps when walking
-  private let footstepDistanceRun: Float = 1.5  // Distance between footsteps when running (faster rate)
+  // Systems
+  private var physicsWorld: PhysicsWorld!
+  private var cameraSystem: CameraSystem!
+  private var playerController: PlayerController!
+  private var interactionSystem: InteractionSystem!
 
-  // Debug renderer for physics visualization
-  private var debugRenderer: DebugRenderer?
-  private var physicsSystem: PhysicsSystem
-  // Job system for physics updates (required, cannot be null)
-  private var jobSystem: JobSystemThreadPool
-  // Store filter objects so they stay alive (PhysicsSystem only keeps references)
-  private var broadPhaseLayerInterface: BroadPhaseLayerInterfaceTable
-  private var objectLayerPairFilter: ObjectLayerPairFilterTable
-  private var objectVsBroadPhaseLayerFilter: ObjectVsBroadPhaseLayerFilterTable
-  // Character controller for player capsule
-  private var characterController: CharacterVirtual?
-  // Tracking all physics body IDs for the current scene (so we can clear them when loading a new scene)
-  private var collisionBodyIDs: [BodyID] = []
-  // Mapping from action body IDs to their node names
-  private var actionBodyNames: [BodyID: String] = [:]
-  // Currently detected action body name (updated each frame)
-  private var detectedActionName: String?
-  // Mapping from trigger body IDs to their node names
-  private var triggerBodyNames: [BodyID: String] = [:]
-  // Currently active triggers (OrderedSet to avoid duplicates while maintaining order)
-  private var currentTriggers: OrderedSet<String> = []
-  // Currently active camera triggers (OrderedSet to avoid duplicates while maintaining order)
-  private var currentCameraTriggers: OrderedSet<String> = []
-  // Previous frame's triggers (to detect new entries)
-  private var previousTriggers: Set<String> = []
-  // Sensor body in front of capsule for detecting action triggers
-  private var capsuleSensorBodyID: BodyID?
-  // Flag to track if physics system is ready for updates
-  private var physicsSystemReady: Bool = false
+  // Expose player position/rotation for rendering and debug
+  var playerPosition: vec3 {
+    return playerController.position
+  }
+  var playerRotation: Float {
+    return playerController.rotation
+  }
+
   var currentProjection: mat4 = mat4(1)  // Accessible by debug renderer implementation
   var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
-
-  // Query caching - reduces expensive collision queries
-  private var queryFrameCounter: UInt32 = 0  // For caching collision queries
-  private var cachedActionQueryResults: [JPH_CollideShapeResult] = []  // Cached action query results
-  private var cachedTriggerQueryResults: [JPH_CollideShapeResult] = []  // Cached trigger query results
-  private let queryCacheInterval: UInt32 = 2  // Run queries every 2 frames (30fps effective rate)
-
-  // Debug camera override mode - when enabled, camera triggers are ignored
-  private var isDebugCameraOverrideMode: Bool = false
 
   @Editor var visualizePhysics: Bool = false
   @Editor var visualizeEntries: Bool = false
@@ -88,11 +52,16 @@ private let startingEntry = "1"
   @Editor func shakeScreenMore() { ScreenShake.shared.shake(.heavy) }
   @Editor func shakeScreenVertically() { ScreenShake.shared.shake(.subtle, axis: .vertical) }
 
-  // Scene and camera
+  // Scene
   private(set) var scene: Scene?
-  private var camera: Assimp.Camera?
-  private var cameraNode: Node?
-  private var cameraWorldTransform: mat4 = mat4(1)
+
+  // Camera access (delegated to CameraSystem)
+  private var camera: Assimp.Camera? {
+    return cameraSystem.getCamera()
+  }
+  private var cameraWorldTransform: mat4 {
+    return cameraSystem.cameraWorldTransform
+  }
 
   // Scene lights
   private var sceneLights: [(light: Assimp.Light, worldTransform: mat4)] = []
@@ -111,12 +80,9 @@ private let startingEntry = "1"
   }
 
   // @Editable
-  var selectedCamera: String = "1" {
-    didSet {
-      if selectedCamera != oldValue {
-        try? prerenderedEnvironment?.switchToCamera(selectedCamera)
-      }
-    }
+  var selectedCamera: String {
+    get { cameraSystem.selectedCamera }
+    set { cameraSystem.selectedCamera = newValue }
   }
 
   // Main menu system
@@ -162,62 +128,16 @@ private let startingEntry = "1"
     // This registers factory functions - they'll be called lazily when scripts are created
     registerAllSceneScripts()
 
-    // Initialize Jolt runtime (required before using any Jolt features)
-    JoltRuntime.initialize()
-
-    // Initialize physics system for collision body visualization
-    // Set up collision filtering (required for PhysicsSystem)
-    // Note: Object layers are 0-indexed, so numObjectLayers: 3 means we can use layers 0, 1, 2
-    let numObjectLayers: UInt32 = 3  // 0=unused, 1=static, 2=dynamic
-    let numBroadPhaseLayers: UInt32 = 2  // Keep it simple - 2 broad phase layers
-
-    // Create broad phase layer interface
-    broadPhaseLayerInterface = BroadPhaseLayerInterfaceTable(
-      numObjectLayers: numObjectLayers,
-      numBroadPhaseLayers: numBroadPhaseLayers
+    // Initialize systems (order matters - physicsWorld must be first)
+    physicsWorld = PhysicsWorld(renderLoop: self)
+    cameraSystem = CameraSystem()
+    playerController = PlayerController(physicsWorld: physicsWorld)
+    // InteractionSystem needs all three systems, so create it last
+    interactionSystem = InteractionSystem(
+      physicsWorld: physicsWorld,
+      playerController: playerController,
+      cameraSystem: cameraSystem
     )
-    // Map all object layers to the first broad phase layer (simple setup)
-    broadPhaseLayerInterface.map(objectLayer: 1, to: 0)  // Static objects
-    broadPhaseLayerInterface.map(objectLayer: 2, to: 0)  // Dynamic objects (if we add them)
-
-    // Create object layer pair filter (allows all collisions)
-    objectLayerPairFilter = ObjectLayerPairFilterTable(numObjectLayers: numObjectLayers)
-    // Enable collisions between all layers
-    objectLayerPairFilter.enableCollision(1, 1)  // Static vs Static
-    objectLayerPairFilter.enableCollision(1, 2)  // Static vs Dynamic
-    objectLayerPairFilter.enableCollision(2, 2)  // Dynamic vs Dynamic
-
-    // Create object vs broad phase layer filter
-    objectVsBroadPhaseLayerFilter = ObjectVsBroadPhaseLayerFilterTable(
-      broadPhaseLayerInterface: broadPhaseLayerInterface,
-      numBroadPhaseLayers: numBroadPhaseLayers,
-      objectLayerPairFilter: objectLayerPairFilter,
-      numObjectLayers: numObjectLayers
-    )
-
-    // Create job system for physics updates (required for PhysicsSystem::Update)
-    jobSystem = JobSystemThreadPool(
-      maxJobs: 1024,
-      maxBarriers: 8,
-      numThreads: -1  // Auto-detect number of threads
-    )
-
-    // Create physics system with proper filters
-    physicsSystem = PhysicsSystem(
-      maxBodies: 1024,
-      broadPhaseLayerInterface: broadPhaseLayerInterface,
-      objectLayerPairFilter: objectLayerPairFilter,
-      objectVsBroadPhaseLayerFilter: objectVsBroadPhaseLayerFilter
-    )
-    physicsSystem.setGravity(Vec3(x: 0, y: -9.81, z: 0))
-
-    // Initialize debug renderer
-    let debugProcs = DebugRendererImplementation()
-    debugRenderer = DebugRenderer(procs: debugProcs)
-    debugProcs.renderLoop = self
-
-    // Create ground plane immediately (doesn't depend on scene)
-    createGroundPlane()
 
     // Load capsule mesh
     loadCapsuleMesh()
@@ -368,34 +288,7 @@ private let startingEntry = "1"
 
   /// Syncs `camera`, its node/world transform and prerender near/far from the given camera name
   private func syncActiveCamera(name: String) {
-    guard let scene = self.scene else { return }
-    let nodeName = name
-    if let node = scene.rootNode.findNode(named: nodeName) {
-      cameraNode = node
-      cameraWorldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-      logger.trace("✅ Active camera node: \(nodeName)")
-      // Debug: Print camera transform
-      let cameraPos = vec3(cameraWorldTransform[3].x, cameraWorldTransform[3].y, cameraWorldTransform[3].z)
-      logger.trace("📷 Camera world transform position: \(cameraPos)")
-    } else {
-      logger.warning("⚠️ Camera node not found: \(nodeName)")
-      cameraNode = nil
-      cameraWorldTransform = mat4(1)
-    }
-
-    if let cam = scene.cameras.first(where: { $0.name == nodeName }) {
-      camera = cam
-      // Sync projection and mist params
-      prerenderedEnvironment?.near = cam.clipPlaneNear
-      prerenderedEnvironment?.far = cam.clipPlaneFar
-      // If Blender mist settings are known, keep defaults (0.1 / 25.0) or adjust here
-      logger.trace(
-        "✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
-      )
-    } else {
-      logger.warning("⚠️ Camera struct not found for name: \(nodeName)")
-      camera = nil
-    }
+    cameraSystem.syncActiveCamera(name: name)
   }
 
   private func loadCapsuleMesh() {
@@ -493,7 +386,7 @@ private let startingEntry = "1"
           }
         } else {
           // No dialog showing, handle interaction with detected action
-          handleInteraction()
+          interactionSystem.handleInteraction(sceneScript: sceneScript)
         }
         return
 
@@ -536,9 +429,9 @@ private let startingEntry = "1"
 
       case .escape:
         // Exit debug camera override mode if active
-        if isDebugCameraOverrideMode {
+        if cameraSystem.isDebugCameraOverrideMode {
           UISound.select()
-          isDebugCameraOverrideMode = false
+          cameraSystem.setDebugCameraOverrideMode(false)
         } else {
           // Show pause screen if no other UI is showing and dialog is not active
           if !dialogView.isActive {
@@ -551,45 +444,25 @@ private let startingEntry = "1"
       case .semicolon:
         UISound.select()
         // Enter debug camera override mode when manually cycling cameras
-        isDebugCameraOverrideMode = true
-        prerenderedEnvironment?.cycleToNextCamera()
-        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-        // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
-        syncActiveCamera(name: "Camera_\(selectedCamera)")
+        cameraSystem.setDebugCameraOverrideMode(true)
+        cameraSystem.cycleToNextCamera()
 
       case .apostrophe:
         UISound.select()
         // Enter debug camera override mode when manually cycling cameras
-        isDebugCameraOverrideMode = true
-        prerenderedEnvironment?.cycleToPreviousCamera()
-        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-        // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
-        syncActiveCamera(name: "Camera_\(selectedCamera)")
+        cameraSystem.setDebugCameraOverrideMode(true)
+        cameraSystem.cycleToPreviousCamera()
 
       case .graveAccent:
         UISound.select()
         // Enter debug camera override mode and switch to debug camera
-        isDebugCameraOverrideMode = true
-        prerenderedEnvironment?.switchToDebugCamera()
-        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-        // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
-        syncActiveCamera(name: "Camera_\(selectedCamera)")
+        cameraSystem.setDebugCameraOverrideMode(true)
+        cameraSystem.switchToDebugCamera()
 
       case .r:
         UISound.select()
         // Reset player to spawn
-        playerPosition = spawnPosition
-        playerRotation = spawnRotation
-        previousPlayerPosition = spawnPosition  // Reset footstep tracking
-        footstepAccumulatedDistance = 0.0  // Reset footstep accumulator
-
-        // Also reset character controller if it exists
-        if let characterController {
-          characterController.position = RVec3(x: spawnPosition.x, y: spawnPosition.y, z: spawnPosition.z)
-          let rotationQuat = Quat(x: 0, y: sin(spawnRotation / 2), z: 0, w: cos(spawnRotation / 2))
-          characterController.rotation = rotationQuat
-          characterController.linearVelocity = Vec3(x: 0, y: 0, z: 0)  // Stop all movement
-        }
+        playerController.resetToSpawn()
 
       case .l:
         UISound.select()
@@ -846,6 +719,37 @@ private let startingEntry = "1"
     return capitalized.joined()
   }
 
+  /// Normalize entries/camera identifiers so area comparisons stay consistent
+  /// - "Entry_1" -> "1"
+  /// - "Entry_hallway" -> "hallway"
+  /// - "hallway_2" -> "hallway"
+  /// - "hallway" -> "hallway"
+  /// - "1" -> "1"
+  private func normalizedAreaIdentifier(_ name: String) -> String {
+    guard !name.isEmpty else { return name }
+
+    var identifier = name
+
+    if identifier.hasPrefix("Entry_") {
+      let suffix = identifier.dropFirst("Entry_".count)
+      if !suffix.isEmpty {
+        identifier = String(suffix)
+      }
+    }
+
+    if let underscoreIndex = identifier.lastIndex(of: "_") {
+      let suffixStart = identifier.index(after: underscoreIndex)
+      if suffixStart < identifier.endIndex {
+        let suffix = identifier[suffixStart...]
+        if suffix.allSatisfy({ $0.isNumber }) {
+          identifier = String(identifier[..<underscoreIndex])
+        }
+      }
+    }
+
+    return identifier
+  }
+
   /// Position player at an entry node
   /// - Parameters:
   ///   - entryName: The entry name (e.g., "Entry_1", "hallway" will look for "Entry_hallway")
@@ -875,21 +779,9 @@ private let startingEntry = "1"
     let capsuleHalfHeight: Float = 0.8
     let adjustedPos = vec3(extractedPos.x, extractedPos.y + capsuleHalfHeight, extractedPos.z)
 
-    // Update player position and rotation
-    playerPosition = adjustedPos
-    playerRotation = entryRotation
-    spawnPosition = extractedPos  // Keep spawn position at feet for reference
-    spawnRotation = entryRotation
-    previousPlayerPosition = adjustedPos  // Reset footstep tracking
-    footstepAccumulatedDistance = 0.0  // Reset footstep accumulator
-
-    // Update character controller if it exists
-    if let characterController {
-      characterController.position = RVec3(x: adjustedPos.x, y: adjustedPos.y, z: adjustedPos.z)
-      let rotationQuat = Quat(x: 0, y: sin(entryRotation / 2), z: 0, w: cos(entryRotation / 2))
-      characterController.rotation = rotationQuat
-      characterController.linearVelocity = Vec3(x: 0, y: 0, z: 0)  // Stop all movement
-    }
+    // Update player position and rotation via PlayerController
+    playerController.setPosition(adjustedPos, rotation: entryRotation)
+    playerController.setSpawn(position: extractedPos, rotation: entryRotation)  // Keep spawn position at feet for reference
 
     logger.trace("🚀 Positioned player at \(entryNodeName): \(extractedPos)")
   }
@@ -936,14 +828,14 @@ private let startingEntry = "1"
     }
 
     // Switch 3D camera
-    syncActiveCamera(name: cameraName)
+    cameraSystem.syncActiveCamera(name: cameraName)
 
     // Switch prerendered environment camera
     try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
-    selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
+    cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
 
     // Update current area in scene script
-    sceneScript?.currentArea = entry
+    sceneScript?.currentArea = normalizedAreaIdentifier(entry)
 
     await Task.sleep(0.15)
 
@@ -990,7 +882,7 @@ private let startingEntry = "1"
       if currentScene.rootNode.findNode(named: areaCameraName) != nil {
         let prerenderedCameraName = "\(entryName)_1"
         try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
-        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
+        cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
       }
     }
 
@@ -1001,33 +893,6 @@ private let startingEntry = "1"
 
     // Play door close sound after fading in
     UISound.doorCloseA()
-  }
-
-  /// Clear all physics bodies from the previous scene
-  private func clearOldPhysicsBodies() {
-    let bodyInterface = physicsSystem.bodyInterface()
-
-    // Remove old character controller
-    characterController = nil
-    capsuleSensorBodyID = nil
-
-    // Remove all collision bodies
-    for bodyID in collisionBodyIDs {
-      bodyInterface.removeAndDestroyBody(bodyID)
-    }
-    collisionBodyIDs.removeAll()
-
-    // Remove all action bodies
-    for bodyID in actionBodyNames.keys {
-      bodyInterface.removeAndDestroyBody(bodyID)
-    }
-    actionBodyNames.removeAll()
-
-    // Remove all trigger bodies
-    for bodyID in triggerBodyNames.keys {
-      bodyInterface.removeAndDestroyBody(bodyID)
-    }
-    triggerBodyNames.removeAll()
   }
 
   /// Load a scene by name, setting up everything (scene, physics, prerendered environment, player position)
@@ -1064,16 +929,20 @@ private let startingEntry = "1"
       //      }
 
       logger.trace("🔄 Loading physics for scene '\(sceneName)'...")
-      clearOldPhysicsBodies()
+
+      // Update camera system with new scene (prerenderedEnvironment will be set later)
+      cameraSystem.setScene(scene)
+
+      // Clear old physics bodies
+      physicsWorld.clearAllBodies()
+      playerController.clear()
 
       // Load new collision bodies
-      loadCollisionBodiesIntoPhysics(scene: scene)
-      loadActionBodiesIntoPhysics(scene: scene)
-      loadTriggerBodiesIntoPhysics(scene: scene)
-      physicsSystem.optimizeBroadPhase()
-      logger.trace(
-        "✅ Loaded physics bodies: \(collisionBodyIDs.count) collision, \(actionBodyNames.count) action, \(triggerBodyNames.count) trigger"
-      )
+      physicsWorld.loadCollisionBodies(scene: scene)
+      physicsWorld.loadActionBodies(scene: scene)
+      physicsWorld.loadTriggerBodies(scene: scene)
+      physicsWorld.optimizeBroadPhase()
+      logger.trace("✅ Loaded physics bodies")
 
       // Position player at entry (updates player position/rotation)
       // This already adjusts for capsule height, so playerPosition is the center position
@@ -1081,25 +950,19 @@ private let startingEntry = "1"
 
       // Create character controller at the positioned location
       // Use the position that was set by positionPlayerAtEntry (already adjusted for capsule height)
-      createCharacterController(at: playerPosition, rotation: playerRotation, in: physicsSystem)
-
-      if characterController == nil {
-        logger.error("⚠️ Failed to create character controller at entry '\(entry)'")
-      } else {
-        logger.trace("✅ Character controller created successfully")
-      }
+      playerController.create(at: playerPosition, rotation: playerRotation)
 
       // Mark physics system as ready for updates
-      physicsSystemReady = true
+      physicsWorld.setReady(true)
 
       // Load scene script class dynamically
       loadSceneScript()
 
       // Set initial area
-      sceneScript?.currentArea = entry
+      sceneScript?.currentArea = normalizedAreaIdentifier(entry)
 
       // Initialize active camera from scene using default name Camera_1
-      syncActiveCamera(name: "Camera_1")
+      cameraSystem.syncActiveCamera(name: "Camera_1")
 
       // Load foreground meshes (nodes with -fg suffix)
       loadForegroundMeshes(scene: scene)
@@ -1108,8 +971,10 @@ private let startingEntry = "1"
       let cameraName = prerenderedCameraName ?? "1"
       do {
         prerenderedEnvironment = try PrerenderedEnvironment(sceneName, cameraName: cameraName)
+        // Update camera system with prerendered environment (now that it's created)
+        cameraSystem.setPrerenderedEnvironment(prerenderedEnvironment)
         // Sync the selectedCamera property with the actual current camera
-        selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
+        cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
       } catch {
         logger.error("⚠️ Failed to initialize PrerenderedEnvironment for scene '\(sceneName)': \(error)")
       }
@@ -1121,441 +986,20 @@ private let startingEntry = "1"
     }
   }
 
-  private func handleInteraction() {
-    guard let detectedActionName else { return }
-    guard let sceneScript = sceneScript else { return }
-
-    // Set the current action name in the script (for variations tracking)
-    sceneScript.currentActionName = detectedActionName
-    // Reset the call counter for this action (each interaction starts fresh)
-    sceneScript.resetCallCounter(for: detectedActionName)
-
-    // Convert action name to method name (e.g., "Stove" -> "stove")
-    let methodName = detectedActionName.prefix(1).lowercased() + detectedActionName.dropFirst()
-
-    // Call the method dynamically (handles both sync and async)
-    if let task = sceneScript.callMethod(named: methodName) {
-      // Async method - fire and forget
-      Task {
-        await task.value
-      }
-    } else if type(of: sceneScript).availableMethods().contains(methodName) {
-      // Sync method was called successfully
-    } else {
-      // Method not found
-      logger.warning("⚠️ Scene script does not respond to method: \(methodName)")
-    }
-
-    // Clear the current action name after the interaction
-    sceneScript.currentActionName = nil
+  @MainActor
+  func withScriptCameraOverride<T>(
+    on cameraName: String,
+    perform: () async throws -> T
+  ) async rethrows -> T {
+    return try await cameraSystem.withScriptCameraOverride(on: cameraName, perform: perform)
   }
 
-  private func handleCameraTrigger(cameraName: String) {
-    // Ignore camera triggers when in debug camera override mode
-    if isDebugCameraOverrideMode {
-      logger.trace("📷 Camera trigger '\(cameraName)' ignored: debug camera override mode is active")
-      return
-    }
-
-    // Extract area from camera name
-    // Examples: "hallway_1" -> "hallway", "Entry_1" -> "Entry_1"
-    let triggerArea: String
-    if cameraName.hasPrefix("Entry_") {
-      // Entry areas keep the full name (e.g., "Entry_1")
-      triggerArea = cameraName
-    } else {
-      // Named areas: remove trailing "_1", "_2", etc. (e.g., "hallway_1" -> "hallway")
-      if let lastUnderscoreIndex = cameraName.lastIndex(of: "_") {
-        let beforeUnderscore = String(cameraName[..<lastUnderscoreIndex])
-        // Check if after underscore is just a number
-        let afterUnderscore = String(cameraName[cameraName.index(after: lastUnderscoreIndex)...])
-        if afterUnderscore.allSatisfy({ $0.isNumber }) {
-          triggerArea = beforeUnderscore
-        } else {
-          // Not a numbered camera, use full name
-          triggerArea = cameraName
-        }
-      } else {
-        // No underscore, use full name
-        triggerArea = cameraName
-      }
-    }
-
-    // Check if player is in the correct area
-    let currentArea = sceneScript?.currentArea
-    //    if currentArea == nil {
-    //      sceneScript?.currentArea = triggerArea
-    //    } else
-    if let currentArea, currentArea != triggerArea {
-      logger.trace(
-        "📷 Camera trigger '\(cameraName)' ignored: player is in area '\(currentArea)', trigger requires '\(triggerArea)'"
-      )
-      return
-    }
-
-    // Switch 3D camera (e.g., "hallway_1" -> "Camera_hallway_1")
-    let cameraNodeName = "Camera_\(cameraName)"
-    syncActiveCamera(name: cameraNodeName)
-
-    // Switch prerendered environment camera (e.g., "hallway_1" -> "hallway_1")
-    try? prerenderedEnvironment?.switchToCamera(cameraName)
-    selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
-
-    logger.trace("📷 Camera trigger activated: switched to camera '\(cameraName)' (area: '\(triggerArea)')")
-  }
-
-  private func callTriggerMethod(triggerName: String) {
-    guard let sceneScript = sceneScript else { return }
-
-    // Convert trigger name to method name (e.g., "Door" -> "door")
-    let methodName = triggerName.prefix(1).lowercased() + triggerName.dropFirst()
-
-    // Call the method dynamically (handles both sync and async)
-    if let task = sceneScript.callMethod(named: methodName) {
-      // Async method - fire and forget
-      Task {
-        await task.value
-      }
-    } else if type(of: sceneScript).availableMethods().contains(methodName) {
-      // Sync method was called successfully
-    } else {
-      // Method not found
-      logger.warning("⚠️ Scene script does not respond to trigger method: \(methodName)")
-    }
-  }
-
-  private func createCharacterController(at position: vec3, rotation: Float, in system: PhysicsSystem) {
-    // If character controller already exists, remove it first
-    if characterController != nil {
-      characterController = nil
-      capsuleSensorBodyID = nil
-    }
-
-    // Create capsule shape for character (radius ~0.4, halfHeight ~0.8)
-    let capsuleRadius: Float = 0.4
-    let capsuleHalfHeight: Float = 0.8
-    let capsuleShape = CapsuleShape(halfHeight: capsuleHalfHeight, radius: capsuleRadius)
-
-    // Create supporting volume (plane at bottom of capsule for ground detection)
-    let supportingPlane = Plane(normal: Vec3(x: 0, y: 1, z: 0), distance: -capsuleRadius)
-
-    // Create character settings
-    let characterSettings = CharacterVirtualSettings(
-      up: Vec3(x: 0, y: 1, z: 0),
-      supportingVolume: supportingPlane,
-      shape: capsuleShape
-    )
-
-    // Convert rotation to quaternion
-    let rotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
-
-    // Create character controller
-    characterController = CharacterVirtual(
-      settings: characterSettings,
-      position: RVec3(x: position.x, y: position.y, z: position.z),
-      rotation: rotationQuat,
-      in: system
-    )
-
-    // Set mass and strength
-    characterController?.mass = 70.0  // kg
-    characterController?.maxStrength = 500.0  // N
-
-    // Initialize footstep tracking position
-    previousPlayerPosition = position
-
-    // Create a sensor sphere in front of the capsule for detecting action triggers
-    createCapsuleSensor(at: position, in: system)
-
-    logger.trace("✅ Created character controller at position (\(position.x), \(position.y), \(position.z))")
-  }
-
-  private func createCapsuleSensor(at position: vec3, in system: PhysicsSystem) {
-    let bodyInterface = physicsSystem.bodyInterface()
-
-    // Create a small sphere sensor in front of the capsule
-    // Position it slightly in front and at the same height as the capsule
-    let sensorRadius: Float = 0.5
-    let sensorDistance: Float = 1.2  // Distance in front of capsule
-    let sensorShape = SphereShape(radius: sensorRadius)
-
-    // Position sensor in front of capsule (using forward direction)
-    let forwardX = GLMath.sin(spawnRotation)
-    let forwardZ = GLMath.cos(spawnRotation)
-    let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
-    let sensorPosition = position + sensorOffset
-
-    // Create body settings - make it a kinematic sensor so it moves with the capsule
-    let bodySettings = BodyCreationSettings(
-      shape: sensorShape,
-      position: RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z),
-      rotation: Quat.identity,
-      motionType: .kinematic,
-      objectLayer: 2  // Same layer as character
-    )
-    bodySettings.isSensor = true  // Make it a sensor
-
-    // Create and add sensor body
-    let sensorBodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-    if sensorBodyID != 0 {
-      capsuleSensorBodyID = sensorBodyID
-      logger.trace("✅ Created capsule sensor body ID: \(sensorBodyID)")
-    } else {
-      logger.error("❌ Failed to create capsule sensor")
-    }
-  }
-
-  private func createGroundPlane() {
-    let bodyInterface = physicsSystem.bodyInterface()
-
-    // Use a large BoxShape instead of PlaneShape for better reliability
-    // PlaneShape can have issues with collision detection when the character moves away from the origin
-    // A large flat box is more reliable and still very efficient
-    let groundHalfExtent = Vec3(x: 500.0, y: 0.5, z: 500.0)  // Very large flat box
-    let groundShape = BoxShape(halfExtent: groundHalfExtent)
-
-    // Position at y = -0.5 so top surface is at y = 0
-    let groundPosition = RVec3(x: 0, y: -0.5, z: 0)
-    let groundRotation = Quat.identity
-
-    // Create body settings
-    let groundLayer: ObjectLayer = 1  // Static layer
-    let bodySettings = BodyCreationSettings(
-      shape: groundShape,
-      position: groundPosition,
-      rotation: groundRotation,
-      motionType: .static,
-      objectLayer: groundLayer
-    )
-
-    // Create and add ground body
-    let groundBodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-    if groundBodyID != 0 {
-      logger.trace("✅ Created ground plane body ID: \(groundBodyID)")
-    } else {
-      logger.error("❌ Failed to create ground plane")
-    }
-  }
-
-  private func loadCollisionBodiesIntoPhysics(scene: Scene) {
-    let bodyInterface = physicsSystem.bodyInterface()
-
-    // Simple object layer for static collision bodies
-    let staticLayer: ObjectLayer = 1
-
-    func traverse(_ node: Node) {
-      if let name = node.name, name.contains("-col") {
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-
-        // Get mesh from this node
-        if node.numberOfMeshes > 0 {
-          let meshIndex = node.meshes[0]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
-
-            // Extract triangles from mesh and transform them to world space (includes scale/rotation/translation)
-            // We transform to world space because the visual meshes are rendered with world transforms
-            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
-
-            guard !triangles.isEmpty else { return }
-
-            // Create mesh shape from triangles (already in world space, no body transform needed)
-            let meshShape = MeshShape(triangles: triangles)
-
-            // Position is at origin since triangles are already in world space
-            let position = vec3(0, 0, 0)
-
-            // Rotation is identity since triangles are already in world space
-            let rotation = Quat.identity
-
-            // Create body settings
-            let bodySettings = BodyCreationSettings(
-              shape: meshShape,
-              position: RVec3(x: position.x, y: position.y, z: position.z),
-              rotation: rotation,
-              motionType: .static,
-              objectLayer: staticLayer
-            )
-
-            // Create and add body to physics system
-            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-            if bodyID != 0 {
-              collisionBodyIDs.append(bodyID)
-              logger.trace("✅ Created collision body ID: \(bodyID) for node '\(name)'")
-            } else {
-              logger.error("❌ Failed to create collision body for node '\(name)'")
-            }
-          }
-        }
-      }
-      for child in node.children { traverse(child) }
-    }
-    traverse(scene.rootNode)
-  }
-
-  private func loadActionBodiesIntoPhysics(scene: Scene) {
-    let bodyInterface = physicsSystem.bodyInterface()
-
-    // Simple object layer for static action bodies (same as collision bodies)
-    let staticLayer: ObjectLayer = 1
-
-    func traverse(_ node: Node) {
-      if let name = node.name, name.contains("-action") {
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-
-        // Get mesh from this node
-        if node.numberOfMeshes > 0 {
-          let meshIndex = node.meshes[0]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
-
-            // Extract triangles from mesh and transform them to world space
-            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
-
-            guard !triangles.isEmpty else { return }
-
-            // Create mesh shape from triangles (already in world space)
-            let meshShape = MeshShape(triangles: triangles)
-
-            // Position is at origin since triangles are already in world space
-            let position = vec3(0, 0, 0)
-            let rotation = Quat.identity
-
-            // Create body settings - mark as sensor so it doesn't collide but triggers
-            let bodySettings = BodyCreationSettings(
-              shape: meshShape,
-              position: RVec3(x: position.x, y: position.y, z: position.z),
-              rotation: rotation,
-              motionType: .static,
-              objectLayer: staticLayer
-            )
-            bodySettings.isSensor = true  // Make it a sensor/trigger
-
-            // Store user data with body ID so we can map it back to name
-            // We'll store the name in actionBodyNames after creation
-
-            // Create and add body to physics system
-            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-            if bodyID != 0 {
-              // Store mapping from body ID to node name
-              actionBodyNames[bodyID] = name
-              logger.trace("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
-            } else {
-              logger.error("❌ Failed to create action trigger body for node '\(name)'")
-            }
-          }
-        }
-      }
-      for child in node.children { traverse(child) }
-    }
-    traverse(scene.rootNode)
-  }
-
-  private func loadTriggerBodiesIntoPhysics(scene: Scene) {
-    let bodyInterface = physicsSystem.bodyInterface()
-
-    // Simple object layer for static trigger bodies (same as collision bodies)
-    let staticLayer: ObjectLayer = 1
-
-    func traverse(_ node: Node) {
-      if let name = node.name, name.contains("-trigger") || name.hasPrefix("CameraTrigger_") {
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-
-        // Get mesh from this node
-        if node.numberOfMeshes > 0 {
-          let meshIndex = node.meshes[0]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
-
-            // Extract triangles from mesh and transform them to world space
-            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
-
-            guard !triangles.isEmpty else { return }
-
-            // Create mesh shape from triangles (already in world space)
-            let meshShape = MeshShape(triangles: triangles)
-
-            // Position is at origin since triangles are already in world space
-            let position = vec3(0, 0, 0)
-            let rotation = Quat.identity
-
-            // Create body settings - mark as sensor so it doesn't collide but triggers
-            let bodySettings = BodyCreationSettings(
-              shape: meshShape,
-              position: RVec3(x: position.x, y: position.y, z: position.z),
-              rotation: rotation,
-              motionType: .static,
-              objectLayer: staticLayer
-            )
-            bodySettings.isSensor = true  // Make it a sensor/trigger
-
-            // Create and add body to physics system
-            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-            if bodyID != 0 {
-              // Store mapping from body ID to node name
-              triggerBodyNames[bodyID] = name
-              logger.trace("✅ Created trigger body ID: \(bodyID) for node '\(name)'")
-            } else {
-              logger.error("❌ Failed to create trigger body for node '\(name)'")
-            }
-          }
-        }
-      }
-      for child in node.children { traverse(child) }
-    }
-    traverse(scene.rootNode)
-  }
-
-  private func extractTrianglesFromMesh(mesh: Assimp.Mesh, transform: mat4) -> [Triangle] {
-    guard mesh.numberOfVertices > 0, mesh.numberOfFaces > 0 else { return [] }
-
-    let vertices = mesh.vertices
-    var triangles: [Triangle] = []
-
-    // Extract faces (triangles) and transform them to world space
-    for face in mesh.faces {
-      guard face.numberOfIndices == 3 else { continue }  // Only process triangles
-
-      let i1 = Int(face.indices[0])
-      let i2 = Int(face.indices[1])
-      let i3 = Int(face.indices[2])
-
-      guard i1 < mesh.numberOfVertices, i2 < mesh.numberOfVertices, i3 < mesh.numberOfVertices else {
-        continue
-      }
-
-      // Get vertex positions in local space
-      let v1Local = vec3(
-        Float(vertices[i1 * 3 + 0]),
-        Float(vertices[i1 * 3 + 1]),
-        Float(vertices[i1 * 3 + 2])
-      )
-      let v2Local = vec3(
-        Float(vertices[i2 * 3 + 0]),
-        Float(vertices[i2 * 3 + 1]),
-        Float(vertices[i2 * 3 + 2])
-      )
-      let v3Local = vec3(
-        Float(vertices[i3 * 3 + 0]),
-        Float(vertices[i3 * 3 + 1]),
-        Float(vertices[i3 * 3 + 2])
-      )
-
-      // Transform to world space (includes scale, rotation, translation)
-      let v1World = transform * vec4(v1Local.x, v1Local.y, v1Local.z, 1.0)
-      let v2World = transform * vec4(v2Local.x, v2Local.y, v2Local.z, 1.0)
-      let v3World = transform * vec4(v3Local.x, v3Local.y, v3Local.z, 1.0)
-
-      triangles.append(
-        Triangle(
-          v1: Vec3(x: v1World.x, y: v1World.y, z: v1World.z),
-          v2: Vec3(x: v2World.x, y: v2World.y, z: v2World.z),
-          v3: Vec3(x: v3World.x, y: v3World.y, z: v3World.z),
-          materialIndex: 0
-        ))
-    }
-
-    return triangles
+  @MainActor
+  func withScriptCameraOverride<T>(
+    on cameraName: String,
+    perform: () throws -> T
+  ) rethrows -> T {
+    return try cameraSystem.withScriptCameraOverride(on: cameraName, perform: perform)
   }
 
   private func drawEntryArrows(scene: Scene, debugRenderer: DebugRenderer) {
@@ -1585,240 +1029,6 @@ private let startingEntry = "1"
     traverse(scene.rootNode)
   }
 
-  private func handleMovement(_ keyboard: Keyboard, _ deltaTime: Float) {
-    // Tank controls: A/D rotate, W/S move forward/backward
-    let rotationDelta = rotationSpeed * deltaTime
-
-    // Always allow rotation, even while aiming
-    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
-      playerRotation += rotationDelta
-    }
-    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
-      playerRotation -= rotationDelta
-    }
-
-    // Don't allow forward/backward movement while aiming
-    if weaponSystem.isAiming { return }
-
-    // Calculate forward direction from rotation
-    let forwardX = GLMath.sin(playerRotation)
-    let forwardZ = GLMath.cos(playerRotation)
-    let forward = vec3(forwardX, 0, forwardZ)
-
-    // Update character controller if it exists
-    if let characterController {
-      // Check for speed boost (Shift key)
-      let speedMultiplier: Float
-      if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
-        speedMultiplier = 2.5  // 2.5x speed when holding Shift
-      } else {
-        speedMultiplier = 1.0
-      }
-      let currentMoveSpeed = moveSpeed * speedMultiplier
-
-      // Calculate desired horizontal velocity from input
-      var desiredVelocity = Vec3(x: 0, y: 0, z: 0)
-
-      if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
-        desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
-      } else if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
-        desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
-      }
-
-      // Get current velocity and preserve Y component (gravity)
-      var currentVelocity = characterController.linearVelocity
-      let currentYVelocity = currentVelocity.y
-
-      // Set horizontal velocity directly (no smoothing - character controller handles it)
-      currentVelocity.x = desiredVelocity.x
-      currentVelocity.z = desiredVelocity.z
-      // Apply gravity if not on ground
-      if !characterController.isSupported {
-        currentVelocity.y = currentYVelocity + physicsSystem.getGravity().y * deltaTime
-      } else {
-        currentVelocity.y = 0  // On ground, no vertical velocity
-      }
-
-      characterController.linearVelocity = currentVelocity
-
-      // Update character rotation
-      let rotationQuat = Quat(x: 0, y: sin(playerRotation / 2), z: 0, w: cos(playerRotation / 2))
-      characterController.rotation = rotationQuat
-
-      // Only update character controller and physics system if ready
-      if physicsSystemReady {
-        // Update physics system FIRST (jobSystem is required)
-        // This internally waits for all jobs to complete, so it's synchronous
-        // This ensures the physics world is in a consistent state before character controller updates
-        physicsSystem.update(deltaTime: deltaTime, collisionSteps: 1, jobSystem: jobSystem)
-
-        // Update character controller (this does the physics movement)
-        let characterLayer: ObjectLayer = 2  // Dynamic layer
-        characterController.update(deltaTime: deltaTime, layer: characterLayer, in: physicsSystem)
-
-        // Read position immediately after character controller update
-        // This gives us the position from the character controller's internal state
-        let characterPos = characterController.position
-        let newPosition = vec3(characterPos.x, characterPos.y, characterPos.z)
-
-        // Calculate horizontal distance moved (ignore vertical movement)
-        let horizontalDelta = vec3(
-          newPosition.x - previousPlayerPosition.x,
-          0,
-          newPosition.z - previousPlayerPosition.z
-        )
-        let distanceMoved = length(horizontalDelta)
-
-        // Check if player is moving (has input)
-        let isMoving =
-          keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
-          || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
-
-        // Only accumulate distance and play footsteps if moving and on ground
-        if isMoving && characterController.isSupported {
-          footstepAccumulatedDistance += distanceMoved
-
-          // Determine footstep rate based on running vs walking
-          let footstepThreshold = speedMultiplier > 1.0 ? footstepDistanceRun : footstepDistanceWalk
-
-          // Play footstep when threshold is reached
-          if footstepAccumulatedDistance >= footstepThreshold {
-            UISound.footstep()
-            footstepAccumulatedDistance = 0.0  // Reset accumulator
-          }
-        } else {
-          // Not moving or not on ground - reset accumulator
-          footstepAccumulatedDistance = 0.0
-        }
-
-        // Update previous position for next frame
-        previousPlayerPosition = newPosition
-        playerPosition = newPosition
-      }
-
-      // FIX 3: Cache collision queries - only run every N frames
-      queryFrameCounter += 1
-      let shouldUpdateQueries = (queryFrameCounter % queryCacheInterval) == 0
-
-      // Check for action body contacts (sensor bodies)
-      detectedActionName = nil
-
-      // Also check character controller contacts (always check these, they're fast)
-      let contacts = characterController.activeContacts()
-      for contact in contacts {
-        if contact.isSensorB, let actionName = actionBodyNames[contact.bodyID] {
-          detectedActionName = actionName.replacing(/-action$/, with: "")
-          break  // Just show first detected action
-        }
-      }
-
-      // Update capsule sensor position to follow the capsule in front
-      // And check for action body overlaps using collision query
-      if let sensorBodyID = capsuleSensorBodyID {
-        let bodyInterface = physicsSystem.bodyInterface()
-
-        // Calculate position in front of capsule based on current rotation
-        let forwardX = GLMath.sin(playerRotation)
-        let forwardZ = GLMath.cos(playerRotation)
-        let sensorDistance: Float = 1.2
-        let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
-        let sensorPosition = playerPosition + sensorOffset
-
-        // Update sensor position using Body wrapper
-        var sensorBody = bodyInterface.body(sensorBodyID, in: physicsSystem)
-        sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
-
-        // FIX 3: Only query for overlapping action bodies every N frames
-        if shouldUpdateQueries {
-          let sensorShape = SphereShape(radius: 0.5)
-          var baseOffset = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
-          cachedActionQueryResults = physicsSystem.collideShapeAll(
-            shape: sensorShape,
-            scale: Vec3(x: 1, y: 1, z: 1),
-            baseOffset: &baseOffset
-          )
-        }
-
-        // Check if any of the colliding bodies are action bodies (use cached results)
-        for result in cachedActionQueryResults {
-          let bodyID = result.bodyID2
-          if let actionName = actionBodyNames[bodyID] {
-            detectedActionName = actionName.replacing(/-action$/, with: "")
-            break  // Just show first detected action
-          }
-        }
-      }
-
-      // Check for trigger body contacts
-      // Triggers fire immediately when player enters them
-      currentTriggers.removeAll()
-      currentCameraTriggers.removeAll()
-      var newTriggers: Set<String> = []
-
-      // Check character controller contacts for triggers (always check these, they're fast)
-      for contact in contacts {
-        if contact.isSensorB, let triggerName = triggerBodyNames[contact.bodyID] {
-          // Handle camera triggers
-          if triggerName.hasPrefix("CameraTrigger_") {
-            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
-            currentCameraTriggers.append(cameraName)
-            // Check if we're not already on this camera - switch if needed
-            let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-            if currentCamera != cameraName {
-              handleCameraTrigger(cameraName: cameraName)
-            }
-          } else {
-            let cleanName = triggerName.replacing(/-trigger$/, with: "")
-            currentTriggers.append(cleanName)
-            newTriggers.insert(cleanName)
-          }
-        }
-      }
-
-      // FIX 3: Only check using collision query every N frames
-      if shouldUpdateQueries {
-        let triggerCheckRadius: Float = 0.5  // Radius to check around player
-        let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
-        var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
-        cachedTriggerQueryResults = physicsSystem.collideShapeAll(
-          shape: triggerCheckShape,
-          scale: Vec3(x: 1, y: 1, z: 1),
-          baseOffset: &playerBaseOffset
-        )
-      }
-
-      // Check for trigger bodies (use cached results)
-      for result in cachedTriggerQueryResults {
-        let bodyID = result.bodyID2
-        if let triggerName = triggerBodyNames[bodyID] {
-          // Handle camera triggers
-          if triggerName.hasPrefix("CameraTrigger_") {
-            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
-            currentCameraTriggers.append(cameraName)
-            // Check if we're not already on this camera - switch if needed
-            let currentCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-            if currentCamera != cameraName {
-              handleCameraTrigger(cameraName: cameraName)
-            }
-          } else {
-            let cleanName = triggerName.replacing(/-trigger$/, with: "")
-            currentTriggers.append(cleanName)
-            newTriggers.insert(cleanName)
-          }
-        }
-      }
-
-      // Call trigger methods for newly entered triggers
-      let newlyEnteredTriggers = newTriggers.subtracting(previousTriggers)
-      for triggerName in newlyEnteredTriggers {
-        callTriggerMethod(triggerName: triggerName)
-      }
-
-      // Update previous triggers for next frame
-      previousTriggers = newTriggers
-    }
-  }
-
   func update(window: Window, deltaTime: Float) {
     if showingPickupView {
       // Update pickup view
@@ -1838,7 +1048,18 @@ private let startingEntry = "1"
       // Only handle movement if dialog is not active and input is enabled
       if !dialogView.isActive && Input.player1.isEnabled {
         // Handle WASD movement
-        handleMovement(window.keyboard, deltaTime)
+        playerController.update(
+          keyboard: window.keyboard,
+          deltaTime: deltaTime,
+          physicsWorld: physicsWorld,
+          isAiming: weaponSystem.isAiming
+        )
+
+        // Update interaction system (detect actions/triggers)
+        interactionSystem.update(
+          sceneScript: sceneScript,
+          normalizedAreaIdentifier: normalizedAreaIdentifier
+        )
 
         // Handle weapon system hold mode and firing
         // Update weapon system (for rate of fire timing)
@@ -2067,13 +1288,11 @@ private let startingEntry = "1"
       }
 
       // Always call nextFrame to maintain consistent timing (even when not visualizing)
-      if let debugRenderer {
-        debugRenderer.nextFrame()
-      }
+      physicsWorld.nextFrame()
 
       if !showingPauseScreen {
         // Update debug renderer camera and draw if enabled
-        if let debugRenderer {
+        if let debugRenderer = physicsWorld.getDebugRenderer() {
           currentProjection = projection
           currentView = view
 
@@ -2083,7 +1302,7 @@ private let startingEntry = "1"
 
           if visualizePhysics {
             debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF00FF, size: 2.0)
-            physicsSystem.drawBodies(debugRenderer: debugRenderer)
+            physicsWorld.drawBodies(debugRenderer: debugRenderer)
           }
 
           // Draw entry arrows using Jolt debug renderer
@@ -2111,8 +1330,12 @@ private let startingEntry = "1"
   }
 
   private func drawDebugInfo() {
-    // Show "(override)" suffix when in debug camera override mode
-    let cameraDisplayName = isDebugCameraOverrideMode ? "\(selectedCamera) (override)" : selectedCamera
+    let cameraDisplayName: String
+    if cameraSystem.isDebugCameraOverrideMode {
+      cameraDisplayName = "\(selectedCamera) (override)"
+    } else {
+      cameraDisplayName = selectedCamera
+    }
 
     var overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
@@ -2132,18 +1355,19 @@ private let startingEntry = "1"
         playerRotation
       ),
 
-      detectedActionName != nil
-        ? "Actions: \(detectedActionName!.prefix(1).lowercased() + detectedActionName!.dropFirst())" : "Actions: none",
+      interactionSystem.detectedActionName != nil
+        ? "Actions: \(interactionSystem.detectedActionName!.prefix(1).lowercased() + interactionSystem.detectedActionName!.dropFirst())"
+        : "Actions: none",
 
-      currentTriggers.isEmpty
+      interactionSystem.currentTriggers.isEmpty
         ? "Triggers: none"
-        : "Triggers: \(currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
+        : "Triggers: \(interactionSystem.currentTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))",
     ]
 
     // Add camera triggers line if there are any
-    if !currentCameraTriggers.isEmpty {
+    if !interactionSystem.currentCameraTriggers.isEmpty {
       overlayLines.append(
-        "Camera Triggers: \(currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
+        "Camera Triggers: \(interactionSystem.currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
       )
     }
 

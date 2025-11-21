@@ -43,7 +43,7 @@ public final class TextField: OptionsControl {
   public var caretColor = Color.gray300
   public var cornerRadius: Float = 6
   public var borderWidth: Float = 2
-  public var contentInsets: EdgeInsets = EdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
+  public var contentInsets: EdgeInsets = EdgeInsets(top: 9, left: 10, bottom: 7, right: 10)
   public var textStyle: TextStyle = TextStyle.textField
   public var bezeled: Bool = true  // when false: no background, no border
 
@@ -107,7 +107,9 @@ public final class TextField: OptionsControl {
       let iconY = frame.midY - desiredH * 0.5
       let iconRect = Rect(x: iconX, y: iconY, width: iconW, height: desiredH)
       if let ctx = GraphicsContext.current {
-        ctx.renderer.drawImage(textureID: icon.textureID, in: iconRect, tint: leftIconTint, strokeWidth: 0, strokeColor: nil, shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
+        ctx.renderer.drawImage(
+          textureID: icon.textureID, in: iconRect, tint: leftIconTint, strokeWidth: 0, strokeColor: nil,
+          shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
       }
       textOriginX += iconW + leftIconPadding
     }

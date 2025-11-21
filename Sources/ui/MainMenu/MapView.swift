@@ -1687,25 +1687,42 @@ class MapView: RenderLoop {
     }
 
     let viewportSize = context.size
-    let centerX = viewportSize.width / 2.0
-    let centerY = viewportSize.height / 2.0
 
-    // Transform player position to screen space
-    let worldPos = vec4(playerPosition.x, playerPosition.y, playerPosition.z, 1.0)
-    let clipPos = projection * view * worldPos
-
-    // Convert from clip space [-1, 1] to screen space [0, width/height]
-    let ndcX = clipPos.x / clipPos.w
-    let ndcY = clipPos.y / clipPos.w
-    let screenX = centerX + ndcX * (viewportSize.width / 2.0)
-    let screenY = centerY + ndcY * (viewportSize.height / 2.0)
+    guard
+      let playerScreenPoint = projectToScreen(
+        position: playerPosition,
+        projection: projection,
+        view: view,
+        viewportSize: viewportSize)
+    else {
+      return
+    }
 
     // Check if position is valid and on screen (prevent glitchy lines)
-    guard screenX.isFinite && screenY.isFinite,
-      screenX >= -100 && screenX <= viewportSize.width + 100,
-      screenY >= -100 && screenY <= viewportSize.height + 100
+    guard playerScreenPoint.x.isFinite && playerScreenPoint.y.isFinite,
+      playerScreenPoint.x >= -100 && playerScreenPoint.x <= viewportSize.width + 100,
+      playerScreenPoint.y >= -100 && playerScreenPoint.y <= viewportSize.height + 100
     else {
       return  // Skip rendering if position is invalid or way off screen
+    }
+
+    let forwardDirection = vec3(GLMath.sin(playerRotation), 0, GLMath.cos(playerRotation))
+    let forwardPosition = playerPosition + forwardDirection
+
+    let iconOrientationOffset: Float = .pi / 2.0
+    let iconRotation: Float
+    if let forwardScreenPoint = projectToScreen(
+      position: forwardPosition,
+      projection: projection,
+      view: view,
+      viewportSize: viewportSize)
+    {
+      let directionX = forwardScreenPoint.x - playerScreenPoint.x
+      let directionY = forwardScreenPoint.y - playerScreenPoint.y
+      let screenRotation = Float(atan2(Double(directionY), Double(directionX)))
+      iconRotation = screenRotation - iconOrientationOffset
+    } else {
+      iconRotation = playerRotation - cameraYawAroundUpAxis() - iconOrientationOffset
     }
 
     // Calculate subtle breathing pulsation (slower, more gentle)
@@ -1742,14 +1759,9 @@ class MapView: RenderLoop {
     }
     let headingIcon = Image("UI/MapHeading.svg", size: Size(rasterizedIconSize, rasterizedIconSize))
 
-    // Convert player rotation (yaw in radians) to icon rotation
-    // Subtract 90° (π/2) to align icon with player facing direction
-    // Player rotation is around Y axis; for top-down view, we need to offset for icon orientation
-    let iconRotation = playerRotation - .pi / 2.0
-
     // Draw icon with RE2 style: light fill, dark border, pulsation scale, and rotation
     // Ensure icon position is valid and within reasonable bounds
-    let iconPoint = Point(screenX - iconSize / 2.0, screenY - iconSize / 2.0)
+    let iconPoint = Point(playerScreenPoint.x - iconSize / 2.0, playerScreenPoint.y - iconSize / 2.0)
     guard iconPoint.x.isFinite && iconPoint.y.isFinite,
       iconPoint.x >= -500 && iconPoint.x <= viewportSize.width + 500,
       iconPoint.y >= -500 && iconPoint.y <= viewportSize.height + 500
@@ -1810,6 +1822,39 @@ class MapView: RenderLoop {
   }
 
   // MARK: - Helper Functions
+
+  private func projectToScreen(position: vec3, projection: mat4, view: mat4, viewportSize: Size) -> Point? {
+    let worldPos = vec4(position.x, position.y, position.z, 1.0)
+    let clipPos = projection * view * worldPos
+    guard abs(clipPos.w) > 0.0001 else { return nil }
+
+    let ndcX = clipPos.x / clipPos.w
+    let ndcY = clipPos.y / clipPos.w
+    guard ndcX.isFinite && ndcY.isFinite else { return nil }
+
+    let halfWidth = viewportSize.width * 0.5
+    let halfHeight = viewportSize.height * 0.5
+    let screenX = halfWidth + ndcX * halfWidth
+    let screenY = halfHeight + ndcY * halfHeight
+    return Point(screenX, screenY)
+  }
+
+  private func cameraYawAroundUpAxis() -> Float {
+    if debugCameraWorldTransform == mat4(1) {
+      return 0.0
+    }
+
+    let rightVector = vec3(
+      debugCameraWorldTransform[0].x,
+      debugCameraWorldTransform[0].y,
+      debugCameraWorldTransform[0].z
+    )
+
+    let horizontalMagnitude = sqrt(rightVector.x * rightVector.x + rightVector.z * rightVector.z)
+    guard horizontalMagnitude > 0.0001 else { return 0.0 }
+
+    return Float(atan2(Double(rightVector.z), Double(rightVector.x)))
+  }
 
   /// Check if an area at the given index should be visible based on the visibility mask
   private func isAreaVisible(index: Int) -> Bool {

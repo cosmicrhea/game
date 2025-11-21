@@ -1,9 +1,18 @@
 extension TextStyle {
 
   static let titleScreen = TextStyle(
-    fontName: "Broken Glass",
-    fontSize: 96,
+    fontName: "BrokenGlass",
+    fontSize: 56,
     color: .white
+  )
+
+  static let largeTitle = TextStyle(
+    fontName: "CreatoDisplay-ExtraBold",
+    fontSize: 40,
+    color: .white,
+    shadowWidth: 4,
+    shadowOffset: Point(0, 8),
+    shadowColor: .black.withAlphaComponent(0.5),
   )
 
   static let inputPrompt = TextStyle(
@@ -101,6 +110,38 @@ extension TextStyle {
   )
 
   static let slotListQuantity = itemName
+
+  static let saveSlot = TextStyle(
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 20,
+    color: .gray100
+  )
+
+  static let saveSlotPrimary = TextStyle(
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 20,
+    color: .gray100
+  )
+
+  static let saveSlotSecondary = TextStyle(
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 20,
+    color: .gray300
+  )
+
+  static let saveSlotBadge = TextStyle(
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 24,
+    color: .gray200,
+    alignment: .center
+  )
+
+  static let saveSlotDate = TextStyle(
+    fontName: "ZF2334Squarish-Regular",
+    fontSize: 18,
+    color: .gray300,
+    alignment: .right
+  )
 
   /// Creates a menu item style based on selection and disabled state
   static func menuItem(selected: Bool, disabled: Bool) -> TextStyle {

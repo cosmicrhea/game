@@ -32,7 +32,7 @@ final class TitleScreen: Screen {
 
       ListMenu.MenuItem(id: "options", label: String(localized: "Options")) {
         // Navigate to options screen
-        self.navigate(to: OptionsScreen())
+        self.navigate(to: OptionsScreen(presentationContext: .titleScreen))
       },
 
       ListMenu.MenuItem(id: "give_up", label: String(localized: "Give Up")) {
@@ -144,15 +144,19 @@ final class TitleScreenStack: RenderLoop {
     // Draw the navigation stack (which includes the menu)
     navigationStack.draw()
 
-    // Draw prompts (no animation) - set group based on navigation state
-    promptList.group = navigationStack.isAtRoot ? .menuRoot : .menu
-    promptList.showCalloutBackground = false
-    promptList.draw()
+    let usesFullScreenContent = navigationStack.usesFullScreenContent
+    if !usesFullScreenContent {
+      promptList.group = navigationStack.isAtRoot ? .menuRoot : .menu
+      promptList.showCalloutBackground = false
+      promptList.draw()
+    }
 
-    // Draw version text in bottom left corner
-    let versionText = Engine.versionString
-    let versionX: Float = 56
-    let versionY: Float = 20
-    versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
+    if !usesFullScreenContent {
+      // Draw version text in bottom left corner
+      let versionText = Engine.versionString
+      let versionX: Float = 56
+      let versionY: Float = 20
+      versionText.draw(at: Point(versionX, versionY), style: .version, anchor: .bottomLeft)
+    }
   }
 }

@@ -11,7 +11,15 @@ public final class ColorWell: OptionsControl {
   public var checkerColorA: Color = Color.gray400.withAlphaComponent(0.25)
   public var checkerColorB: Color = Color.gray700.withAlphaComponent(0.25)
 
-  public init(frame: Rect = .zero, color: Color = .white) {
+  public static let defaultSize = Size(44, 28)
+
+  public init(
+    frame: Rect = Rect(
+      origin: .zero,
+      size: Size(ColorWell.defaultSize.width, ColorWell.defaultSize.height)
+    ),
+    color: Color = .white
+  ) {
     self.frame = frame
     self.color = color
   }
