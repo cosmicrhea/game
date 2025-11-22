@@ -3,6 +3,10 @@ enum CreditsData {
     "Executive Producer": ["cosmic_rhea"],
 
     "Environment Artists": [
+      // https://ambientcg.com
+      // https://ambientcg.com/view?id=Facade007
+      "ambientCG",
+
       // https://sketchfab.com/jintrim3
       // https://sketchfab.com/3d-models/work-gloves-991e775b6b5b4fdab682af56d08bb119
       "Aleksandr Sagidullin",
