@@ -31,6 +31,7 @@ private let startingEntry = "1"
   private var cameraSystem: CameraSystem!
   private var playerController: PlayerController!
   private var interactionSystem: InteractionSystem!
+  private var enemySystem: EnemySystem!
 
   // Expose player position/rotation for rendering and debug
   var playerPosition: vec3 {
@@ -138,6 +139,8 @@ private let startingEntry = "1"
       playerController: playerController,
       cameraSystem: cameraSystem
     )
+    // EnemySystem needs physicsWorld and playerController
+    enemySystem = EnemySystem(physicsWorld: physicsWorld, playerController: playerController)
 
     // Load capsule mesh
     loadCapsuleMesh()
@@ -220,6 +223,67 @@ private let startingEntry = "1"
 
     traverse(scene.rootNode)
     logger.trace("✅ Loaded \(foregroundMeshInstances.count) foreground mesh instances")
+  }
+
+  /// Spawn enemies from Enemy_* nodes in the scene
+  private func spawnEnemiesFromScene(scene: Scene) {
+    var enemyCount = 0
+
+    func traverse(_ node: Node) {
+      // Check if this node is an enemy spawn point
+      if let nodeName = node.name, nodeName.hasPrefix("Enemy_") {
+        // Extract enemy type from name (e.g., "Enemy_Civilian", "Enemy_Dog.001")
+        let enemyTypeName = String(nodeName.dropFirst("Enemy_".count))
+
+        // Remove any numeric suffix (e.g., ".001", ".002") for type matching
+        let baseTypeName: String
+        if let dotIndex = enemyTypeName.firstIndex(of: ".") {
+          baseTypeName = String(enemyTypeName[..<dotIndex])
+        } else {
+          baseTypeName = enemyTypeName
+        }
+
+        // Get world transform for position and rotation
+        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+        let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
+
+        // Extract forward direction and calculate rotation (same as entry positioning)
+        let fwd = vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
+        let yaw = atan2(fwd.x, fwd.z)
+        let rotation = yaw - (.pi * 0.5)
+
+        // Adjust Y position to account for capsule half-height (enemies spawn at center)
+        let capsuleHalfHeight: Float = 0.8
+        let adjustedPosition = vec3(position.x, position.y + capsuleHalfHeight, position.z)
+
+        // Spawn appropriate enemy type
+        let enemyType: Enemy.Type
+        switch baseTypeName.lowercased() {
+        case "civilian":
+          enemyType = CivilianEnemy.self
+        case "dog":
+          enemyType = DogEnemy.self
+        default:
+          logger.warning("⚠️ Unknown enemy type '\(baseTypeName)' at node '\(nodeName)'")
+          return
+        }
+
+        if let _ = enemySystem.spawnEnemy(enemyType, at: adjustedPosition, rotation: rotation) {
+          enemyCount += 1
+          logger.trace("✅ Spawned \(baseTypeName) enemy at \(position)")
+        } else {
+          logger.warning("⚠️ Failed to spawn \(baseTypeName) enemy at node '\(nodeName)'")
+        }
+      }
+
+      // Recursively traverse children
+      for child in node.children {
+        traverse(child)
+      }
+    }
+
+    traverse(scene.rootNode)
+    logger.trace("✅ Spawned \(enemyCount) enemies from scene")
   }
 
   /// Get lighting from scene lights (returns main light and fill light)
@@ -936,6 +1000,7 @@ private let startingEntry = "1"
       // Clear old physics bodies
       physicsWorld.clearAllBodies()
       playerController.clear()
+      enemySystem.clearAll()
 
       // Load new collision bodies
       physicsWorld.loadCollisionBodies(scene: scene)
@@ -966,6 +1031,9 @@ private let startingEntry = "1"
 
       // Load foreground meshes (nodes with -fg suffix)
       loadForegroundMeshes(scene: scene)
+
+      // Spawn enemies from Enemy_* nodes
+      spawnEnemiesFromScene(scene: scene)
 
       // Initialize prerendered environment for the scene
       let cameraName = prerenderedCameraName ?? "1"
@@ -1064,6 +1132,9 @@ private let startingEntry = "1"
         // Handle weapon system hold mode and firing
         // Update weapon system (for rate of fire timing)
         weaponSystem.update(deltaTime: deltaTime)
+
+        // Update enemy system
+        enemySystem.update(deltaTime: deltaTime)
 
         // Handle hold mode for Space
         if !weaponSystem.usesToggledAiming {
@@ -1258,6 +1329,46 @@ private let startingEntry = "1"
         }
       }
 
+      // Draw enemy capsules
+      let aliveEnemies = enemySystem.aliveEnemies
+      if !aliveEnemies.isEmpty && !capsuleMeshInstances.isEmpty {
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(true)
+        glDepthFunc(GL_LEQUAL)
+
+        let lighting = getSceneLighting()
+        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+
+        for enemy in aliveEnemies {
+          // Create model matrix: translate to enemy position, then rotate around Y axis
+          // Offset Y downward so capsule sits on floor (assuming origin is at center)
+          var adjustedPosition = enemy.position
+          adjustedPosition.y -= capsuleHeightOffset
+          var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
+          modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
+
+          for meshInstance in capsuleMeshInstances {
+            // Combine the mesh's original transform with enemy transform
+            let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
+
+            // Use a slightly different color to distinguish from player (tint red)
+            meshInstance.draw(
+              projection: projection,
+              view: view,
+              modelMatrix: combinedModelMatrix,
+              cameraPosition: cameraPosition,
+              lightDirection: lighting.mainLight.direction,
+              lightColor: lighting.mainLight.color,
+              lightIntensity: lighting.mainLight.intensity,
+              fillLightDirection: lighting.fillLight.direction,
+              fillLightColor: lighting.fillLight.color,
+              fillLightIntensity: lighting.fillLight.intensity,
+              diffuseOnly: false
+            )
+          }
+        }
+      }
+
       // Draw foreground meshes (nodes with -fg suffix)
       if !foregroundMeshInstances.isEmpty {
         glEnable(GL_DEPTH_TEST)
@@ -1303,6 +1414,46 @@ private let startingEntry = "1"
           if visualizePhysics {
             debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF00FF, size: 2.0)
             physicsWorld.drawBodies(debugRenderer: debugRenderer)
+
+            // Draw character controllers (player and enemies)
+            // Player character controller
+            if let characterController = playerController.getCharacterController() {
+              let worldTransform = characterController.getWorldTransform()
+              // Draw capsule: halfHeight 0.8, radius 0.4
+              debugRenderer.drawCapsule(
+                worldTransform,
+                halfHeightOfCylinder: 0.8,
+                radius: 0.4,
+                color: 0xFF00FF00,  // Green for player
+                castShadow: .off,
+                drawMode: .wireframe
+              )
+            }
+
+            // Enemy character controllers
+            for enemy in enemySystem.aliveEnemies {
+              if let characterController = enemy.characterController {
+                let worldTransform = characterController.getWorldTransform()
+                // Determine capsule size based on enemy type
+                let (halfHeight, radius): (Float, Float)
+                if enemy is DogEnemy {
+                  halfHeight = 0.4
+                  radius = 0.25
+                } else {
+                  halfHeight = 0.8
+                  radius = 0.4
+                }
+                // Red for enemies
+                debugRenderer.drawCapsule(
+                  worldTransform,
+                  halfHeightOfCylinder: halfHeight,
+                  radius: radius,
+                  color: 0xFFFF0000,  // Red for enemies
+                  castShadow: .off,
+                  drawMode: .wireframe
+                )
+              }
+            }
           }
 
           // Draw entry arrows using Jolt debug renderer

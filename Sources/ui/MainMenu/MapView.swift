@@ -149,6 +149,7 @@ class MapView: RenderLoop {
   private let mapDisplayNames: [String: String] = [
     "test_map": "Map Test",
     "shooting_range": "Training Facility",
+    "chiefs_office": "Chief's Office",
   ]
 
   var currentMapName: String {

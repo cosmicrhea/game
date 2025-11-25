@@ -41,7 +41,6 @@ final class DocumentView: RenderLoop {
 
   private let caretLeft = Caret(direction: .left)
   private let caretRight = Caret(direction: .right)
-  //let ref = Image("UI/RE2Doc.jpg")
 
   private var deltaTime: Float = 0.0
   private var currentPage: Int = 0
@@ -202,12 +201,7 @@ final class DocumentView: RenderLoop {
   }
 
   func draw() {
-    // Draw reference image
-    // ref.draw(in: Rect(x: 0, y: 0, width: Float(Engine.viewportSize.width), height: Float(Engine.viewportSize.height)), tint: .white.withAlphaComponent(0.5))
-
     GraphicsContext.current?.renderer.setClearColor(.black)
-
-    // glClearColor(0, 0, 0, 1)
 
     // Draw background in the center of the screen
     let backgroundSize: Float = 360
