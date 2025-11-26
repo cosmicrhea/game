@@ -1,6 +1,10 @@
 import Logging
 
-let logger = Logger(label: "local.cosmicrhea.Game")
+let logger = {
+  var logger = Logger(label: "local.cosmicrhea.Game")
+  logger.logLevel = .debug
+  return logger
+}()
 
 extension Logger {
   func error(_ cString: [GLchar]) {

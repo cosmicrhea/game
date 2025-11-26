@@ -169,7 +169,7 @@ extension Item {
   static let catStatue = Item(
     id: "cat_statue",
     name: "Cat Statue",
-    description: "A concrete statue of a cat. Cuuute! ^-^",
+    description: "A concrete statue of a cat. Cuuute!! ^_^",
     inspectionDistance: 0.4,
   )
 

@@ -2,6 +2,8 @@ import Assimp
 import Foundation
 import GLMath
 
+private let defaultMapZoom: Float = 0.58
+
 @Editable  //(.grouped)
 class MapView: RenderLoop {
 
@@ -60,8 +62,8 @@ class MapView: RenderLoop {
   private var debugCameraWorldTransform: mat4 = mat4(1)
 
   // Camera controls
-  private var cameraPan: vec2 = vec2(0, 0)  // Pan offset in world space
-  private var cameraZoom: Float = 0.58  // Zoom level (1.0 = default)
+  private var cameraPan: vec2 = vec2(0, 0)
+  private var cameraZoom: Float = defaultMapZoom
   private var baseSceneBounds: (minX: Float, maxX: Float, minZ: Float, maxZ: Float)? = nil
 
   // Mouse drag panning
@@ -73,7 +75,7 @@ class MapView: RenderLoop {
   private var resetStartTime: Float = 0.0
   private let resetDuration: Float = 1.0
   private var resetStartPan: vec2 = vec2(0, 0)
-  private var resetStartZoom: Float = 0.58
+  private var resetStartZoom: Float = defaultMapZoom
 
   // Debug text toggle
   private var showDebugText: Bool = false
@@ -226,7 +228,7 @@ class MapView: RenderLoop {
 
     // Reset camera state
     cameraPan = vec2(0, 0)
-    cameraZoom = 0.58
+    cameraZoom = defaultMapZoom
     baseSceneBounds = nil
 
     Task {
@@ -968,12 +970,12 @@ class MapView: RenderLoop {
       let easedProgress = 1.0 - (1.0 - progress) * (1.0 - progress) * (1.0 - progress)
 
       cameraPan = resetStartPan + (vec2(0, 0) - resetStartPan) * easedProgress
-      cameraZoom = resetStartZoom + (0.8 - resetStartZoom) * easedProgress
+      cameraZoom = resetStartZoom + (defaultMapZoom - resetStartZoom) * easedProgress
 
       if progress >= 1.0 {
         isResetting = false
         cameraPan = vec2(0, 0)
-        cameraZoom = 0.8
+        cameraZoom = defaultMapZoom
       }
       return  // Don't process other input during reset
     }
@@ -1930,7 +1932,4 @@ class MapView: RenderLoop {
 
     return nil
   }
-
-  /// Calculate world transform for a node by traversing up the hierarchy
-
 }

@@ -14,7 +14,7 @@ public final class PlayerController {
   private var spawnRotation: Float = 0.0
 
   private var moveSpeed: Float = 3.0
-  private var rotationSpeed: Float = 2.0  // radians per second
+  private var rotationSpeed: Float = 4.0  // radians per second
 
   // Footstep tracking
   private var footstepAccumulatedDistance: Float = 0.0

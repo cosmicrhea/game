@@ -81,7 +81,7 @@ class Enemy {
   
   // Subclasses can override for custom attack behavior
   func attack(target: vec3) {
-    logger.trace("Enemy \(id) attacking target at \(target)")
+    logger.debug("Enemy \(id.uuidString.prefix(4)) attacking target at \(target)")
   }
   
   func takeDamage(_ amount: Float) {

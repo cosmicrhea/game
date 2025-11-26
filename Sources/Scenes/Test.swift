@@ -5,11 +5,10 @@ class Test: Script {
   //@SceneReference var stoveCloseup: Camera
 
   func showCat() {
-    if catStatue.isHidden {
-      UISound.select()
-      catStatue.isHidden = false
-      logger.trace("showing cat!!!!")
-    }
+    // if catStatue.isHidden {
+    //   UISound.select()
+    //   catStatue.isHidden = false
+    // }
   }
 
   func stove() {
@@ -29,7 +28,9 @@ class Test: Script {
     // await say("A cat has appeared.")
     await withCloseup(on: "stove.001") {
       await say("There's a cat here.", more: true)
-      await acquire(.catStatue)
+      if await acquire(.catStatue) {
+        catStatue.isHidden = true
+      }
     }
   }
 

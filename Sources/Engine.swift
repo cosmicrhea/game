@@ -524,7 +524,11 @@ public final class Engine: NSObject {
       title += " | Debug Build"
     #endif
 
-    window.title = title
+    if let activeLoop {
+      window.title = "\(String(describing: type(of: activeLoop))) (\(title))"
+    } else {
+      window.title = title
+    }
   }
 
   private func renderEditorWindow() {

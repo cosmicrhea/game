@@ -9,7 +9,8 @@ extension UISound {
   static func knifeMiss() { play("REWeapons/knife_miss") }
 
   static func shotgunFire() { play("REWeapons/shotgun_fire") }
-  static func shotgunEmpty() { play("REWeapons/handgun_empty") }
+  static func shotgunShell() { play("REWeapons/shotgun_shell") }
+  static func shotgunEmpty() { play("REWeapons/shotgun_empty") }
   static func shotgunReload() { play("REWeapons/shotgun_reload") }
 
   static func launcherFire() { play("REWeapons/grenade_launcher_fire") }

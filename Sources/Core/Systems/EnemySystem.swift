@@ -57,5 +57,24 @@ public final class EnemySystem {
   var aliveEnemies: [Enemy] {
     enemies.values.filter { $0.isAlive }
   }
+
+  /// Find an enemy by its character controller's inner body ID
+  func findEnemy(byCharacterID characterID: CharacterID) -> Enemy? {
+    return enemies.values.first { enemy in
+      guard let characterController = enemy.characterController else { return false }
+      return characterController.id == characterID
+    }
+  }
+
+  /// Find an enemy by checking if a raycast hit its character controller
+  func findEnemy(hitByRaycast hit: RayHit, in physicsWorld: PhysicsWorld) -> Enemy? {
+    // For character controllers, we need to check if the hit body is the inner body
+    // of any enemy's character controller
+    let hitBodyID = hit.bodyID
+    return enemies.values.first { enemy in
+      guard let characterController = enemy.characterController else { return false }
+      return characterController.getInnerBodyID() == hitBodyID
+    }
+  }
 }
 
