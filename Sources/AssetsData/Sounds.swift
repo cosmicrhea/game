@@ -25,6 +25,6 @@ extension UISound {
   static func doorOpenA() { play("RE/doors/re2_19_1") }
   static func doorCloseA() { play("RE/doors/re2_19_2") }
 
-  static func footstep() { play("RE/footstep", volume: 0.7) }
+  static func footstep() { play("RE/footstep", volume: 0.5) }
 
 }

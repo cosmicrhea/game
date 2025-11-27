@@ -77,7 +77,7 @@ public final class ImageAtlas {
   public static func loadInputPromptsAtlas(for source: InputSource?) -> ImageAtlas? {
     let src = source ?? .keyboardMouse
     if let cached = inputPromptCache[src] {
-      logger.debug("ImageAtlas: using cached atlas for \(src)")
+      logger.trace("ImageAtlas: using cached atlas for \(src)")
       return cached
     }
     //logger.trace("ImageAtlas: loading new atlas for \(src)")

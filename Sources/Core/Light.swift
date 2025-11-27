@@ -25,9 +25,9 @@ struct Light: Equatable, @unchecked Sendable {
     self.type = type
   }
 
-  /// Create a light pointing down and slightly forward for item inspection
+  /// Create a light pointing down and slightly backward for item inspection
   static let itemInspection = Light(
-    direction: vec3(0.2, -0.8, 0.3),  // Slightly forward and down
+    direction: vec3(0.2, -0.8, -0.3),  // Slightly backward and down
     position: vec3(0.0, 2.0, 1.0),  // Position above and in front
     color: vec3(1.0, 0.98, 0.95),  // Slightly warm white
     intensity: 1.2,  // More reasonable intensity to let normal maps show through

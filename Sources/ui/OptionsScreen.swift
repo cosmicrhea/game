@@ -6,7 +6,7 @@ final class OptionsScreen: Screen {
 
   enum Panel {
     case controls
-    case camera
+    //case camera
     case display
     case audio
     case language
@@ -16,7 +16,7 @@ final class OptionsScreen: Screen {
   private let presentationContext: PresentationContext
   private let listMenu = ListMenu()
   private let controlsPanel = ControlsOptionsPanel()
-  private let cameraPanel = CameraOptionsPanel()
+  //private let cameraPanel = CameraOptionsPanel()
   private let displayPanel = DisplayOptionsPanel()
   private let audioPanel = AudioOptionsPanel()
   private let languagePanel = LanguageOptionsPanel()
@@ -27,7 +27,7 @@ final class OptionsScreen: Screen {
     guard let currentPanel else { return nil }
     switch currentPanel {
     case .controls: return controlsPanel
-    case .camera: return cameraPanel
+    //case .camera: return cameraPanel
     case .display: return displayPanel
     case .audio: return audioPanel
     case .language: return languagePanel
@@ -44,10 +44,10 @@ final class OptionsScreen: Screen {
         UISound.select()
         self.currentPanel = .controls
       },
-      ListMenu.MenuItem(id: "camera", label: "Camera") {
-        UISound.select()
-        self.currentPanel = .camera
-      },
+      // ListMenu.MenuItem(id: "camera", label: "Camera") {
+      //   UISound.select()
+      //   self.currentPanel = .camera
+      // },
       ListMenu.MenuItem(id: "display", label: "Display") {
         UISound.select()
         self.currentPanel = .display

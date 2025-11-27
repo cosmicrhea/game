@@ -3,8 +3,11 @@ import CJolt
 import Foundation
 import Jolt
 
-private let startingScene = "chiefs_office"
-private let startingEntry = "1"
+private let startingScene = "nexus"
+private let startingEntry = "8"
+
+// private let startingScene = "chiefs_office"
+// private let startingEntry = "1"
 // private let startingScene = "shooting_range"
 // private let startingEntry = "range"
 
@@ -13,6 +16,7 @@ private let startingEntry = "1"
 
   // Scene configuration
   private(set) var sceneName: String = startingScene
+  var currentAreaName: String?
 
   // Gameplay state
   private var smoothedFPS: Float = 60.0
@@ -286,7 +290,10 @@ private let startingEntry = "1"
     }
 
     traverse(scene.rootNode)
-    logger.debug("✅ Spawned \(enemyCount) enemies from scene")
+
+    if enemyCount > 0 {
+      logger.debug("✅ Spawned \(enemyCount) enemies from scene")
+    }
   }
 
   /// Get lighting from scene lights (returns main light and fill light)
@@ -817,6 +824,38 @@ private let startingEntry = "1"
     return identifier
   }
 
+  /// Determine the best camera node to activate when loading/transitioning scenes
+  private func preferredCameraNodeName(for entry: String, in scene: Scene) -> String? {
+    var candidates: [String] = []
+    var seen: Set<String> = []
+
+    func addCandidate(_ name: String) {
+      guard !name.isEmpty, !seen.contains(name) else { return }
+      candidates.append(name)
+      seen.insert(name)
+    }
+
+    if !entry.hasPrefix("Entry_") {
+      addCandidate("Camera_\(entry)_1")
+    }
+
+    addCandidate("Camera_1")
+
+    for camera in scene.cameras {
+      if let cameraName = camera.name {
+        addCandidate(cameraName)
+      }
+    }
+
+    for candidate in candidates {
+      if scene.rootNode.findNode(named: candidate) != nil {
+        return candidate
+      }
+    }
+
+    return nil
+  }
+
   /// Position player at an entry node
   /// - Parameters:
   ///   - entryName: The entry name (e.g., "Entry_1", "hallway" will look for "Entry_hallway")
@@ -901,8 +940,8 @@ private let startingEntry = "1"
     try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
     cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
 
-    // Update current area in scene script
-    sceneScript?.currentArea = normalizedAreaIdentifier(entry)
+    // Reset area tracking - actual area is determined by camera triggers
+    currentAreaName = nil
 
     await Task.sleep(0.15)
 
@@ -950,6 +989,7 @@ private let startingEntry = "1"
         let prerenderedCameraName = "\(entryName)_1"
         try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
         cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
+        cameraSystem.syncActiveCamera(name: areaCameraName)
       }
     }
 
@@ -1026,11 +1066,15 @@ private let startingEntry = "1"
       // Load scene script class dynamically
       loadSceneScript()
 
-      // Set initial area
-      sceneScript?.currentArea = normalizedAreaIdentifier(entry)
+      // Reset area tracking - camera triggers define actual areas
+      currentAreaName = nil
 
-      // Initialize active camera from scene using default name Camera_1
-      cameraSystem.syncActiveCamera(name: "Camera_1")
+      // Initialize active camera using best available node to avoid missing-camera warnings
+      if let preferredCameraName = preferredCameraNodeName(for: entry, in: scene) {
+        cameraSystem.syncActiveCamera(name: preferredCameraName)
+      } else {
+        logger.warning("⚠️ No camera nodes found to sync in scene '\(sceneName)'")
+      }
 
       // Load foreground meshes (nodes with -fg suffix)
       loadForegroundMeshes(scene: scene)
@@ -1046,6 +1090,15 @@ private let startingEntry = "1"
         cameraSystem.setPrerenderedEnvironment(prerenderedEnvironment)
         // Sync the selectedCamera property with the actual current camera
         cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
+        if let currentScene = self.scene {
+          let activeCameraName = cameraSystem.selectedCamera
+          if !activeCameraName.isEmpty {
+            let cameraNodeName = "Camera_\(activeCameraName)"
+            if currentScene.rootNode.findNode(named: cameraNodeName) != nil {
+              cameraSystem.syncActiveCamera(name: cameraNodeName)
+            }
+          }
+        }
       } catch {
         logger.error("⚠️ Failed to initialize PrerenderedEnvironment for scene '\(sceneName)': \(error)")
       }
@@ -1129,6 +1182,7 @@ private let startingEntry = "1"
         // Update interaction system (detect actions/triggers)
         interactionSystem.update(
           sceneScript: sceneScript,
+          currentAreaName: currentAreaName,
           normalizedAreaIdentifier: normalizedAreaIdentifier
         )
 
@@ -1508,9 +1562,16 @@ private let startingEntry = "1"
       cameraDisplayName = selectedCamera
     }
 
+    let sceneLine: String
+    if let areaName = currentAreaName, !areaName.isEmpty {
+      sceneLine = "Scene: \(sceneName) (\(areaName))"
+    } else {
+      sceneLine = "Scene: \(sceneName)"
+    }
+
     var overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
-      //"Scene: \(sceneName)",
+      sceneLine,
       "Camera: \(cameraDisplayName)",
 
       String(

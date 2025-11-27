@@ -46,6 +46,7 @@ public final class InteractionSystem {
   /// Update interaction system - detect actions and triggers
   func update(
     sceneScript: Script?,
+    currentAreaName: String?,
     normalizedAreaIdentifier: (String) -> String
   ) {
     guard let physicsWorld = physicsWorld,
@@ -119,10 +120,12 @@ public final class InteractionSystem {
             // Check if we're not already on this camera - switch if needed
             if let cameraSystem = cameraSystem {
               let currentCamera = cameraSystem.selectedCamera
-              if currentCamera != cameraName {
+              let shouldHandleTrigger =
+                currentCamera != cameraName || (MainLoop.shared?.currentAreaName == nil)
+              if shouldHandleTrigger {
                 cameraSystem.handleCameraTrigger(
                   cameraName: cameraName,
-                  sceneScript: sceneScript,
+                  currentAreaName: currentAreaName,
                   normalizedAreaIdentifier: normalizedAreaIdentifier
                 )
               }
@@ -158,10 +161,12 @@ public final class InteractionSystem {
             // Check if we're not already on this camera - switch if needed
             if let cameraSystem = cameraSystem {
               let currentCamera = cameraSystem.selectedCamera
-              if currentCamera != cameraName {
+              let shouldHandleTrigger =
+                currentCamera != cameraName || (MainLoop.shared?.currentAreaName == nil)
+              if shouldHandleTrigger {
                 cameraSystem.handleCameraTrigger(
                   cameraName: cameraName,
-                  sceneScript: sceneScript,
+                  currentAreaName: currentAreaName,
                   normalizedAreaIdentifier: normalizedAreaIdentifier
                 )
               }

@@ -339,6 +339,11 @@ final class PrerenderedEnvironment {
       return
     }
 
+    if index == currentCameraIndex {
+      logger.trace("📷 Camera '\(currentCameraName)' already active; ignoring switch request")
+      return
+    }
+
     currentCameraIndex = index
     selectedCamera = currentCameraName  // Update the editable property
     logger.info("📷 Switched to camera '\(currentCameraName)' (index \(index))")

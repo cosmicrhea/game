@@ -35,7 +35,7 @@ class Test: Script {
   }
 
   func door() {
-    go(toScene: "shooting_range", entry: "hallway")
+    go(toScene: "nexus", entry: "3")
   }
 
 }

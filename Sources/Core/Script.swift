@@ -56,8 +56,11 @@ class Script: SceneLoadingDelegate {
   var currentActionName: String?
 
   /// Track the current area/zone the player is in (set automatically when transitioning)
-  /// This can be used to determine which side of a door the player is on, etc.
-  var currentArea: String?
+  /// Stored on MainLoop so gameplay systems can query it directly.
+  var currentArea: String? {
+    get { MainLoop.shared?.currentAreaName }
+    set { MainLoop.shared?.currentAreaName = newValue }
+  }
 
   /// Track interaction counts for variations cycling
   private var interactionCounts: [String: Int] = [:]

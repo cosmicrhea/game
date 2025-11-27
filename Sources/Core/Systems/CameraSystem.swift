@@ -100,7 +100,7 @@ public final class CameraSystem {
   /// Handle camera trigger activation
   func handleCameraTrigger(
     cameraName: String,
-    sceneScript: Script?,
+    currentAreaName: String?,
     normalizedAreaIdentifier: (String) -> String
   ) {
     // Ignore camera triggers when a manual or scripted override is active
@@ -135,12 +135,16 @@ public final class CameraSystem {
     }
 
     // Check if player is in the correct area
-    let currentArea = sceneScript?.currentArea
+    let currentArea = currentAreaName
     let currentAreaDescription = currentArea ?? "unknown"
     let normalizedCurrentArea = currentArea.map(normalizedAreaIdentifier)
     let normalizedTriggerArea = normalizedAreaIdentifier(triggerArea)
+    let triggerHasNamedArea = normalizedTriggerArea.rangeOfCharacter(from: .letters) != nil
 
-    if let normalizedCurrentArea, normalizedCurrentArea != normalizedTriggerArea {
+    if triggerHasNamedArea,
+      let normalizedCurrentArea,
+      normalizedCurrentArea != normalizedTriggerArea
+    {
       logger.trace(
         "📷 Camera trigger '\(cameraName)' ignored: player is in area '\(currentAreaDescription)', trigger requires '\(triggerArea)'"
       )
@@ -154,6 +158,15 @@ public final class CameraSystem {
     // Switch prerendered environment camera (e.g., "hallway_1" -> "hallway_1")
     try? prerenderedEnvironment?.switchToCamera(cameraName)
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
+
+    // Update MainLoop area tracking: only named triggers define areas
+    if let mainLoop = MainLoop.shared {
+      if triggerHasNamedArea {
+        mainLoop.currentAreaName = normalizedTriggerArea
+      } else {
+        mainLoop.currentAreaName = nil
+      }
+    }
 
     logger.trace("📷 Camera trigger activated: switched to camera '\(cameraName)' (area: '\(triggerArea)')")
   }

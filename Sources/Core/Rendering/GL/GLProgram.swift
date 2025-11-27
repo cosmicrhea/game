@@ -76,7 +76,7 @@ enum GLProgramError: Error {
       // Watch vertex shader
       let vertexFileDescriptor = open(vertexPath, openFlags)
       if vertexFileDescriptor >= 0 {
-        logger.debug("👁️ Watching vertex shader: \(vertexPath)")
+        logger.debug("👁️  Watching vertex shader: \(vertexPath)")
         vertexWatcher = DispatchSource.makeFileSystemObjectSource(
           fileDescriptor: vertexFileDescriptor,
           eventMask: DispatchSource.FileSystemEvent.write,
@@ -107,7 +107,7 @@ enum GLProgramError: Error {
       // Watch fragment shader
       let fragmentFileDescriptor = open(fragmentPath, openFlags)
       if fragmentFileDescriptor >= 0 {
-        logger.debug("👁️ Watching fragment shader: \(fragmentPath)")
+        logger.debug("👁️  Watching fragment shader: \(fragmentPath)")
         fragmentWatcher = DispatchSource.makeFileSystemObjectSource(
           fileDescriptor: fragmentFileDescriptor,
           eventMask: DispatchSource.FileSystemEvent.write,
@@ -263,10 +263,10 @@ public final class GLProgram: @unchecked Sendable {
       // Reuse watcher if it already exists
       let watcher: GLProgramFileWatcher
       if let existing = Self.fileWatchers[key] {
-        logger.debug("🔁 Reusing shader watcher for '\(vertexName)'/'\(fragmentName)'")
+        logger.trace("🔁 Reusing shader watcher for '\(vertexName)'/'\(fragmentName)'")
         watcher = existing
       } else {
-        logger.debug(
+        logger.trace(
           "🔍 Setting up shader watcher '\(vertexName)'/'\(fragmentName)' (v=\(sourceVertexPath), f=\(sourceFragmentPath))"
         )
         watcher = GLProgramFileWatcher(
