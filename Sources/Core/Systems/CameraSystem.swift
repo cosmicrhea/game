@@ -166,6 +166,7 @@ public final class CameraSystem {
       } else {
         mainLoop.currentAreaName = nil
       }
+      mainLoop.markCameraTriggerSynced()
     }
 
     logger.trace("📷 Camera trigger activated: switched to camera '\(cameraName)' (area: '\(triggerArea)')")

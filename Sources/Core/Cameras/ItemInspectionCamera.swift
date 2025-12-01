@@ -375,7 +375,7 @@ class ItemInspectionCamera {
   /// Draws debug information in the corner of the screen
   func drawDebugInfo() {
     let debugText = String(
-      format: "Inspect: @ %.1f,%.1f,%.1f; modelYaw:%.1f modelPitch:%.1f dist:%.2f pan:%.2f,%.2f,%.2f",
+      format: "Inspect: @ %.1f,%.1f,%.1f; yaw: %.1f°; pitch: %.1f°; distance: %.2f; pan: %.2f,%.2f,%.2f",
       position.x, position.y, position.z, modelYaw, modelPitch, distance, panOffset.x, panOffset.y, panOffset.z
     )
 

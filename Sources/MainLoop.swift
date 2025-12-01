@@ -17,6 +17,15 @@ private let startingEntry = "8"
   // Scene configuration
   private(set) var sceneName: String = startingScene
   var currentAreaName: String?
+  private var needsInitialCameraTriggerSync: Bool = true
+
+  func shouldForceCameraTriggerSync() -> Bool {
+    return needsInitialCameraTriggerSync
+  }
+
+  func markCameraTriggerSynced() {
+    needsInitialCameraTriggerSync = false
+  }
 
   // Gameplay state
   private var smoothedFPS: Float = 60.0
@@ -942,6 +951,7 @@ private let startingEntry = "8"
 
     // Reset area tracking - actual area is determined by camera triggers
     currentAreaName = nil
+    needsInitialCameraTriggerSync = true
 
     await Task.sleep(0.15)
 
@@ -1068,6 +1078,7 @@ private let startingEntry = "8"
 
       // Reset area tracking - camera triggers define actual areas
       currentAreaName = nil
+      needsInitialCameraTriggerSync = true
 
       // Initialize active camera using best available node to avoid missing-camera warnings
       if let preferredCameraName = preferredCameraNodeName(for: entry, in: scene) {
@@ -1562,6 +1573,27 @@ private let startingEntry = "8"
       cameraDisplayName = selectedCamera
     }
 
+    let cameraDetails: String
+    if let camera {
+      if camera.horizontalFOV == 0.0 || camera.orthographicWidth > 0.0 {
+        let orthoWidth = camera.orthographicWidth > 0.0 ? camera.orthographicWidth : 1.0
+        cameraDetails = String(format: "ortho width %.2f", Double(orthoWidth * 2.0))
+      } else {
+        let horizontalDegrees = camera.horizontalFOV * 180.0 / .pi
+        let halfHorizontalFOV = camera.horizontalFOV * 0.5
+        let halfWidthTangent = tan(halfHorizontalFOV)
+        if halfWidthTangent > 0.0 {
+          let sensorWidthMillimeters: Float = 36.0
+          let focalLength = sensorWidthMillimeters / (2.0 * halfWidthTangent)
+          cameraDetails = String(format: "%.0f mm / %.1f° FOV", Double(focalLength), Double(horizontalDegrees))
+        } else {
+          cameraDetails = String(format: "%.1f° FOV", Double(horizontalDegrees))
+        }
+      }
+    } else {
+      cameraDetails = "FOV unknown"
+    }
+
     let sceneLine: String
     if let areaName = currentAreaName, !areaName.isEmpty {
       sceneLine = "Scene: \(sceneName) (\(areaName))"
@@ -1572,7 +1604,7 @@ private let startingEntry = "8"
     var overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
       sceneLine,
-      "Camera: \(cameraDisplayName)",
+      "Camera: \(cameraDisplayName) (\(cameraDetails))",
 
       String(
         format: "Position: %.2f, %.2f, %.2f",

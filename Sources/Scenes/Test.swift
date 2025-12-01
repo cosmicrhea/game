@@ -35,7 +35,7 @@ class Test: Script {
   }
 
   func door() {
-    go(toScene: "nexus", entry: "3")
+    goTo(scene: "nexus", entry: "3")
   }
 
 }

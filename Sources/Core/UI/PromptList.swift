@@ -1,14 +1,16 @@
-import OrderedCollections
-
 /// A UI component that displays input prompts for different input sources.
-/// This is a modern replacement for the legacy InputPromptsRenderer.
-public final class PromptList {
-  /// Layout options
+/// This is a modern replacement for the legacy `InputPromptsRenderer`.
+@MainActor public final class PromptList {
+  /// Whether the default draw method centers prompts at the bottom edge.
+  public static var centersAtBottom: Bool = false
+
+  // Layout options
   public var iconSpacing: Float = 0
   public var rowSpacing: Float = 8
   public var groupSpacing: Float = 24
   public var padding: Float = 16
   public var gapBetweenIconsAndLabel: Float = 8
+
   /// Fine-tune vertical alignment of labels (positive moves down)
   public var labelBaselineOffset: Float = -14
   /// Target icon height in pixels. If set, icons are scaled to this height preserving aspect.
@@ -379,11 +381,24 @@ public final class PromptList {
   @MainActor public func draw(opacity: Float = 1.0) {
     guard let group = group else { return }
     let prompts = PromptGroup.prompts[group] ?? [:]
-    let origin = Point(Float(Engine.viewportSize.width) - 56, 12)
+    let promptSize = size(for: prompts, inputSource: .player1)
+
+    let bottomPadding: Float = 12
+    let rightPadding: Float = 56
+
+    let anchor: AnchorPoint
+    let origin: Point
+
+    if Self.centersAtBottom {
+      anchor = .bottom
+      origin = Point(Float(Engine.viewportSize.width) * 0.5, bottomPadding + promptSize.height * 0.5)
+    } else {
+      anchor = .bottomRight
+      origin = Point(Float(Engine.viewportSize.width) - rightPadding, bottomPadding)
+    }
 
     // Draw callout background if enabled
     if showCalloutBackground {
-      let promptSize = size(for: prompts, inputSource: .player1)
       let calloutWidth = promptSize.width + 128
       let callout = Callout(style: .promptList(width: calloutWidth))
       callout.draw()
@@ -394,7 +409,7 @@ public final class PromptList {
       prompts: prompts,
       inputSource: .player1,
       origin: origin,
-      anchor: .bottomRight,
+      anchor: anchor,
       opacity: opacity
     )
   }

@@ -3,7 +3,7 @@ import Assimp
 final class ModelViewer: RenderLoop {
   // UI
   private let promptList = PromptList(.modelViewer)
-  private let controlsPromptList = PromptList(.modelViewerControls, axis: .vertical)
+  private let secondaryPromptList = PromptList(.modelViewerControls, axis: .vertical)
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
 
   // Models
@@ -223,7 +223,7 @@ final class ModelViewer: RenderLoop {
 
       if let prompts = PromptGroup.prompts[.modelViewerControls] {
         let origin = Point(Float(Engine.viewportSize.width) - 400, Float(Engine.viewportSize.height) / 2)
-        controlsPromptList.draw(
+        secondaryPromptList.draw(
           prompts: prompts,
           inputSource: .player1,
           origin: origin,

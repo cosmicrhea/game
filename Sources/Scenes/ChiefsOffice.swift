@@ -2,12 +2,19 @@
 class ChiefsOffice: Script {
 
   func chiefsDoor() {
-    go(toScene: "nexus", entry: "8")
+    goTo(scene: "nexus", entry: "8")
   }
 
   func laptop() async {
-    await withCloseup(on: "Reference") {
-      await say("Looks like chief is working on something.")
+    await script {
+      withCloseup(on: "desk") {
+        await say("Looks like chief is working on something.", more: true)
+      }
+
+      withCloseup(on: "laptop") {
+        await pause(1.0)
+        await say("What the hell?!")
+      }
     }
   }
 

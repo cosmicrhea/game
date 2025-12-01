@@ -108,37 +108,37 @@ class Script: SceneLoadingDelegate {
 
   /// Transition to a different entry in the current scene
   /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
-  @MainActor func go(to entry: String) {
+  @MainActor func goTo(entry entryName: String) {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
       return
     }
     Task {
-      await mainLoop.transition(to: entry)
+      await mainLoop.transition(to: entryName)
     }
   }
 
   /// Transition to a different entry in the current scene (async version that waits for completion)
   /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
-  @MainActor func go(to entry: String) async {
+  @MainActor func goTo(entry entryName: String) async {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
       return
     }
-    await mainLoop.transition(to: entry)
+    await mainLoop.transition(to: entryName)
   }
 
   /// Transition to a different scene
   /// - Parameters:
   ///   - scene: The scene name to load
   ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
-  @MainActor func go(toScene scene: String, entry: String? = nil) {
+  @MainActor func goTo(scene sceneName: String, entry: String? = nil) {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
       return
     }
     Task {
-      await mainLoop.transition(toScene: scene, entry: entry)
+      await mainLoop.transition(toScene: sceneName, entry: entry)
     }
   }
 
@@ -146,12 +146,12 @@ class Script: SceneLoadingDelegate {
   /// - Parameters:
   ///   - scene: The scene name to load
   ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
-  @MainActor func go(toScene scene: String, entry: String? = nil) async {
+  @MainActor func goTo(scene sceneName: String, entry: String? = nil) async {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
       return
     }
-    await mainLoop.transition(toScene: scene, entry: entry)
+    await mainLoop.transition(toScene: sceneName, entry: entry)
   }
 
   /// Runs work while forcing the camera to a specific closeup.
@@ -178,8 +178,13 @@ class Script: SceneLoadingDelegate {
     return try await mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
   }
 
-  @MainActor func say(_ string: String) { dialogView.print(chunks: [string]) }
-  @MainActor func say(_ strings: [String]) { dialogView.print(chunks: strings) }
+  @MainActor func say(_ string: String, more: Bool = false) {
+    dialogView.print(chunks: [string], forceMore: more)
+  }
+
+  @MainActor func say(_ strings: [String], more: Bool = false) {
+    dialogView.print(chunks: strings, forceMore: more)
+  }
 
   /// Async version of say() that waits until the dialog is finished
   /// - Parameter string: The text to display
@@ -240,7 +245,7 @@ class Script: SceneLoadingDelegate {
 
     interactionCounts[key] = count + 1
 
-    say(text)
+    await say(text)
   }
 
   func ask(_ string: String, options: [String]) -> String { options[0] }
@@ -249,7 +254,13 @@ class Script: SceneLoadingDelegate {
     ask(string, options: [optionA, optionB]) == optionA
   }
 
-  func pause(_ seconds: Float) {}
+  func pause(_ seconds: Float) {
+    Thread.sleep(forTimeInterval: Double(seconds))
+  }
+
+  func pause(_ seconds: Float) async {
+    await Task.sleep(Double(seconds))
+  }
 
   @discardableResult func acquire(_ item: Item, quantity: Int = 1) async -> Bool {
     // Input is already disabled by dialogView.dismiss() when dialog finishes

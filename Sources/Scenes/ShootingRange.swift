@@ -4,13 +4,13 @@ class ShootingRange: Script {
   @FindNode var catStatue: Node
 
   func rangeDoor() {
-    go(to: currentArea == "hallway" ? "range" : "hallway")
+    goTo(entry: currentArea == "hallway" ? "range" : "hallway")
   }
 
   func frontDoor() {
     //play(.doorLocked, at: currentActionTriggerNodeThingy)
-//    go(toScene: "test")
-    go(toScene: "nexus")
+    //    goTo(scene: "test")
+    goTo(scene: "nexus")
     // UISound.lockedA()
     // say(variations: [
     //   "It's locked.",

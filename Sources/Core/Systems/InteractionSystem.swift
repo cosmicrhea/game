@@ -120,8 +120,8 @@ public final class InteractionSystem {
             // Check if we're not already on this camera - switch if needed
             if let cameraSystem = cameraSystem {
               let currentCamera = cameraSystem.selectedCamera
-              let shouldHandleTrigger =
-                currentCamera != cameraName || (MainLoop.shared?.currentAreaName == nil)
+              let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
+              let shouldHandleTrigger = currentCamera != cameraName || needsInitialSync
               if shouldHandleTrigger {
                 cameraSystem.handleCameraTrigger(
                   cameraName: cameraName,
@@ -161,8 +161,8 @@ public final class InteractionSystem {
             // Check if we're not already on this camera - switch if needed
             if let cameraSystem = cameraSystem {
               let currentCamera = cameraSystem.selectedCamera
-              let shouldHandleTrigger =
-                currentCamera != cameraName || (MainLoop.shared?.currentAreaName == nil)
+              let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
+              let shouldHandleTrigger = currentCamera != cameraName || needsInitialSync
               if shouldHandleTrigger {
                 cameraSystem.handleCameraTrigger(
                   cameraName: cameraName,
