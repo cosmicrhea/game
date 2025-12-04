@@ -58,10 +58,28 @@ jobs:
       - name: Free up disk space
         run: |
           df -h
-          sudo apt-get clean
-          sudo apt-get autoremove -y
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo rm -rf /tmp/*
+          echo "slaying unused toolchains…"
+
+          # android sdk (HUUUGE)
+          sudo rm -rf /usr/local/lib/android || true
+
+          # dotnet
+          sudo rm -rf /usr/share/dotnet || true
+
+          # docker images + cache
+          docker image prune -af || true
+          docker system prune -af || true
+
+          # haskell/ghc
+          sudo rm -rf /opt/ghc || true
+
+          # llvm (massive)
+          sudo rm -rf /usr/local/clang* /usr/local/llvm* || true
+
+          # large language/model packs you prob don't need
+          sudo rm -rf /usr/share/swift || true
+
+          echo "ok queen the disk is serving CLEAN ✨"
           df -h
 
       - name: Show Swift version
