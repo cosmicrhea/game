@@ -152,7 +152,7 @@ let package = Package(
 extension Package.Dependency {
   static func package(_ name: String, branch: String = "main") -> Package.Dependency {
     if useLocalDependencies {
-      .package(path: "../glass-deps/\(name)")
+      .package(path: "../Game Dependencies/\(name)")
     } else {
       .package(url: "https://github.com/cosmicrhea-game/\(name)", branch: branch)
     }
