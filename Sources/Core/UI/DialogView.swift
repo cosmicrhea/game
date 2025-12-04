@@ -275,7 +275,7 @@
   /// and will show a "more" indicator when complete (even if it doesn't wrap).
   /// - Parameter chunks: Array of strings, each treated as a chunk
   /// - Parameter forceMore: If true, forces the more indicator to show even if there are no more chunks
-  func print(chunks: [String], forceMore: Bool = false) {
+  func print(chunks: [LocalizedStringResource], forceMore: Bool = false) {
     guard !chunks.isEmpty else {
       self.text = ""
       forceMoreIndicator = false
@@ -283,19 +283,19 @@
     }
 
     isChunkMode = true
-    self.chunks = chunks
+    self.chunks = chunks.map { String(gameLocalized: $0) }
     currentStringChunkIndex = 0
     currentPageIndex = 0
     self.forceMoreIndicator = forceMore
 
     // Set text to first chunk
-    self.text = chunks[0]
+    self.text = self.chunks[0]
   }
 
   /// Async version of print() that waits until the dialog is finished
   /// - Parameter chunks: Array of strings, each treated as a chunk
   /// - Parameter forceMore: If true, forces the more indicator to show even if there are no more chunks
-  func print(chunks: [String], forceMore: Bool = false) async {
+  func print(chunks: [LocalizedStringResource], forceMore: Bool = false) async {
     // Cancel any existing continuation
     if let continuation = completionContinuation {
       completionContinuation = nil
@@ -310,14 +310,14 @@
     }
 
     isChunkMode = true
-    self.chunks = chunks
+    self.chunks = chunks.map { String(gameLocalized: $0) }
     currentStringChunkIndex = 0
     currentPageIndex = 0
     self.forceMoreIndicator = forceMore
 
     // Set text to first chunk
     wasTextEmptyLastFrame = text.isEmpty
-    self.text = chunks[0]
+    self.text = self.chunks[0]
 
     // Wait for completion (until text becomes empty - user dismisses dialog)
     await withCheckedContinuation { continuation in

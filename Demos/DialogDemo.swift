@@ -2,7 +2,7 @@
 final class DialogDemo: RenderLoop {
   private let dialogView = DialogView()
 
-  private let messages = [
+  private let messages: [LocalizedStringResource] = [
     "Welcome to the dialog demo!",
     "This text will type out character by character.",
     "You can display messages that wrap to two lines maximum, centered at the bottom of the screen.",

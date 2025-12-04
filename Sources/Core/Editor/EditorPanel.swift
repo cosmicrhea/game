@@ -198,16 +198,16 @@ public final class EditorPanel: OptionsPanel {
         for property in group.properties {
           if let slider = createSliderForProperty(property) {
             sliders.append(slider)
-            rows.append(Row(label: property.displayName, control: slider))
+            rows.append(Row(label: "\(property.displayName)", control: slider))
           } else if let sw = createSwitchForProperty(property) {
             switches.append(sw)
-            rows.append(Row(label: property.displayName, control: sw))
+            rows.append(Row(label: "\(property.displayName)", control: sw))
           } else if let picker = createPickerForProperty(property) {
             pickers.append(picker)
-            rows.append(Row(label: property.displayName, control: picker))
+            rows.append(Row(label: "\(property.displayName)", control: picker))
           } else if let colorPicker = createColorPickerForProperty(property) {
             colorPickers.append(colorPicker)
-            rows.append(Row(label: property.displayName, control: colorPicker))
+            rows.append(Row(label: "\(property.displayName)", control: colorPicker))
           }
         }
       }
@@ -216,23 +216,23 @@ public final class EditorPanel: OptionsPanel {
       for property in editorProperties {
         if let slider = createSliderForProperty(property) {
           sliders.append(slider)
-          rows.append(Row(label: property.displayName, control: slider))
+          rows.append(Row(label: "\(property.displayName)", control: slider))
         } else if let sw = createSwitchForProperty(property) {
           switches.append(sw)
-          rows.append(Row(label: property.displayName, control: sw))
+          rows.append(Row(label: "\(property.displayName)", control: sw))
         } else if let picker = createPickerForProperty(property) {
           pickers.append(picker)
-          rows.append(Row(label: property.displayName, control: picker))
+          rows.append(Row(label: "\(property.displayName)", control: picker))
         } else if let colorPicker = createColorPickerForProperty(property) {
           colorPickers.append(colorPicker)
-          rows.append(Row(label: property.displayName, control: colorPicker))
+          rows.append(Row(label: "\(property.displayName)", control: colorPicker))
         }
       }
     }
 
     // Add function buttons at the end
     for editorFunction in editorFunctions {
-      rows.append(Row(button: editorFunction.displayName, action: editorFunction.action))
+      rows.append(Row(button: "\(editorFunction.displayName)", action: editorFunction.action))
     }
 
     setRows(rows)
@@ -292,7 +292,10 @@ public final class EditorPanel: OptionsPanel {
     }
 
     let picker = Picker(
-      frame: .zero, options: availableOptions, selectedIndex: availableOptions.firstIndex(of: stringValue) ?? 0)
+      frame: .zero,
+      options: availableOptions.map { "\($0)" },
+      selectedIndex: availableOptions.firstIndex(of: stringValue) ?? 0
+    )
     picker.onSelectionChanged = { newIndex in
       if newIndex < picker.options.count {
         property.setValue(picker.options[newIndex])

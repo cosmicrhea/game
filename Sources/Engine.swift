@@ -21,11 +21,11 @@ struct CLIOptions: ParsableArguments {
   @Option(help: "Take a screenshot after 1 second. Optionally specify a path to save the screenshot.")
   var screenshot: String?
 
-  @Flag(help: "Exit after 2 seconds.")
+  @ArgumentParser.Flag(help: "Exit after 2 seconds.")
   var exit: Bool = false
 
   #if canImport(Metal)
-    @Flag(help: "Use Metal renderer instead of OpenGL on supported platforms. (Unfinished.)")
+    @ArgumentParser.Flag(help: "Use Metal renderer instead of OpenGL on supported platforms. (Unfinished.)")
     var metal: Bool = false
   #else
     let metal = false
@@ -92,6 +92,8 @@ public final class Engine: NSObject {
       print("|ω･)ﾉ♡☆")
     #endif
 
+    print(Locale.game)
+
     //    print("Bundle.game: \(Bundle.game)")
     //    print("Bundle.main: \(Bundle.main)")
     //    print("Bundle.module: \(Bundle.module)")
@@ -100,8 +102,6 @@ public final class Engine: NSObject {
     //LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 
     cli = CLIOptions.parseOrExit()
-
-    //sleep(1)  // ffs, apple… https://developer.apple.com/forums/thread/765445
 
     setupGLFW()
     setupWindow()

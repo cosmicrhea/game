@@ -47,7 +47,7 @@
   }
 
   /// Calculate size for given prompts and input source
-  public func size(for prompts: OrderedDictionary<String, [[String]]>, inputSource: InputSource = .player1) -> Size {
+  public func size(for prompts: OrderedDictionary<LocalizedStringResource, [[String]]>, inputSource: InputSource = .player1) -> Size {
     var groups: [Row] = []
     for (label, options) in prompts {
       if let icons = chooseIcons(for: inputSource, from: options) {
@@ -112,7 +112,8 @@
         if i + 1 < group.iconNames.count { iconsWidth += iconSpacing }
       }
     }
-    let labelWidth = measureTextWidth(group.label)
+    let label = Bundle.game.localizedString(forKey: group.label.key, table: "Localizable", locale: .game)
+    let labelWidth = measureTextWidth(label)
     let height = max(maxIconHeight, lineHeight)
     return (iconsWidth: iconsWidth, maxIconHeight: maxIconHeight, labelWidth: labelWidth, height: height)
   }
@@ -167,7 +168,9 @@
     let labelStyle = TextStyle(
       fontName: textStyle.fontName, fontSize: textStyle.fontSize,
       color: Color(red: labelColor.0, green: labelColor.1, blue: labelColor.2, alpha: labelColor.3 * opacity))
-    group.label.draw(at: Point(labelX, labelBaselineY), style: labelStyle, anchor: .baselineLeft)
+
+    let label = Bundle.game.localizedString(forKey: group.label.key, table: "Localizable", locale: .game)
+    label.draw(at: Point(labelX, labelBaselineY), style: labelStyle, anchor: .baselineLeft)
   }
 
   /// Render a single horizontal strip of groups aligned to bottom-right.
@@ -258,7 +261,7 @@
     var groups: [Row] = []
     for (label, options) in prompts {
       if let icons = chooseIcons(for: inputSource, from: options) {
-        groups.append(Row(iconNames: icons, label: label))
+        groups.append(Row(iconNames: icons, label: "\(label)"))
       }
     }
     drawHorizontal(groups: groups, windowSize: windowSize, origin: origin, anchor: anchor, opacity: opacity)
@@ -266,7 +269,7 @@
 
   /// Ordered overload: preserves explicit label ordering using OrderedDictionary
   public func drawHorizontal(
-    prompts: OrderedDictionary<String, [[String]]>,
+    prompts: OrderedDictionary<LocalizedStringResource, [[String]]>,
     inputSource: InputSource = .player1,
     windowSize: (w: Int32, h: Int32),
     origin: (x: Float, y: Float),
@@ -284,7 +287,7 @@
 
   /// Measure the actual size of a horizontal strip for the given prompts and input source
   public func measureHorizontal(
-    prompts: OrderedDictionary<String, [[String]]>,
+    prompts: OrderedDictionary<LocalizedStringResource, [[String]]>,
     inputSource: InputSource
   ) -> (width: Float, height: Float) {
     var groups: [Row] = []
@@ -353,7 +356,7 @@
 
   /// Draw at specific coordinates
   public func draw(
-    prompts: OrderedDictionary<String, [[String]]>,
+    prompts: OrderedDictionary<LocalizedStringResource, [[String]]>,
     inputSource: InputSource = .player1,
     origin: Point,
     anchor: AnchorPoint,
@@ -420,6 +423,6 @@
 extension PromptList {
   public struct Row {
     public let iconNames: [String]
-    public let label: String
+    public let label: LocalizedStringResource
   }
 }

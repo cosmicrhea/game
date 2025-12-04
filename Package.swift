@@ -28,6 +28,7 @@ let package = Package(
 
   dependencies: [
     .package("assimp", branch: "master"),
+    .package("cgltf", branch: "master"),
     .package("gl", branch: "master"),
     .package("gl-math", branch: "master"),
     .package("glfw-swift"),
@@ -74,6 +75,7 @@ let package = Package(
         .product(name: "GL", package: "gl"),
         .product(name: "GLMath", package: "gl-math"),
         .product(name: "GLFW", package: "glfw-swift"),
+        .product(name: "GLTF", package: "cgltf"),
         .product(name: "Jolt", package: "jolt"),
         //.product(name: "Tess", package: "libtess2"),
         .product(name: "Miniaudio", package: "miniaudio"),
@@ -94,6 +96,7 @@ let package = Package(
         "Sources/Core/Macros",
         //"Sources/Core/Shell",
         "README.md",
+        "Assets/Localizable.xcstrings",  // Processed by build tool, not included as resource
       ],
 
       resources: [
@@ -106,8 +109,7 @@ let package = Package(
         .copy("Assets/Metal"),
         .copy("Assets/Scenes"),
         .copy("Assets/UI"),
-        //.process("Assets/Localizable.xcstrings", localization: .default),
-        .process("Assets/Localizable.xcstrings"),
+        .copy("Assets/Localizations"),  // Generated .lproj directories from xcstrings
       ],
 
       cSettings: [
@@ -116,7 +118,7 @@ let package = Package(
       ],
 
       swiftSettings: [
-        .define("HOTLOAD_SHADERS"),
+        .define("HOTLOAD_SHADERS")
         //.define("EDITOR"),
       ],
 

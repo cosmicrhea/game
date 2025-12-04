@@ -6,7 +6,7 @@ final class PromptListDemo: RenderLoop {
   private let titleStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 18, color: .white)
 
   // Helper function to measure the actual width of a group
-  private func measureGroupWidth(prompts: OrderedDictionary<String, [[String]]>) -> Float {
+  private func measureGroupWidth(prompts: OrderedDictionary<LocalizedStringResource, [[String]]>) -> Float {
     var maxWidth: Float = 0
 
     // Measure the actual width for each input source and take the maximum
@@ -29,7 +29,7 @@ final class PromptListDemo: RenderLoop {
     let padding: Float = 16
 
     // Collect all groups and measure their sizes
-    var groupData: [(title: String, prompts: OrderedDictionary<String, [[String]]>, width: Float, height: Float)] = []
+    var groupData: [(title: String, prompts: OrderedDictionary<LocalizedStringResource, [[String]]>, width: Float, height: Float)] = []
 
     for (title, prompts) in PromptGroup.prompts.reversed() {
       let measuredWidth = measureGroupWidth(prompts: prompts)

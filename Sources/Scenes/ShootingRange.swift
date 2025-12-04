@@ -1,7 +1,7 @@
 @SceneScript
 class ShootingRange: Script {
 
-  @FindNode var catStatue: Node
+  @Ref var catStatue: Node
 
   func rangeDoor() {
     goTo(entry: currentArea == "hallway" ? "range" : "hallway")

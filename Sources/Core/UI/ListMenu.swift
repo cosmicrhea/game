@@ -5,12 +5,23 @@ public class ListMenu {
   public struct MenuItem {
     public let id: String
     public let label: String
+    public let labelKey: String
     public let isEnabled: Bool
     public let action: () -> Void
 
+    @_disfavoredOverload
     public init(id: String, label: String, isEnabled: Bool = true, action: @escaping () -> Void) {
       self.id = id
       self.label = label
+      self.labelKey = ""
+      self.isEnabled = isEnabled
+      self.action = action
+    }
+
+    public init(id: String, label: LocalizedStringResource, isEnabled: Bool = true, action: @escaping () -> Void) {
+      self.id = id
+      self.label = ""
+      self.labelKey = label.key
       self.isEnabled = isEnabled
       self.action = action
     }
@@ -138,7 +149,15 @@ public class ListMenu {
         finalX = baseX + (indentAmount * (1.0 - easedProgress))
       }
 
-      item.label.draw(at: Point(finalX, finalY), style: finalStyle)
+      let effectiveLabel =
+        if !item.labelKey.isEmpty {
+          Bundle.game.localizedString(forKey: item.labelKey, value: nil, table: "Localizable", locale: .game)
+        } else {
+          item.label
+        }
+
+      // print(Bundle.game, effectiveLabel)
+      effectiveLabel.draw(at: Point(finalX, finalY), style: finalStyle)
     }
   }
 

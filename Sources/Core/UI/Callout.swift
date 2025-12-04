@@ -40,7 +40,7 @@ public enum CalloutFade {
 public class Callout {
   // Content
   /// The text content to display in the callout.
-  public var text: String
+  public var text: LocalizedStringResource
   /// Optional icon to display alongside the text.
   public var icon: CalloutIcon?
 
@@ -88,7 +88,7 @@ public class Callout {
   ///   - text: The text content to display.
   ///   - icon: Optional icon to display alongside the text.
   ///   - style: The callout style determining position and behavior.
-  public init(_ text: String = "", icon: CalloutIcon? = nil, style: CalloutStyle = .objective()) {
+  public init(_ text: LocalizedStringResource = "", icon: CalloutIcon? = nil, style: CalloutStyle = .objective()) {
     self.text = text
     self.icon = icon
     self.style = style
@@ -98,8 +98,8 @@ public class Callout {
   }
 
   /// Computed size of the callout for future multi-line support.
-  public var size: Size {
-    let textWidth = text.size(with: Callout.defaultStyle).width
+  @MainActor public var size: Size {
+    let textWidth = String(gameLocalized: text).size(with: Callout.defaultStyle).width
     let iconWidth: Float = icon != nil ? 20 + iconTextGap : 0
     let totalWidth = iconWidth + textWidth + iconPaddingX * 2
     return Size(totalWidth, 36)
@@ -245,7 +245,7 @@ public class Callout {
     switch style {
     case .tutorial:
       // Center the text within the callout
-      let textWidth = text.size(with: labelStyle).width
+      let textWidth = String(gameLocalized: text).size(with: labelStyle).width
       let totalContentWidth = (cachedIcon != nil ? 20 + iconTextGap : 0) + textWidth
       let contentStartX = baseCenter.0 - totalContentWidth * 0.5
       let textX = contentStartX + (cachedIcon != nil ? 20 + iconTextGap : 0)
@@ -263,7 +263,7 @@ public class Callout {
     } else if case .healthDisplay = style {
       // Ditto
     } else {
-      text.draw(at: labelPoint, style: labelStyle, context: context)
+      String(gameLocalized: text).draw(at: labelPoint, style: labelStyle, context: context)
     }
   }
 

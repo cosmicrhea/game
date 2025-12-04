@@ -17,6 +17,10 @@
 @_exported import class Foundation.Thread
 @_exported import struct Foundation.URL
 @_exported import class Foundation.DispatchQueue
+@_exported import struct Foundation.LocalizedStringResource
+
+// FIXME: remove this once we have a proper scene graph ourselves
+@_exported import class Assimp.Camera
 
 #if canImport(Darwin)
   @_exported import Darwin

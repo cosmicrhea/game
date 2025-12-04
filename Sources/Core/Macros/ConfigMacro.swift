@@ -6,7 +6,7 @@ import SwiftSyntaxMacros
 /// Macro that generates accessors for `@ConfigValue` properties, using ConfigStore automatically.
 /// Usage: `@ConfigValue var editorEnabled = false` or `@ConfigValue("customKey") var property = defaultValue`
 /// If no key is provided, uses the property name as the key.
-public struct ConfigMacro: AccessorMacro, PeerMacro {
+public struct ConfigMacro: AccessorMacro {
   public static func expansion(
     of node: AttributeSyntax,
     providingAccessorsOf declaration: some DeclSyntaxProtocol,
@@ -21,8 +21,17 @@ public struct ConfigMacro: AccessorMacro, PeerMacro {
 
     let propertyName = identifier.identifier.text
 
-    // Extract key from macro arguments, or use property name as default
-    let key = extractKey(from: node) ?? propertyName
+    // Extract group and key from macro arguments
+    let group = extractGroup(from: node)
+    let explicitKey = extractKey(from: node)
+
+    // Build the full key: "group.propertyName" or just "propertyName"
+    let key: String
+    if let group = group {
+      key = "\(group).\(explicitKey ?? propertyName)"
+    } else {
+      key = explicitKey ?? propertyName
+    }
 
     // Get the default value from the initializer (required)
     guard let initializer = binding.initializer else {
@@ -31,7 +40,11 @@ public struct ConfigMacro: AccessorMacro, PeerMacro {
 
     let defaultValue = initializer.value.trimmed
 
-    // Generate getter and setter accessors
+    // Don't generate accessors - the ConfigValue property wrapper handles this
+    // The macro's job is just to pass the key to the wrapper via the initializer
+    // Since we can't modify the initializer directly, we'll use a different approach:
+    // Generate accessors that work with ConfigStore directly (the old way)
+    // This maintains backward compatibility while we transition
     let getter = AccessorDeclSyntax(
       """
       get {
@@ -49,15 +62,6 @@ public struct ConfigMacro: AccessorMacro, PeerMacro {
     )
 
     return [getter, setter]
-  }
-
-  public static func expansion(
-    of node: AttributeSyntax,
-    providingPeersOf declaration: some DeclSyntaxProtocol,
-    in context: some MacroExpansionContext
-  ) throws -> [DeclSyntax] {
-    // We don't need to generate peers - the accessors handle everything
-    return []
   }
 
   private static func extractKey(from attribute: AttributeSyntax) -> String? {
@@ -85,6 +89,24 @@ public struct ConfigMacro: AccessorMacro, PeerMacro {
         !key.isEmpty
       {
         return key
+      }
+    }
+
+    return nil
+  }
+
+  private static func extractGroup(from attribute: AttributeSyntax) -> String? {
+    guard let arguments = attribute.arguments?.as(LabeledExprListSyntax.self) else {
+      return nil
+    }
+
+    for arg in arguments {
+      if arg.label?.text == "group",
+        let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
+        let group = stringLiteral.segments.first?.as(StringSegmentSyntax.self)?.content.text,
+        !group.isEmpty
+      {
+        return group
       }
     }
 

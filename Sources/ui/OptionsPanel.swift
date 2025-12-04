@@ -67,18 +67,18 @@ public class OptionsPanel: Screen {
   }
 
   struct Row {
-    let label: String
+    let label: LocalizedStringResource
     let control: OptionsControl
 
     /// Convenience initializer for button rows that trigger an action.
     @MainActor
-    init(button label: String, action: @escaping () -> Void) {
+    init(button label: LocalizedStringResource, action: @escaping () -> Void) {
       self.label = label
       self.control = ButtonRow(action: action)
     }
 
     /// Standard initializer for rows with a control.
-    init(label: String, control: OptionsControl) {
+    init(label: LocalizedStringResource, control: OptionsControl) {
       self.label = label
       self.control = control
     }
@@ -116,9 +116,10 @@ public class OptionsPanel: Screen {
       if focusViaKeyboard, let focusedIndex, focusedIndex == i, rows[i].control.isFocusable {
         focusRing.draw(around: r, intensity: 1.0, paddingX: 8, paddingY: 4)
       }
-      let labelSize = row.label.size(with: labelStyle)
+      let label = Bundle.game.localizedString(forKey: row.label.key, locale: .game)
+      let labelSize = label.size(with: labelStyle)
       let labelY = r.origin.y + (rowHeight - labelSize.height) * 0.5
-      row.label.draw(at: Point(r.origin.x, labelY), style: labelStyle, anchor: .bottomLeft)
+      label.draw(at: Point(r.origin.x, labelY), style: labelStyle, anchor: .bottomLeft)
       row.control.draw()
     }
   }

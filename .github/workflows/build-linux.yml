@@ -1,0 +1,87 @@
+name: Build for Linux
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      GAME_LOCAL_DEPS: "0"
+    steps:
+      - name: Checkout glass
+        uses: actions/checkout@v4
+        with:
+          path: glass
+          lfs: true
+
+      - name: Set up Swift 6.2
+        uses: mman/setup-swift@main
+        with:
+          swift-version: "6.2"
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            xorg-dev \
+            libwayland-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxinerama-dev \
+            libxkbcommon-dev \
+            mesa-common-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libudev-dev \
+            zlib1g-dev \
+            libassimp-dev
+
+      - name: Clear SwiftPM cache
+        run: |
+          rm -rf ~/.swiftpm
+          rm -rf glass/.build
+          rm -rf glass/.swiftpm
+          rm -f glass/Package.resolved
+          cd glass && swift package clean
+
+      - name: Free up disk space
+        run: |
+          df -h
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo rm -rf /tmp/*
+          df -h
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Check disk space before build
+        run: |
+          df -h
+          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
+
+      - name: Build (debug)
+        working-directory: glass
+        run: swift build --quiet --enable-experimental-prebuilts
+
+      - name: Clean debug build artifacts
+        run: |
+          echo "Cleaning debug build to free space for release build..."
+          rm -rf glass/.build
+          df -h
+
+      - name: Build (release)
+        working-directory: glass
+        run: swift build -c release --quiet --enable-experimental-prebuilts

@@ -9,7 +9,7 @@ final class PauseScreen: Screen {
     super.init()
 
     listMenu.setItems([
-      ListMenu.MenuItem(id: "back", label: String(localized: "Return to Game")) {
+      ListMenu.MenuItem(id: "back", label: "Return to Game") {
         // Close pause screen by accessing MainLoop
         if let mainLoop = MainLoop.shared {
           mainLoop.hidePauseScreen()
@@ -17,11 +17,11 @@ final class PauseScreen: Screen {
         }
       },
 
-      ListMenu.MenuItem(id: "options", label: String(localized: "Options")) {
+      ListMenu.MenuItem(id: "options", label: "Options") {
         self.navigate(to: OptionsScreen(presentationContext: .inGamePause))
       },
 
-      ListMenu.MenuItem(id: "give_up", label: String(localized: "Give Up")) {
+      ListMenu.MenuItem(id: "give_up", label: "Give Up") {
 
       },
     ])

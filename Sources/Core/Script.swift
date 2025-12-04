@@ -1,7 +1,5 @@
 import Assimp
 
-// TODO: macro for `@Flag`
-
 /// Macro to automatically generate method registry and dynamic calling for scene scripts
 @attached(
   member, names: named(methodRegistry), named(availableMethods), named(callMethod), named(_register),
@@ -9,10 +7,14 @@ import Assimp
 public macro SceneScript() = #externalMacro(module: "GameMacros", type: "SceneScriptMacro")
 
 /// Macro to automatically find a node from the scene
-/// Usage: `@FindNode var catStatue: Node!` or `@FindNode("StatueOfCat") var catStatue: Node!`
+/// Usage: `@Ref var catStatue: Node!` or `@Ref("StatueOfCat") var catStatue: Node!`
 @attached(accessor)
 @attached(peer, names: arbitrary)
-public macro FindNode(_ nodeName: String? = nil) = #externalMacro(module: "GameMacros", type: "FindNodeMacro")
+public macro Ref(_ nodeName: String? = nil) = #externalMacro(module: "GameMacros", type: "RefMacro")
+
+/// Macro to automatically persist script-scoped flags using the ScriptFlagStore.
+@attached(accessor)
+public macro Flag(_ name: String? = nil) = #externalMacro(module: "GameMacros", type: "FlagMacro")
 
 class Character {
 
@@ -24,16 +26,8 @@ class Character {
 
 }
 
-protocol SceneLoadingDelegate {
-  func sceneDidLoad()
-}
-
-extension SceneLoadingDelegate {
-  func sceneDidLoad() {}
-}
-
 @MainActor
-class Script: SceneLoadingDelegate {
+class Script {
 
   var scene: Scene {
     guard let mainLoop = MainLoop.shared else {
@@ -50,6 +44,45 @@ class Script: SceneLoadingDelegate {
       fatalError("MainLoop.shared is nil - ensure MainLoop.init() has been called")
     }
     return mainLoop.dialogView
+  }
+
+  var flags: ScriptFlagStore {
+    guard let mainLoop = MainLoop.shared else {
+      fatalError("MainLoop.shared is nil - ensure MainLoop.init() has been called")
+    }
+    return mainLoop.flagStore
+  }
+
+  private var flagNamespace: String {
+    return String(describing: type(of: self))
+  }
+
+  func flagKey(_ suffix: String) -> String {
+    return "\(flagNamespace)/\(suffix)"
+  }
+
+  func readFlag<T: ScriptFlagValue>(_ name: String, default defaultValue: T) -> T {
+    return flags.value(forKey: flagKey(name), default: defaultValue)
+  }
+
+  func writeFlag<T: ScriptFlagValue>(_ value: T, name: String) {
+    flags.set(value, forKey: flagKey(name))
+  }
+
+  func hasFlag(_ name: String) -> Bool {
+    return flags.containsValue(forKey: flagKey(name))
+  }
+
+  func clearFlag(_ name: String) {
+    flags.removeValue(forKey: flagKey(name))
+  }
+
+  func setFlag(_ name: String, to value: Bool = true) {
+    writeFlag(value, name: name)
+  }
+
+  func flagValue(_ name: String, default defaultValue: Bool = false) -> Bool {
+    return readFlag(name, default: defaultValue)
   }
 
   /// Track the current action name (set by MainLoop before calling interaction methods)
@@ -76,9 +109,9 @@ class Script: SceneLoadingDelegate {
 
   var hasAliveEnemies: Bool { false }
 
-  // /// Called when the scene script is loaded and initialized
-  // /// Override this method in scene-specific script classes to perform initialization
-  // func sceneDidLoad() {}
+  /// Called when the scene script is loaded and initialized
+  /// Override this method in scene-specific script classes to perform initialization
+  func sceneDidLoad() {}
 
   /// Find a node by name, searching from the root node
   /// Matches exact names or names with dashed suffixes (e.g., "CatStatue" matches "CatStatue-fg")
@@ -99,6 +132,30 @@ class Script: SceneLoadingDelegate {
       if let found = findNode(named: name, in: child) {
         return found
       }
+    }
+
+    return nil
+  }
+
+  /// Find a camera by name
+  /// The name should match the camera's name property (e.g., "Camera_desk" or "desk" -> "Camera_desk")
+  /// Tries exact match, then with Camera_ prefix, then lowercase variations
+  func findCamera(_ name: String) -> Assimp.Camera? {
+    // Try exact match first
+    if let camera = scene.cameras.first(where: { $0.name == name }) {
+      return camera
+    }
+
+    // Try with Camera_ prefix if not already present
+    let cameraName = name.hasPrefix("Camera_") ? name : "Camera_\(name)"
+    if let camera = scene.cameras.first(where: { $0.name == cameraName }) {
+      return camera
+    }
+
+    // Try lowercase version (e.g., "Camera_Desk" -> "Camera_desk")
+    let lowercaseName = cameraName.lowercased()
+    if lowercaseName != cameraName {
+      return scene.cameras.first(where: { $0.name == lowercaseName })
     }
 
     return nil
@@ -168,6 +225,20 @@ class Script: SceneLoadingDelegate {
     return try mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
   }
 
+  /// Runs work while forcing the camera to a specific closeup.
+  /// Camera triggers are temporarily ignored until the closure finishes.
+  /// - Parameters:
+  ///   - camera: The camera object to use for the closeup.
+  ///   - perform: The work to execute during the closeup.
+  @discardableResult
+  func withCloseup<T>(on camera: Assimp.Camera, perform: () throws -> T) rethrows -> T {
+    guard let cameraName = camera.name else {
+      logger.warning("⚠️ Cannot activate closeup: camera has no name")
+      return try perform()
+    }
+    return try withCloseup(on: cameraName, perform: perform)
+  }
+
   /// Async variant of `withCloseup(on:perform:)`.
   @discardableResult
   func withCloseup<T>(on cameraName: String, perform: () async throws -> T) async rethrows -> T {
@@ -178,32 +249,42 @@ class Script: SceneLoadingDelegate {
     return try await mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
   }
 
-  @MainActor func say(_ string: String, more: Bool = false) {
+  /// Async variant of `withCloseup(on:perform:)`.
+  @discardableResult
+  func withCloseup<T>(on camera: Assimp.Camera, perform: () async throws -> T) async rethrows -> T {
+    guard let cameraName = camera.name else {
+      logger.warning("⚠️ Cannot activate closeup: camera has no name")
+      return try await perform()
+    }
+    return try await withCloseup(on: cameraName, perform: perform)
+  }
+
+  @MainActor func say(_ string: LocalizedStringResource, more: Bool = false) {
     dialogView.print(chunks: [string], forceMore: more)
   }
 
-  @MainActor func say(_ strings: [String], more: Bool = false) {
+  @MainActor func say(_ strings: [LocalizedStringResource], more: Bool = false) {
     dialogView.print(chunks: strings, forceMore: more)
   }
 
   /// Async version of say() that waits until the dialog is finished
   /// - Parameter string: The text to display
   /// - Parameter more: If true, forces the more indicator to show even if there are no more chunks
-  @MainActor func say(_ string: String, more: Bool = false) async {
+  @MainActor func say(_ string: LocalizedStringResource, more: Bool = false) async {
     await dialogView.print(chunks: [string], forceMore: more)
   }
 
   /// Async version of say() that waits until the dialog is finished
   /// - Parameter strings: Array of text chunks to display
   /// - Parameter more: If true, forces the more indicator to show even if there are no more chunks
-  @MainActor func say(_ strings: [String], more: Bool = false) async {
+  @MainActor func say(_ strings: [LocalizedStringResource], more: Bool = false) async {
     await dialogView.print(chunks: strings, forceMore: more)
   }
 
   /// Say text with variations that cycle through on repeated interactions
   /// - Parameter variations: Array of text variations to cycle through
   /// The variations loop back to the first after exhausting all options
-  @MainActor func say(variations: [String]) {
+  @MainActor func say(variations: [LocalizedStringResource]) {
     guard !variations.isEmpty else { return }
 
     // Use currentActionName if available, otherwise fall back to #function
@@ -227,7 +308,7 @@ class Script: SceneLoadingDelegate {
   /// Async version of say(variations:) that waits until the dialog is finished
   /// - Parameter variations: Array of text variations to cycle through
   /// The variations loop back to the first after exhausting all options
-  @MainActor func say(variations: [String]) async {
+  @MainActor func say(variations: [LocalizedStringResource]) async {
     guard !variations.isEmpty else { return }
 
     // Use currentActionName if available, otherwise fall back to #function
@@ -254,11 +335,7 @@ class Script: SceneLoadingDelegate {
     ask(string, options: [optionA, optionB]) == optionA
   }
 
-  func pause(_ seconds: Float) {
-    Thread.sleep(forTimeInterval: Double(seconds))
-  }
-
-  func pause(_ seconds: Float) async {
+  func pause(_ seconds: Float = 1.0) async {
     await Task.sleep(Double(seconds))
   }
 

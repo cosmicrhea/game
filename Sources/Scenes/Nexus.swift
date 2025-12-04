@@ -1,12 +1,25 @@
 @SceneScript
 class Nexus: Script {
 
-  @FindNode var catStatue: Node
+  @Flag var hasCollectedCat = false
+  @Ref var catStatue: Node
+
+  override func sceneDidLoad() {
+    if hasCollectedCat {
+      catStatue.isHidden = true
+    }
+  }
 
   func cat() async {
+    if hasCollectedCat {
+      await say("Already picked that up.")
+      return
+    }
+
     guard !catStatue.isHidden else { return }
     if await acquire(.catStatue) {
       catStatue.isHidden = true
+      hasCollectedCat = true
       //removeActiveTrigger() // ???
     }
   }

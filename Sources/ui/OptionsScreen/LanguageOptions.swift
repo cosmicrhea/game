@@ -1,8 +1,18 @@
+private let voiceLanguages = [
+  "en": "English",
+  "da": "Danish",
+]
+
+private let displayLanguages = [
+  "en": "English",
+  "da": "Danish",
+]
+
 final class LanguageOptionsPanel: OptionsPanel {
-  private let voiceLanguagePicker = Picker(options: ["English", "Danish"])
-  private let displayLanguagePicker = Picker(options: ["English", "Danish"])
-  //private let subtitlesSwitch = Switch(isOn: true)
-  private let subtitlesPicker = Picker(options: ["On", "Off"])
+  let voiceLanguagePicker = Picker(value: Config.current.bindingVoiceLocaleIdentifier, options: voiceLanguages)
+  let displayLanguagePicker = Picker(value: Config.current.bindingDisplayLocaleIdentifier, options: displayLanguages)
+  //let subtitlesSwitch = Switch(isOn: true)
+  let subtitlesPicker = Picker(options: ["On", "Off"])
 
   override init() {
     super.init()

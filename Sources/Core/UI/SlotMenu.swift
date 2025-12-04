@@ -13,7 +13,20 @@ public enum SlotAction: String, CaseIterable {
 
 extension SlotAction {
   var id: String { rawValue }
-  var label: String { rawValue.titleCased }
+
+  var label: LocalizedStringResource {
+    switch self {
+    case .use: "Use"
+    case .equip: "Equip"
+    case .unequip: "Unequip"
+    case .inspect: "Inspect"
+    case .combine: "Combine"
+    case .exchange: "Exchange"
+    case .discard: "Discard"
+    case .store: "Store"
+    case .retrieve: "Retrieve"
+    }
+  }
 
   var icon: Image? {
     switch self {
@@ -81,7 +94,7 @@ public final class SlotMenu: PopupMenu {
     at position: Point,
     slotIndex: Int,
     slotPosition: Point,
-    actions: [(String, SlotAction)]
+    actions: [(LocalizedStringResource, SlotAction)]
   ) {
     self.slotIndex = slotIndex
     self.slotPosition = slotPosition

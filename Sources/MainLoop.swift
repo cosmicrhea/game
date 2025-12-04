@@ -112,6 +112,8 @@ private let startingEntry = "8"
 
   // Dialog system
   private(set) var dialogView: DialogView!
+  // Persisted scene flags
+  let flagStore = ScriptFlagStore()
   // Scene script instance
   private var sceneScript: Script?
 

@@ -10,6 +10,13 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
     let registrationOutputFile = context.pluginWorkDirectoryURL.appendingPathComponent("SceneScriptRegistration.swift")
     let registrationScriptFile = context.pluginWorkDirectoryURL.appendingPathComponent("generate_registration.sh")
 
+    // Localization conversion setup
+    // Output to plugin work directory first, then copy to Assets/Localizations
+    let xcstringsInput = context.package.directoryURL.appendingPathComponent("Assets/Localizable.xcstrings")
+    let localizationTempDir = context.pluginWorkDirectoryURL.appendingPathComponent("Localizations")
+    let localizationOutputDir = context.package.directoryURL.appendingPathComponent("Assets/Localizations")
+    let convertScript = context.pluginWorkDirectoryURL.appendingPathComponent("ConvertXCStrings.swift")
+
     // Create a shell script that will work better with Xcode
     let versionScriptContent = """
       #!/bin/sh
@@ -115,6 +122,99 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
       fi
       """
 
+    // Copy the conversion script to plugin work directory
+    let convertScriptSource = context.package.directoryURL.appendingPathComponent(
+      ".scripts/ConvertXCStrings.swift")
+    let convertScriptContent = try String(contentsOf: convertScriptSource, encoding: .utf8)
+    try convertScriptContent.write(to: convertScript, atomically: true, encoding: .utf8)
+
+    // Create shell script wrapper for localization conversion
+    let localizationScriptContent = """
+      #!/bin/sh
+      set -e
+
+      XCSTRINGS_FILE="\(xcstringsInput.path)"
+      CONVERT_SCRIPT="\(convertScript.path)"
+
+      if [ ! -f "$XCSTRINGS_FILE" ]; then
+        echo "Warning: Localizable.xcstrings not found at $XCSTRINGS_FILE"
+        exit 0
+      fi
+
+      # Write to temp directory first
+      TEMP_DIR="\(localizationTempDir.path)"
+      OUTPUT_DIR="\(localizationOutputDir.path)"
+
+      # Ensure temp directory exists
+      mkdir -p "$TEMP_DIR"
+
+      # Run the conversion script to temp directory
+      swift "$CONVERT_SCRIPT" "$XCSTRINGS_FILE" "$TEMP_DIR"
+
+      # Copy generated files to final location for SwiftPM resource inclusion
+      # Note: Files are already in the bundle via build tool outputs, but we also
+      # copy to Assets/Localizations so SwiftPM can include them as declared resources
+      mkdir -p "$OUTPUT_DIR" 2>/dev/null || true
+
+      # Try to copy, but don't fail if it doesn't work (files are already in bundle)
+      if [ -d "$TEMP_DIR" ] && [ -w "$OUTPUT_DIR" ] 2>/dev/null; then
+        find "$OUTPUT_DIR" -maxdepth 1 -type d -name "*.lproj" -exec rm -rf {} + 2>/dev/null || true
+        for lproj_dir in "$TEMP_DIR"/*.lproj; do
+          if [ -d "$lproj_dir" ] && [ -f "$lproj_dir/Localizable.strings" ]; then
+            lang_name=$(basename "$lproj_dir")
+            target_dir="$OUTPUT_DIR/$lang_name"
+            rm -rf "$target_dir" 2>/dev/null || true
+            mkdir -p "$target_dir" 2>/dev/null || true
+            cat "$lproj_dir/Localizable.strings" > "$target_dir/Localizable.strings" 2>/dev/null || true
+          fi
+        done
+      fi
+      """
+
+    let localizationScriptFile = context.pluginWorkDirectoryURL.appendingPathComponent("convert_localization.sh")
+    try localizationScriptContent.write(to: localizationScriptFile, atomically: true, encoding: .utf8)
+
+    // Parse the xcstrings file to determine which languages exist
+    var localizationOutputFiles: [URL] = []
+    if FileManager.default.fileExists(atPath: xcstringsInput.path) {
+      do {
+        let data = try Data(contentsOf: xcstringsInput)
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let strings = json["strings"] as? [String: Any],
+          let sourceLanguage = json["sourceLanguage"] as? String
+        {
+          var languages: Set<String> = [sourceLanguage]
+
+          // Extract all languages from localizations
+          for (_, entry) in strings {
+            if let entryDict = entry as? [String: Any],
+              let localizations = entryDict["localizations"] as? [String: Any]
+            {
+              for lang in localizations.keys {
+                languages.insert(lang)
+              }
+            }
+          }
+
+          // Create output file URLs for each language (in temp dir for build tracking)
+          for lang in languages {
+            let lprojDir = localizationTempDir.appendingPathComponent("\(lang).lproj")
+            let stringsFile = lprojDir.appendingPathComponent("Localizable.strings")
+            localizationOutputFiles.append(stringsFile)
+          }
+        }
+      } catch {
+        // If parsing fails, we'll still try to run the conversion
+        print("Warning: Could not parse xcstrings file to determine languages: \(error)")
+      }
+    }
+
+    // If no output files were determined, use a marker file approach
+    if localizationOutputFiles.isEmpty {
+      let markerFile = localizationOutputDir.appendingPathComponent(".localization_complete")
+      localizationOutputFiles.append(markerFile)
+    }
+
     // Write the scripts to temporary files
     try versionScriptContent.write(to: versionScriptFile, atomically: true, encoding: String.Encoding.utf8)
     try registrationScriptContent.write(to: registrationScriptFile, atomically: true, encoding: String.Encoding.utf8)
@@ -131,6 +231,13 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
         executable: URL(fileURLWithPath: "/bin/sh"),
         arguments: [registrationScriptFile.path],
         outputFiles: [registrationOutputFile]
+      ),
+      .buildCommand(
+        displayName: "Convert XCStrings to .strings Plist Files",
+        executable: URL(fileURLWithPath: "/bin/sh"),
+        arguments: [localizationScriptFile.path],
+        inputFiles: [xcstringsInput],
+        outputFiles: localizationOutputFiles
       ),
     ]
   }

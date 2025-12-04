@@ -1,7 +1,7 @@
 @SceneScript
 class Test: Script {
 
-  @FindNode var catStatue: Node
+  @Ref var catStatue: Node
   //@SceneReference var stoveCloseup: Camera
 
   func showCat() {

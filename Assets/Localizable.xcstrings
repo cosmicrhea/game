@@ -1,35 +1,631 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Continue" : {
+    "" : {
+      "shouldTranslate" : false
+    },
+    "%@" : {
+      "shouldTranslate" : false
+    },
+    "Ambiance & Music Volume" : {
       "localizations" : {
-        "en" : {
+        "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "hwdeqd"
+            "value" : "Stemning og musikvolumen"
+          }
+        }
+      }
+    },
+    "Audio" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lyd"
+          }
+        }
+      }
+    },
+    "Auto-reload" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lad om automatisk"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilbage"
+          }
+        }
+      }
+    },
+    "Camera Wobble" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamerarysten"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annuller"
+          }
+        }
+      }
+    },
+    "Change Page" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skift side"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Luk"
+          }
+        }
+      }
+    },
+    "Color Space" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Farverum"
+          }
+        }
+      }
+    },
+    "Combine" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kombiner"
+          }
+        }
+      }
+    },
+    "Confirm" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bekræft"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fortsæt"
+          }
+        }
+      }
+    },
+    "Controller Vibration" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controllervibration"
+          }
+        }
+      }
+    },
+    "Controls" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Styring"
+          }
+        }
+      }
+    },
+    "Credits" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Om"
+          }
+        }
+      }
+    },
+    "Crouch Type" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hukketype"
+          }
+        }
+      }
+    },
+    "Cursor Lock" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cursorlås"
+          }
+        }
+      }
+    },
+    "Discard" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bortkast"
+          }
+        }
+      }
+    },
+    "Display" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visning"
+          }
+        }
+      }
+    },
+    "Display Language" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visningssprog"
+          }
+        }
+      }
+    },
+    "Display Mode" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visningsmodus"
+          }
+        }
+      }
+    },
+    "Equip" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Armer"
+          }
+        }
+      }
+    },
+    "Exchange" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Byt"
+          }
+        }
+      }
+    },
+    "Field of View" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synsfelt"
+          }
+        }
+      }
+    },
+    "Full Screen" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fuld skærm"
           }
         }
       }
     },
     "Give Up" : {
       "localizations" : {
-        "en" : {
+        "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "faskjh"
+            "value" : "Giv op"
+          }
+        }
+      }
+    },
+    "Graphics" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grafik"
+          }
+        }
+      }
+    },
+    "Hide Controls" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skjul HUD"
+          }
+        }
+      }
+    },
+    "High Dynamic Range" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Højt dynamisk område"
+          }
+        }
+      }
+    },
+    "Hold" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold"
+          }
+        }
+      }
+    },
+    "Inspect" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inspicer"
+          }
+        }
+      }
+    },
+    "Key Bindings" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastaturopsætning"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprog"
+          }
+        }
+      }
+    },
+    "Loading..." : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indlæser…"
+          }
+        }
+      }
+    },
+    "Make your way to Kastellet" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tag hen til Kastellet"
+          }
+        }
+      }
+    },
+    "Move" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flyt"
           }
         }
       }
     },
     "New Game" : {
-
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nyt spil"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fra"
+          }
+        }
+      }
+    },
+    "On" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Til"
+          }
+        }
+      }
     },
     "Options" : {
       "localizations" : {
-        "en" : {
+        "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "fasdhk'"
+            "value" : "Opsætning"
+          }
+        }
+      }
+    },
+    "Output Device" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Outputenhed"
+          }
+        }
+      }
+    },
+    "Play" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afspil"
+          }
+        }
+      }
+    },
+    "Press WASD to move" : {
+      "shouldTranslate" : false
+    },
+    "Reset" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nulstil"
+          }
+        }
+      }
+    },
+    "Resolution" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opløsning"
+          }
+        }
+      }
+    },
+    "Retrieve" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hent"
+          }
+        }
+      }
+    },
+    "Return to Game" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilbage til spillet"
+          }
+        }
+      }
+    },
+    "Rotate" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Roter"
+          }
+        }
+      }
+    },
+    "Run Type" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Løbetype"
+          }
+        }
+      }
+    },
+    "Select" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vælg"
+          }
+        }
+      }
+    },
+    "Skip" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spring over"
+          }
+        }
+      }
+    },
+    "Sort" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sorter"
+          }
+        }
+      }
+    },
+    "Sound Effects Volume" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lydeffektvolumen"
+          }
+        }
+      }
+    },
+    "Store" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem"
+          }
+        }
+      }
+    },
+    "Subtitles" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undertekster"
+          }
+        }
+      }
+    },
+    "Toggle" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skift"
+          }
+        }
+      }
+    },
+    "UI Volume" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grænsefladevolumen"
+          }
+        }
+      }
+    },
+    "Unequip" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tag af"
+          }
+        }
+      }
+    },
+    "Use" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brug"
+          }
+        }
+      }
+    },
+    "Voice Language" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stemmesprog"
+          }
+        }
+      }
+    },
+    "Voice Volume" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stemmevolumen"
+          }
+        }
+      }
+    },
+    "Windowed" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vindue"
+          }
+        }
+      }
+    },
+    "Zoom" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom"
           }
         }
       }

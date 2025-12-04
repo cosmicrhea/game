@@ -1,12 +1,12 @@
 // MARK: - Menu Item
 public struct MenuItem {
   public let id: String
-  public let label: String
+  public let label: LocalizedStringResource
   public let icon: Image?
   public let isEnabled: Bool
   public let action: () -> Void
 
-  public init(id: String, label: String, icon: Image? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+  public init(id: String, label: LocalizedStringResource, icon: Image? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
     self.id = id
     self.label = label
     self.icon = icon
@@ -345,7 +345,8 @@ public class PopupMenu {
 
       // Adjust text position based on whether there's an icon
       let textX = item.icon != nil ? position.x + iconMarginLeft + iconSize + iconMarginRight : position.x + padding
-      item.label.draw(
+      let label = Bundle.game.localizedString(forKey: item.label.key, locale: .game)
+      label.draw(
         at: Point(textX, textY),
         style: fadedTextStyle,
         anchor: .topLeft
@@ -449,7 +450,7 @@ public class PopupMenu {
 
     for item in menuItems {
       // This is a rough calculation - in a real implementation you'd measure text width
-      let estimatedWidth = Float(item.label.count) * 8.0 + padding * 2
+      let estimatedWidth = Float(item.label.key.count) * 8.0 + padding * 2
       maxWidth = max(maxWidth, estimatedWidth)
     }
 

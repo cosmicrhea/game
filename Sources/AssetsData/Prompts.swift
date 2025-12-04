@@ -35,7 +35,7 @@ public enum PromptGroup: String, CaseIterable {
   //   .mapView,
   // ]
 
-  @MainActor public static let prompts: OrderedDictionary<PromptGroup, OrderedDictionary<String, [[String]]>> = [
+  @MainActor public static let prompts: OrderedDictionary<PromptGroup, OrderedDictionary<LocalizedStringResource, [[String]]>> = [
     .skip: [
       "Skip": [["keyboard_tab_icon"], ["xbox_button_color_x"], ["playstation_button_color_square"]]
     ],

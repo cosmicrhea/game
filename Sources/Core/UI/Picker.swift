@@ -1,5 +1,3 @@
-
-
 /// A compact picker that centers the current option text and shows chevrons when focused.
 @MainActor
 public final class Picker: OptionsControl {
@@ -7,10 +5,25 @@ public final class Picker: OptionsControl {
   public var isFocused: Bool = false
 
   public var options: [String]
+  private var valueBinding: ConfigBinding<String>?
+  private var dictionaryOptions: [String: String]?
+
   public var selectedIndex: Int {
     didSet {
       selectedIndex = clampIndex(selectedIndex)
+      updateBindingFromIndex()
       if selectedIndex != oldValue { onSelectionChanged?(selectedIndex) }
+    }
+  }
+  public var selectedOption: String {
+    get {
+      guard options.indices.contains(selectedIndex) else { return options.first ?? "" }
+      return options[selectedIndex]
+    }
+    set {
+      if let index = options.firstIndex(of: newValue) {
+        selectedIndex = index
+      }
     }
   }
   public var onSelectionChanged: ((Int) -> Void)?
@@ -24,13 +37,92 @@ public final class Picker: OptionsControl {
   private let leftChevronImage = Image("UI/Icons/Carets/caret-left.png")
   private let rightChevronImage = Image("UI/Icons/Carets/caret-right.png")
 
-  public init(frame: Rect = .zero, options: [String], selectedIndex: Int = 0) {
+  @_disfavoredOverload
+  public init(frame: Rect = .zero, options: [String], selectedIndex: Int = 0, selectedOption: String? = nil) {
     self.frame = frame
     self.options = options
-    self.selectedIndex = max(0, min(selectedIndex, max(0, options.count - 1)))
+    self.valueBinding = nil
+    self.dictionaryOptions = nil
+    if let selectedOption = selectedOption, let index = self.options.firstIndex(of: selectedOption) {
+      self.selectedIndex = index
+    } else {
+      self.selectedIndex = max(0, min(selectedIndex, max(0, options.count - 1)))
+    }
+  }
+
+  /// Initialize with a simple array of options
+  public init(frame: Rect = .zero, options: [LocalizedStringResource], selectedIndex: Int = 0, selectedOption: String? = nil) {
+    self.frame = frame
+    self.options = options.map { $0.key }
+    self.valueBinding = nil
+    self.dictionaryOptions = nil
+    if let selectedOption = selectedOption, let index = self.options.firstIndex(of: selectedOption) {
+      self.selectedIndex = index
+    } else {
+      self.selectedIndex = max(0, min(selectedIndex, max(0, options.count - 1)))
+    }
+  }
+
+  /// Initialize with a ConfigBinding and dictionary mapping (e.g., ["en": "English", "da": "Danish"])
+  /// The binding stores the key (locale code), but the picker displays the value (display name).
+  public init(frame: Rect = .zero, value: ConfigBinding<String>, options: [String: String]) {
+    self.frame = frame
+    self.valueBinding = value
+    self.dictionaryOptions = options
+
+    // Create options array from dictionary values (display names), sorted
+    self.options = Array(options.values).sorted()
+
+    // Set initial selected index based on current binding value
+    let currentKey = value.wrappedValue
+    if let displayName = options[currentKey] {
+      self.selectedIndex = self.options.firstIndex(of: displayName) ?? 0
+    } else {
+      self.selectedIndex = 0
+    }
+
+    // Observe changes to the binding value
+    setupBindingObservation()
+  }
+
+  private func setupBindingObservation() {
+    // Binding observation is handled by checking the value in draw()
+  }
+
+  private func updateBindingFromIndex() {
+    guard let binding = valueBinding,
+      let dictOptions = dictionaryOptions,
+      selectedIndex < options.count
+    else { return }
+
+    let selectedDisplayName = options[selectedIndex]
+    // Find the key (locale code) that maps to this display name
+    if let localeCode = dictOptions.first(where: { $0.value == selectedDisplayName })?.key {
+      binding.wrappedValue = localeCode
+    }
+  }
+
+  private func updateIndexFromBinding() {
+    guard let binding = valueBinding,
+      let dictOptions = dictionaryOptions
+    else { return }
+
+    let currentKey = binding.wrappedValue
+    if let displayName = dictOptions[currentKey],
+      let index = options.firstIndex(of: displayName)
+    {
+      if selectedIndex != index {
+        selectedIndex = index
+      }
+    }
   }
 
   public func draw() {
+    // Update from binding if we have one (sync external changes)
+    if valueBinding != nil {
+      updateIndexFromBinding()
+    }
+
     // Subtle background
     RoundedRect(frame, cornerRadius: backgroundCornerRadius).draw(color: backgroundColor)
 
@@ -62,8 +154,12 @@ public final class Picker: OptionsControl {
         width: rightSize.width,
         height: rightSize.height
       )
-      ctx.renderer.drawImage(textureID: leftChevronImage.textureID, in: leftRect, tint: .gray300, strokeWidth: 0, strokeColor: nil, shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
-      ctx.renderer.drawImage(textureID: rightChevronImage.textureID, in: rightRect, tint: .gray300, strokeWidth: 0, strokeColor: nil, shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
+      ctx.renderer.drawImage(
+        textureID: leftChevronImage.textureID, in: leftRect, tint: .gray300, strokeWidth: 0, strokeColor: nil,
+        shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
+      ctx.renderer.drawImage(
+        textureID: rightChevronImage.textureID, in: rightRect, tint: .gray300, strokeWidth: 0, strokeColor: nil,
+        shadowColor: nil, shadowOffset: Point(0, 0), shadowBlur: 0)
     }
   }
 

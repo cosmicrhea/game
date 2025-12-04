@@ -1,4 +1,4 @@
-name: build
+name: Build for Windows
 
 on:
   workflow_dispatch:
@@ -8,21 +8,9 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macOS
-            runner: macos-15
-          - os: Linux
-            runner: ubuntu-22.04
-          - os: Windows
-            runner: windows-2022
-    runs-on: ${{ matrix.runner }}
-    name: ${{ matrix.os }}
+    runs-on: windows-2022
     env:
       GAME_LOCAL_DEPS: "0"
-      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
       - name: Checkout glass
         uses: actions/checkout@v4
@@ -30,14 +18,7 @@ jobs:
           path: glass
           lfs: true
 
-      - name: Set up Swift 6.2 (Linux)
-        if: runner.os == 'Linux'
-        uses: mman/setup-swift@main
-        with:
-          swift-version: "6.2"
-
-      - name: Set up Swift 6.2 (Windows)
-        if: runner.os == 'Windows'
+      - name: Set up Swift 6.2
         run: |
           # Install winget if not available
           Write-Host "Checking for winget..."
@@ -147,79 +128,14 @@ jobs:
             }
           }
 
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew install assimp
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            xorg-dev \
-            libwayland-dev \
-            libxrandr-dev \
-            libxi-dev \
-            libxcursor-dev \
-            libxinerama-dev \
-            libxkbcommon-dev \
-            mesa-common-dev \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libudev-dev \
-            zlib1g-dev \
-            libassimp-dev
-
-      - name: Clear SwiftPM cache (macOS & Linux)
-        if: runner.os != 'Windows'
-        run: |
-          rm -rf ~/.swiftpm
-          rm -rf glass/.build
-          rm -rf glass/.swiftpm
-          rm -f glass/Package.resolved
-          cd glass && swift package clean
-
-      - name: Free up disk space (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          df -h
-          sudo apt-get clean
-          sudo apt-get autoremove -y
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo rm -rf /tmp/*
-          df -h
-
-      - name: Clear SwiftPM cache (Windows)
-        if: runner.os == 'Windows'
+      - name: Clear SwiftPM cache
         run: |
           Remove-Item -Recurse -Force "$env:USERPROFILE\.swiftpm" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "glass\.build" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "glass\.swiftpm" -ErrorAction SilentlyContinue
           Remove-Item -Force "glass\Package.resolved" -ErrorAction SilentlyContinue
 
-      # - name: Cache SwiftPM
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ~/.swiftpm
-      #       glass/.build
-      #     key: ${{ runner.os }}-spm-${{ hashFiles('glass/Package.resolved') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-spm-
-
-      - name: Show Swift version (macOS & Linux)
-        if: runner.os != 'Windows'
-        run: swift --version
-
-      - name: Show Swift version (Windows)
-        if: runner.os == 'Windows'
+      - name: Show Swift version
         run: |
           Write-Host "Checking Swift installation on Windows..."
           $swiftPaths = @(
@@ -236,19 +152,7 @@ jobs:
           Write-Host "Current PATH: $env:PATH"
           swift --version
 
-      - name: Check disk space before build
-        if: runner.os == 'Linux'
-        run: |
-          df -h
-          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
-
-      - name: Build (debug) - macOS & Linux
-        if: runner.os != 'Windows'
-        working-directory: glass
-        run: swift build --quiet --enable-experimental-prebuilts
-
-      - name: Build (debug) - Windows
-        if: runner.os == 'Windows'
+      - name: Build (debug)
         working-directory: glass
         run: |
           # Ensure Swift is in PATH for Windows
@@ -264,35 +168,7 @@ jobs:
           }
           swift build --quiet --enable-experimental-prebuilts
 
-      - name: Clean debug build artifacts (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          echo "Cleaning debug build to free space for release build..."
-          rm -rf glass/.build
-          df -h
-
-      - name: Build (release) - macOS & Linux
-        if: runner.os != 'Windows'
-        working-directory: glass
-        run: swift build -c release --quiet --enable-experimental-prebuilts
-
-      - name: Create macOS App Bundle
-        if: runner.os == 'macOS'
-        working-directory: glass
-        run: |
-          swift .scripts/make-app-bundle.swift
-          ls -la *.app
-
-      - name: Upload macOS App Bundle
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: glass-app-macos
-          path: glass/*.app
-          retention-days: 30
-
-      - name: Build (release) - Windows
-        if: runner.os == 'Windows'
+      - name: Build (release)
         working-directory: glass
         run: |
           # Ensure Swift is in PATH for Windows

@@ -1,0 +1,56 @@
+name: Build for macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      GAME_LOCAL_DEPS: "0"
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+    steps:
+      - name: Checkout glass
+        uses: actions/checkout@v4
+        with:
+          path: glass
+          lfs: true
+
+      - name: Install macOS dependencies
+        run: |
+          brew install assimp
+
+      - name: Clear SwiftPM cache
+        run: |
+          rm -rf ~/.swiftpm
+          rm -rf glass/.build
+          rm -rf glass/.swiftpm
+          rm -f glass/Package.resolved
+          cd glass && swift package clean
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        working-directory: glass
+        run: swift build --quiet --enable-experimental-prebuilts
+
+      - name: Build (release)
+        working-directory: glass
+        run: swift build -c release --quiet --enable-experimental-prebuilts
+
+      - name: Create macOS App Bundle
+        working-directory: glass
+        run: |
+          swift .scripts/make-app-bundle.swift
+          ls -la *.app
+
+      - name: Upload macOS App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: glass-app-macos
+          path: glass/*.app
+          retention-days: 30
