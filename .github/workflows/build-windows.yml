@@ -142,12 +142,20 @@ jobs:
             "$env:LOCALAPPDATA\Programs\Swift\bin",
             "C:\Program Files\Swift\bin"
           )
+          $swiftFound = $false
           foreach ($swiftPath in $swiftPaths) {
             if (Test-Path $swiftPath) {
               Write-Host "Found Swift at: $swiftPath"
               $env:PATH = "$swiftPath;$env:PATH"
+              echo "$swiftPath" >> $env:GITHUB_PATH
+              $swiftFound = $true
               break
             }
+          }
+          if (-not $swiftFound) {
+            Write-Host "ERROR: Swift not found in any expected path"
+            Write-Host "Checked paths: $($swiftPaths -join ', ')"
+            exit 1
           }
           Write-Host "Current PATH: $env:PATH"
           swift --version
@@ -163,6 +171,7 @@ jobs:
           foreach ($swiftPath in $swiftPaths) {
             if (Test-Path $swiftPath) {
               $env:PATH = "$swiftPath;$env:PATH"
+              echo "$swiftPath" >> $env:GITHUB_PATH
               break
             }
           }
@@ -179,6 +188,7 @@ jobs:
           foreach ($swiftPath in $swiftPaths) {
             if (Test-Path $swiftPath) {
               $env:PATH = "$swiftPath;$env:PATH"
+              echo "$swiftPath" >> $env:GITHUB_PATH
               break
             }
           }

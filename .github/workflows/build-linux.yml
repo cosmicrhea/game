@@ -12,10 +12,37 @@ jobs:
     env:
       GAME_LOCAL_DEPS: "0"
     steps:
-      - name: Checkout glass
+      - name: Free up disk space
+        run: |
+          df -h
+          echo "slaying unused toolchains…"
+
+          # android sdk (HUUUGE)
+          sudo rm -rf /usr/local/lib/android || true
+
+          # dotnet
+          sudo rm -rf /usr/share/dotnet || true
+
+          # docker images + cache
+          docker image prune -af || true
+          docker system prune -af || true
+
+          # haskell/ghc
+          sudo rm -rf /opt/ghc || true
+
+          # llvm (massive)
+          sudo rm -rf /usr/local/clang* /usr/local/llvm* || true
+
+          # large language/model packs you prob don't need
+          sudo rm -rf /usr/share/swift || true
+
+          echo "ok queen the disk is serving CLEAN ✨"
+          df -h
+
+      - name: Checkout game
         uses: actions/checkout@v4
         with:
-          path: glass
+          path: game
           lfs: true
 
       - name: Set up Swift 6.2
@@ -50,37 +77,10 @@ jobs:
       - name: Clear SwiftPM cache
         run: |
           rm -rf ~/.swiftpm
-          rm -rf glass/.build
-          rm -rf glass/.swiftpm
-          rm -f glass/Package.resolved
-          cd glass && swift package clean
-
-      - name: Free up disk space
-        run: |
-          df -h
-          echo "slaying unused toolchains…"
-
-          # android sdk (HUUUGE)
-          sudo rm -rf /usr/local/lib/android || true
-
-          # dotnet
-          sudo rm -rf /usr/share/dotnet || true
-
-          # docker images + cache
-          docker image prune -af || true
-          docker system prune -af || true
-
-          # haskell/ghc
-          sudo rm -rf /opt/ghc || true
-
-          # llvm (massive)
-          sudo rm -rf /usr/local/clang* /usr/local/llvm* || true
-
-          # large language/model packs you prob don't need
-          sudo rm -rf /usr/share/swift || true
-
-          echo "ok queen the disk is serving CLEAN ✨"
-          df -h
+          rm -rf game/.build
+          rm -rf game/.swiftpm
+          rm -f game/Package.resolved
+          cd game && swift package clean
 
       - name: Show Swift version
         run: swift --version
@@ -91,15 +91,15 @@ jobs:
           echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
 
       - name: Build (debug)
-        working-directory: glass
+        working-directory: game
         run: swift build --quiet --enable-experimental-prebuilts
 
       - name: Clean debug build artifacts
         run: |
           echo "Cleaning debug build to free space for release build..."
-          rm -rf glass/.build
+          rm -rf game/.build
           df -h
 
       - name: Build (release)
-        working-directory: glass
+        working-directory: game
         run: swift build -c release --quiet --enable-experimental-prebuilts
