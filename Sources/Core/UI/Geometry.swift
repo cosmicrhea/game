@@ -249,6 +249,24 @@ extension Rect {
     context.drawPath(path, color: color)
   }
 
+  /// Fills this rectangle in the current graphics context with a linear gradient.
+  /// - Parameters:
+  ///   - gradient: The gradient to fill the rectangle with.
+  ///   - angle: The angle of the gradient in degrees (0 = horizontal, 90 = vertical). Defaults to 0.
+  public func fill(with gradient: Gradient, angle: Float = 0) {
+    guard let context = GraphicsContext.current else { return }
+    context.drawLinearGradient(gradient, in: self, angle: angle)
+  }
+
+  /// Fills this rectangle in the current graphics context with a radial gradient.
+  /// - Parameters:
+  ///   - gradient: The gradient to fill the rectangle with.
+  ///   - center: The center point of the radial gradient (relative to the rectangle, 0,0 = top-left, 1,1 = bottom-right).
+  public func fill(with gradient: Gradient, center: Point) {
+    guard let context = GraphicsContext.current else { return }
+    context.drawRadialGradient(gradient, in: self, center: center)
+  }
+
   /// Draws a frame around the inside of this rectangle in the current graphics context with the specified color and line width.
   /// - Parameters:
   ///   - color: The color to stroke the frame with.

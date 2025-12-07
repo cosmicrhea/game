@@ -37,10 +37,9 @@ extension Bundle {
 }
 
 @main
-@objc
 @MainActor
-public final class Engine: NSObject {
-  @objc public static let shared = Engine()
+public final class Engine {
+  public static let shared = Engine()
 
   // TODO: learn about Swift concurrency and how to use it correctly
   private nonisolated(unsafe) static var _cachedViewportSize: Size = DESIGN_RESOLUTION
@@ -85,7 +84,7 @@ public final class Engine: NSObject {
     shared.run()
   }
 
-  @objc public func run() {
+  public func run() {
     #if DEBUG
       print("|ω･)ﾉ♡☆ (debug)")
     #else
@@ -275,7 +274,7 @@ public final class Engine: NSObject {
       //MainMenu(),
       UIDemo(),
       //DocumentDemo(),
-      //MovieDemo(),
+      MovieDemo(),
       ModelViewer(),
       CreditsScreen(),
 

@@ -144,7 +144,7 @@ let package = Package(
     .plugin(
       name: "GameBuildTools",
       capability: .buildTool,
-      path: "Sources/Core/Build"
+      path: "Sources/Core/Build",
     ),
   ]
 )

@@ -14,6 +14,10 @@ public protocol OptionsControl: AnyObject {
 
 extension OptionsControl {
   public var isFocusable: Bool { true }
+  @discardableResult public func handleKey(_ key: Keyboard.Key) -> Bool { return false }
+  @discardableResult public func handleMouseDown(at position: Point) -> Bool { return false }
+  public func handleMouseMove(at position: Point) {}
+  public func handleMouseUp() {}
 }
 
 /// Optional behavior for controls that support an Alt-click action (e.g., reset to default)

@@ -1,34 +1,5 @@
 import Foundation
 
-/// Decorative section header control that draws a title line
-final class EditorSectionHeader: OptionsControl {
-  var frame: Rect = .zero
-  var isFocused: Bool = false
-  var isFocusable: Bool { false }
-  private let title: String
-  private let titleStyle: TextStyle
-
-  init(title: String) {
-    self.title = title
-    // Use item name style for section headers
-    self.titleStyle = TextStyle.itemName
-  }
-
-  func draw() {
-    // Bottom-align the title so extra height adds margin above the header
-    title.draw(at: Point(frame.origin.x, frame.origin.y + 8), style: titleStyle, anchor: .bottomLeft)
-    // Thin separator line across near the bottom
-    let lineY = frame.origin.y + 6
-    let lineRect = Rect(x: frame.origin.x, y: lineY, width: frame.size.width, height: 1)
-    lineRect.fill(with: Color(1, 1, 1, 0.05))
-  }
-
-  func handleKey(_ key: Keyboard.Key) -> Bool { return false }
-  func handleMouseDown(at position: Point) -> Bool { return false }
-  func handleMouseMove(at position: Point) {}
-  func handleMouseUp() {}
-}
-
 public final class EditorPanel: OptionsPanel {
   private var editorProperties: [AnyEditorProperty] = []
   private var propertyGroups: [EditorPropertyGroup] = []
@@ -352,3 +323,37 @@ public final class EditorPanel: OptionsPanel {
     }
   }
 }
+
+/// Decorative section header control that draws a title line
+public final class EditorSectionHeader: OptionsControl {
+  public var frame: Rect = .zero
+  public var isFocused: Bool = false
+  public var isFocusable: Bool { false }
+  private let title: String
+  private let titleStyle: TextStyle
+
+  public init(title: String) {
+    self.title = title
+    // Use item name style for section headers
+    self.titleStyle = TextStyle.itemName
+  }
+
+  public func draw() {
+    // Bottom-align the title so extra height adds margin above the header
+    title.draw(at: Point(frame.origin.x, frame.origin.y + 8), style: titleStyle, anchor: .bottomLeft)
+    // Thin separator line across near the bottom
+    let lineY = frame.origin.y + 6
+    let lineRect = Rect(x: frame.origin.x, y: lineY, width: frame.size.width, height: 1)
+    lineRect.fill(with: Color(1, 1, 1, 0.05))
+  }
+}
+
+//// WTF????
+//@_silgen_name("_$s4Game19EditorSectionHeaderCAA14OptionsControlA2aDP15handleMouseDown2atSbAA5PointV_tFTW")
+//@MainActor
+//public func _EditorSectionHeader_handleMouseDown_witness(
+//    _ instance: EditorSectionHeader,
+//    _ position: Point
+//) -> Bool {
+//    return instance.handleMouseDown(at: position)
+//}

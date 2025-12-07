@@ -28,6 +28,9 @@ public struct SceneScriptMacro: MemberMacro {
 
     // Find all public instance methods (excluding inherited ones from Script base class)
     let methods = findSceneScriptMethods(in: classDecl)
+    
+    // Find all @Ref properties for validation
+    let refProperties = findRefProperties(in: classDecl)
 
     // Generate method registry
     let methodRegistry = generateMethodRegistry(className: className, methods: methods)
@@ -43,6 +46,9 @@ public struct SceneScriptMacro: MemberMacro {
 
     // Generate static property initializer for automatic registration
     let autoRegister = generateAutoRegister(className: className)
+    
+    // Generate validateRefs() method that eagerly accesses all @Ref properties
+    let validateRefs = generateValidateRefs(refProperties: refProperties)
 
     return [
       DeclSyntax(methodRegistry),
@@ -50,6 +56,7 @@ public struct SceneScriptMacro: MemberMacro {
       DeclSyntax(callMethod),
       DeclSyntax(registerMethod),
       DeclSyntax(autoRegister),
+      DeclSyntax(validateRefs),
     ]
   }
 
@@ -183,6 +190,62 @@ public struct SceneScriptMacro: MemberMacro {
       """
     )
   }
+
+  // Find all @Ref properties in the class
+  private static func findRefProperties(in classDecl: ClassDeclSyntax) -> [RefPropertyInfo] {
+    var refProperties: [RefPropertyInfo] = []
+
+    for member in classDecl.memberBlock.members {
+      guard let variableDecl = member.decl.as(VariableDeclSyntax.self) else { continue }
+
+      // Check if this variable has @Ref attribute
+      let hasRefAttribute = variableDecl.attributes.contains { attribute in
+        guard case let .attribute(attr) = attribute else { return false }
+        return attr.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "Ref"
+      }
+
+      guard hasRefAttribute else { continue }
+
+      // Get the property name
+      guard let binding = variableDecl.bindings.first,
+        let identifier = binding.pattern.as(IdentifierPatternSyntax.self)
+      else {
+        continue
+      }
+
+      let propertyName = identifier.identifier.text
+      refProperties.append(RefPropertyInfo(name: propertyName))
+    }
+
+    return refProperties
+  }
+
+  // Generate validateRefs() method that eagerly accesses all @Ref properties
+  private static func generateValidateRefs(refProperties: [RefPropertyInfo]) -> FunctionDeclSyntax {
+    if refProperties.isEmpty {
+      return try! FunctionDeclSyntax(
+        """
+        override func validateRefs() {
+          // No @Ref properties to validate
+        }
+        """
+      )
+    }
+
+    // Generate access statements for each ref property
+    let accessStatements = refProperties.map { ref in
+      "_ = self.\(ref.name)"
+    }.joined(separator: "\n    ")
+
+    return try! FunctionDeclSyntax(
+      """
+      override func validateRefs() {
+        // Eagerly access all @Ref properties to catch missing nodes/cameras early
+        \(raw: accessStatements)
+      }
+      """
+    )
+  }
 }
 
 private struct SceneScriptMacroError: Error {
@@ -195,4 +258,8 @@ private struct SceneScriptMacroError: Error {
 private struct MethodInfo {
   let name: String
   let isAsync: Bool
+}
+
+private struct RefPropertyInfo {
+  let name: String
 }

@@ -243,9 +243,9 @@ private let startingEntry = "8"
     logger.trace("✅ Loaded \(foregroundMeshInstances.count) foreground mesh instances")
   }
 
-  /// Spawn enemies from Enemy_* nodes in the scene
-  private func spawnEnemiesFromScene(scene: Scene) {
-    var enemyCount = 0
+  /// Extract enemy spawn points from Enemy_* nodes in the scene
+  private func extractEnemySpawnPoints(from scene: Scene) -> [EnemySpawnPoint] {
+    var spawnPoints: [EnemySpawnPoint] = []
 
     func traverse(_ node: Node) {
       // Check if this node is an enemy spawn point
@@ -266,32 +266,16 @@ private let startingEntry = "8"
         let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
 
         // Extract forward direction and calculate rotation (same as entry positioning)
-        let fwd = vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
-        let yaw = atan2(fwd.x, fwd.z)
+        let forward = vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
+        let yaw = atan2(forward.x, forward.z)
         let rotation = yaw - (.pi * 0.5)
 
-        // Adjust Y position to account for capsule half-height (enemies spawn at center)
-        let capsuleHalfHeight: Float = 0.8
-        let adjustedPosition = vec3(position.x, position.y + capsuleHalfHeight, position.z)
-
-        // Spawn appropriate enemy type
-        let enemyType: Enemy.Type
-        switch baseTypeName.lowercased() {
-        case "civilian":
-          enemyType = CivilianEnemy.self
-        case "dog":
-          enemyType = DogEnemy.self
-        default:
-          logger.warning("⚠️ Unknown enemy type '\(baseTypeName)' at node '\(nodeName)'")
-          return
-        }
-
-        if let _ = enemySystem.spawnEnemy(enemyType, at: adjustedPosition, rotation: rotation) {
-          enemyCount += 1
-          logger.trace("✅ Spawned \(baseTypeName) enemy at \(position)")
-        } else {
-          logger.warning("⚠️ Failed to spawn \(baseTypeName) enemy at node '\(nodeName)'")
-        }
+        spawnPoints.append(
+          EnemySpawnPoint(
+            position: position,
+            rotation: rotation,
+            typeName: baseTypeName
+          ))
       }
 
       // Recursively traverse children
@@ -301,10 +285,7 @@ private let startingEntry = "8"
     }
 
     traverse(scene.rootNode)
-
-    if enemyCount > 0 {
-      logger.debug("✅ Spawned \(enemyCount) enemies from scene")
-    }
+    return spawnPoints
   }
 
   /// Get lighting from scene lights (returns main light and fill light)
@@ -469,13 +450,15 @@ private let startingEntry = "8"
             // Dialog finished, dismiss it (disables input synchronously)
             dialogView.dismiss()
           }
-        } else {
+        } else if !cameraSystem.isInCloseup {
           // No dialog showing, handle interaction with detected action
           interactionSystem.handleInteraction(sceneScript: sceneScript)
         }
         return
 
       case .space:
+        guard !cameraSystem.isInCloseup else { return }
+
         // Handle aim mode (Space) - toggle mode only
         if dialogView.isActive {
           // If dialog is showing, try to advance it
@@ -505,10 +488,14 @@ private let startingEntry = "8"
       // Handle other gameplay keys
       switch key {
       case .tab, .i:
+        // Block inventory during closeups
+        guard !cameraSystem.isInCloseup else { return }
         UISound.select()
         showMainMenu(tab: .inventory)
 
       case .m:
+        // Block map during closeups
+        guard !cameraSystem.isInCloseup else { return }
         UISound.select()
         showMainMenu(tab: .map)
 
@@ -519,7 +506,7 @@ private let startingEntry = "8"
           cameraSystem.setDebugCameraOverrideMode(false)
         } else {
           // Show pause screen if no other UI is showing and dialog is not active
-          if !dialogView.isActive {
+          if !dialogView.isActive && !cameraSystem.isInCloseup {
             UISound.select()
             showPauseScreen()
           }
@@ -788,6 +775,9 @@ private let startingEntry = "8"
 
     sceneScript = script
     logger.trace("✅ Loaded scene script: \(className)")
+
+    // Validate @Ref properties before sceneDidLoad() to catch missing nodes/cameras early
+    sceneScript?.validateRefs()
 
     // Call sceneDidLoad() after initialization
     sceneScript?.sceneDidLoad()
@@ -1093,7 +1083,8 @@ private let startingEntry = "8"
       loadForegroundMeshes(scene: scene)
 
       // Spawn enemies from Enemy_* nodes
-      spawnEnemiesFromScene(scene: scene)
+      let enemySpawnPoints = extractEnemySpawnPoints(from: scene)
+      enemySystem.spawnFromPoints(enemySpawnPoints)
 
       // Initialize prerendered environment for the scene
       let cameraName = prerenderedCameraName ?? "1"
@@ -1182,8 +1173,8 @@ private let startingEntry = "8"
       // Update main menu
       mainMenu.update(window: window, deltaTime: deltaTime)
     } else {
-      // Only handle movement if dialog is not active and input is enabled
-      if !dialogView.isActive && Input.player1.isEnabled {
+      // Only handle movement if dialog is not active, not in closeup, and input is enabled
+      if !dialogView.isActive && !cameraSystem.isInCloseup && Input.player1.isEnabled {
         // Handle WASD movement
         playerController.update(
           keyboard: window.keyboard,

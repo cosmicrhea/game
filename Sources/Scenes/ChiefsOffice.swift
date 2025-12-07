@@ -5,7 +5,7 @@ class ChiefsOffice: Script {
   @Ref var laptop: Camera
 
   func chiefsDoor() {
-    goTo(scene: "nexus", entry: "8")
+    goTo(scene: .nexus, entry: "8")
   }
 
   func laptop() async {

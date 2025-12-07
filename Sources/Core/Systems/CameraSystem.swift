@@ -22,8 +22,13 @@ public final class CameraSystem {
   // Script-driven camera overrides (used when scene scripts request closeups)
   private var scriptCameraOverrideStack: [CameraStateSnapshot] = []
 
+  /// Whether a script-driven closeup is currently active (blocks player movement/inventory)
+  public var isInCloseup: Bool {
+    return !scriptCameraOverrideStack.isEmpty
+  }
+
   private var isCameraOverrideActive: Bool {
-    return isDebugCameraOverrideMode || !scriptCameraOverrideStack.isEmpty
+    return isDebugCameraOverrideMode || isInCloseup
   }
 
   // MARK: - References

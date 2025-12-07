@@ -50,29 +50,41 @@ jobs:
         with:
           swift-version: "6.2"
 
+      - name: Check disk space before installing dependencies
+        run: |
+          df -h
+          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            xorg-dev \
-            libwayland-dev \
-            libxrandr-dev \
-            libxi-dev \
-            libxcursor-dev \
-            libxinerama-dev \
-            libxkbcommon-dev \
-            mesa-common-dev \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libudev-dev \
-            zlib1g-dev \
             libassimp-dev
+
+      # - name: Install Linux dependencies
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y \
+      #       build-essential \
+      #       cmake \
+      #       ninja-build \
+      #       pkg-config \
+      #       xorg-dev \
+      #       libwayland-dev \
+      #       libxrandr-dev \
+      #       libxi-dev \
+      #       libxcursor-dev \
+      #       libxinerama-dev \
+      #       libxkbcommon-dev \
+      #       mesa-common-dev \
+      #       libgl1-mesa-dev \
+      #       libglu1-mesa-dev \
+      #       libasound2-dev \
+      #       libpulse-dev \
+      #       libudev-dev \
+      #       zlib1g-dev \
+      #       libassimp-dev
 
       - name: Clear SwiftPM cache
         run: |

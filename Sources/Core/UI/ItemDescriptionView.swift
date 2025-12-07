@@ -15,13 +15,27 @@ final class ItemDescriptionView {
 
   /// Draw the item description at the bottom-right of the screen
   @MainActor func draw() {
-    itemCallout.draw()
+    //    itemCallout.draw()
+
+    //Gradient(colors: [.red, .blue])
+    // Rect.zero.
 
     let panelWidth: Float = 512
     let panelHeight: Float = 128
     let marginY: Float = 96
     let paddingX: Float = 32
     let paddingY: Float = 20
+
+    let dividerGradient = Gradient(colors: [.white.withAlphaComponent(0.15), .clear], locations: [0.6, 1.0])
+
+    let panelX = Engine.viewportSize.width - panelWidth + paddingX / 2
+    let topDivider = Rect(x: panelX, y: marginY + panelHeight, width: 512, height: 2)
+    // let middleDivider = Rect(x: panelX, y: marginY + panelHeight - paddingY, width: 512, height: 2)
+    let bottomDivider = Rect(x: panelX, y: marginY, width: 512, height: 2)
+
+    topDivider.fill(with: dividerGradient)
+    // middleDivider.fill(with: dividerGradient)
+    bottomDivider.fill(with: dividerGradient)
 
     let labelX: Float = Engine.viewportSize.width - panelWidth + paddingX
     let labelY: Float = marginY + panelHeight - paddingY

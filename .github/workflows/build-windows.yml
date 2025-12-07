@@ -12,10 +12,10 @@ jobs:
     env:
       GAME_LOCAL_DEPS: "0"
     steps:
-      - name: Checkout glass
+      - name: Checkout game
         uses: actions/checkout@v4
         with:
-          path: glass
+          path: game
           lfs: true
 
       - name: Set up Swift 6.2
@@ -131,9 +131,9 @@ jobs:
       - name: Clear SwiftPM cache
         run: |
           Remove-Item -Recurse -Force "$env:USERPROFILE\.swiftpm" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "glass\.build" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "glass\.swiftpm" -ErrorAction SilentlyContinue
-          Remove-Item -Force "glass\Package.resolved" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "game\.build" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "game\.swiftpm" -ErrorAction SilentlyContinue
+          Remove-Item -Force "game\Package.resolved" -ErrorAction SilentlyContinue
 
       - name: Show Swift version
         run: |
@@ -161,7 +161,7 @@ jobs:
           swift --version
 
       - name: Build (debug)
-        working-directory: glass
+        working-directory: game
         run: |
           # Ensure Swift is in PATH for Windows
           $swiftPaths = @(
@@ -178,7 +178,7 @@ jobs:
           swift build --quiet --enable-experimental-prebuilts
 
       - name: Build (release)
-        working-directory: glass
+        working-directory: game
         run: |
           # Ensure Swift is in PATH for Windows
           $swiftPaths = @(

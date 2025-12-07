@@ -1,7 +1,3 @@
-import Foundation
-
-import func Foundation.NSLocalizedString
-
 final class PauseScreen: Screen {
   private let listMenu = ListMenu()
 

@@ -5,7 +5,14 @@
       "shouldTranslate" : false
     },
     "%@" : {
-      "shouldTranslate" : false
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
+          }
+        }
+      }
     },
     "Ambiance & Music Volume" : {
       "localizations" : {

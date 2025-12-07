@@ -9,6 +9,7 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
 
     let registrationOutputFile = context.pluginWorkDirectoryURL.appendingPathComponent("SceneScriptRegistration.swift")
     let registrationScriptFile = context.pluginWorkDirectoryURL.appendingPathComponent("generate_registration.sh")
+    let scenesDirectory = context.package.directoryURL.appendingPathComponent("Sources/Scenes")
 
     // Localization conversion setup
     // Output to plugin work directory first, then copy to Assets/Localizations
@@ -77,6 +78,20 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
         done
       fi
 
+      # Function to convert PascalCase to snake_case (macOS compatible)
+      # e.g., "ChiefsOffice" -> "chiefs_office", "Nexus" -> "nexus"
+      pascal_to_snake() {
+        echo "$1" | sed 's/\\([A-Z]\\)/_\\1/g' | sed 's/^_//' | tr '[:upper:]' '[:lower:]'
+      }
+
+      # Function to convert PascalCase to camelCase (macOS compatible)
+      # e.g., "ChiefsOffice" -> "chiefsOffice", "Nexus" -> "nexus"
+      pascal_to_camel() {
+        local first_char=$(echo "$1" | cut -c1 | tr '[:upper:]' '[:lower:]')
+        local rest=$(echo "$1" | cut -c2-)
+        echo "${first_char}${rest}"
+      }
+
       # Generate registration code that will be embedded in ScriptHotReload.swift
       # We'll generate a function that calls _register() on each script class
       cat > "\(registrationOutputFile.path)" << 'REGEOF'
@@ -99,6 +114,27 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
       fi
 
       cat >> "\(registrationOutputFile.path)" << 'REGEOF'
+      }
+
+      /// Auto-generated enum of all scene names
+      /// Use with `goTo(scene: .sceneName)` for type-safe scene navigation
+      extension Scene {
+        enum Name: String, CaseIterable {
+      REGEOF
+
+      # Generate enum cases for each scene
+      if [ -n "$CLASSES" ]; then
+        for class_name in $CLASSES; do
+          # Convert PascalCase class name to snake_case scene name
+          scene_name=$(pascal_to_snake "$class_name")
+          # The enum case name should be camelCase (first letter lowercase)
+          case_name=$(pascal_to_camel "$class_name")
+          echo "    case $case_name = \\\"$scene_name\\\"" >> "\(registrationOutputFile.path)"
+        done
+      fi
+
+      cat >> "\(registrationOutputFile.path)" << 'REGEOF'
+        }
       }
       REGEOF
 
@@ -215,6 +251,21 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
       localizationOutputFiles.append(markerFile)
     }
 
+    // Collect all Swift files in Sources/Scenes as input files for registration
+    var sceneScriptInputFiles: [URL] = []
+    if FileManager.default.fileExists(atPath: scenesDirectory.path) {
+      let enumerator = FileManager.default.enumerator(
+        at: scenesDirectory,
+        includingPropertiesForKeys: nil,
+        options: [.skipsHiddenFiles]
+      )
+      while let fileURL = enumerator?.nextObject() as? URL {
+        if fileURL.pathExtension == "swift" {
+          sceneScriptInputFiles.append(fileURL)
+        }
+      }
+    }
+
     // Write the scripts to temporary files
     try versionScriptContent.write(to: versionScriptFile, atomically: true, encoding: String.Encoding.utf8)
     try registrationScriptContent.write(to: registrationScriptFile, atomically: true, encoding: String.Encoding.utf8)
@@ -230,6 +281,7 @@ struct BuildToolPlugin: PackagePlugin.BuildToolPlugin {
         displayName: "Generate Scene Script Registration",
         executable: URL(fileURLWithPath: "/bin/sh"),
         arguments: [registrationScriptFile.path],
+        inputFiles: sceneScriptInputFiles,
         outputFiles: [registrationOutputFile]
       ),
       .buildCommand(
