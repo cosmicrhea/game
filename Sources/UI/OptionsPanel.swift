@@ -70,20 +70,50 @@ public class OptionsPanel: Screen {
     func handleMouseUp() {}
   }
 
+  /// Represents a label that can be either a String or a LocalizedStringResource
+  enum RowLabel {
+    case string(String)
+    case localized(LocalizedStringResource)
+
+    /// Get the localized string value for rendering
+    @MainActor
+    func resolvedString() -> String {
+      switch self {
+      case .string(let str):
+        return str
+      case .localized(let lsr):
+        return Bundle.game.localizedString(forKey: lsr.key, locale: .game)
+      }
+    }
+  }
+
   struct Row {
-    let label: LocalizedStringResource
+    let label: RowLabel
     let control: OptionsControl
 
-    /// Convenience initializer for button rows that trigger an action.
+    /// Convenience initializer for button rows that trigger an action with a LocalizedStringResource.
     @MainActor
     init(button label: LocalizedStringResource, action: @escaping () -> Void) {
-      self.label = label
+      self.label = .localized(label)
       self.control = ButtonRow(action: action)
     }
 
-    /// Standard initializer for rows with a control.
+    /// Convenience initializer for button rows that trigger an action with a String.
+    @MainActor
+    init(button label: String, action: @escaping () -> Void) {
+      self.label = .string(label)
+      self.control = ButtonRow(action: action)
+    }
+
+    /// Standard initializer for rows with a control and LocalizedStringResource label.
     init(label: LocalizedStringResource, control: OptionsControl) {
-      self.label = label
+      self.label = .localized(label)
+      self.control = control
+    }
+
+    /// Standard initializer for rows with a control and String label.
+    init(label: String, control: OptionsControl) {
+      self.label = .string(label)
       self.control = control
     }
   }
@@ -120,7 +150,7 @@ public class OptionsPanel: Screen {
       if focusViaKeyboard, let focusedIndex, focusedIndex == i, rows[i].control.isFocusable {
         focusRing.draw(around: r, intensity: 1.0, paddingX: 8, paddingY: 4)
       }
-      let label = Bundle.game.localizedString(forKey: row.label.key, locale: .game)
+      let label = row.label.resolvedString()
       let labelSize = label.size(with: labelStyle)
       let labelY = r.origin.y + (rowHeight - labelSize.height) * 0.5
       label.draw(at: Point(r.origin.x, labelY), style: labelStyle, anchor: .bottomLeft)

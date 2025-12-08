@@ -68,7 +68,7 @@ for camera in cameras:
 	if camera.type != "CAMERA" or "-noimp" in camera.name or camera.hide_render:
 		continue
 
-	camera_name = camera.name.removeprefix("Camera_").removeprefix("Camera.")
+	camera_name = camera.name.removeprefix("Camera_").removeprefix("Camera.").removeprefix("@Camera ")
 
 	if getenv("CAMERAS") and getenv("CAMERAS") not in camera_name:
 		# print("Skipping camera " + camera_name, flush=True)

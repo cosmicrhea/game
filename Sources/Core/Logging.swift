@@ -1,3 +1,4 @@
+import Foundation
 import Logging
 
 let logger = {
@@ -29,5 +30,35 @@ extension Logger {
     glGetProgramInfoLog(program, logLength, nil, &infoLog)
 
     error(infoLog)
+  }
+
+  /// Measures execution time and logs it with the specified level (defaults to .info)
+  func measure(_ message: String, level: Logger.Level = .info, _ closure: () throws -> Void) rethrows {
+    let startTime = ProcessInfo.processInfo.systemUptime
+    try closure()
+    let elapsedTime = ProcessInfo.processInfo.systemUptime - startTime
+
+    let formattedTime = formatElapsedTime(elapsedTime)
+    self.log(level: level, "\(formattedTime) \(message)")
+  }
+
+  /// Measures execution time and logs it with the specified level (defaults to .info), returning the closure's result
+  func measure<T>(_ message: String, level: Logger.Level = .info, _ closure: () throws -> T) rethrows -> T {
+    let startTime = ProcessInfo.processInfo.systemUptime
+    let result = try closure()
+    let elapsedTime = ProcessInfo.processInfo.systemUptime - startTime
+
+    let formattedTime = formatElapsedTime(elapsedTime)
+    self.log(level: level, "\(formattedTime) \(message)")
+    return result
+  }
+
+  private func formatElapsedTime(_ seconds: Double) -> String {
+    if seconds < 1.0 {
+      let milliseconds = Int(seconds * 1000)
+      return "[\(milliseconds) ms]"
+    } else {
+      return String(format: "[%.2f s]", seconds)
+    }
   }
 }

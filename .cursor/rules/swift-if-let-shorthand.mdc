@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+In modern Swift, you can write `if let x` instead of `if let x = x`.

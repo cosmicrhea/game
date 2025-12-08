@@ -177,110 +177,107 @@ public final class PhysicsWorld {
     // Simple object layer for static collision bodies
     let staticLayer: ObjectLayer = 1
 
-    func traverse(_ node: Node) {
-      if let name = node.name, name.contains("-col") {
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    // Use scene.collisionNodes instead of manual traversal
+    for node in scene.collisionNodes {
+      let name = node.name
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
-        // Get mesh from this node
-        if node.numberOfMeshes > 0 {
-          let meshIndex = node.meshes[0]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
+      // Get mesh from this node
+      if node.numberOfMeshes > 0 {
+        let meshIndex = node.meshes[0]
+        if meshIndex < scene.meshes.count {
+          let mesh = scene.meshes[Int(meshIndex)]
 
-            // Extract triangles from mesh and transform them to world space (includes scale/rotation/translation)
-            // We transform to world space because the visual meshes are rendered with world transforms
-            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+          // Extract triangles from mesh and transform them to world space (includes scale/rotation/translation)
+          // We transform to world space because the visual meshes are rendered with world transforms
+          let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
 
-            guard !triangles.isEmpty else { return }
+          guard !triangles.isEmpty else { continue }
 
-            // Create mesh shape from triangles (already in world space, no body transform needed)
-            let meshShape = MeshShape(triangles: triangles)
+          // Create mesh shape from triangles (already in world space, no body transform needed)
+          let meshShape = MeshShape(triangles: triangles)
 
-            // Position is at origin since triangles are already in world space
-            let position = vec3(0, 0, 0)
+          // Position is at origin since triangles are already in world space
+          let position = vec3(0, 0, 0)
 
-            // Rotation is identity since triangles are already in world space
-            let rotation = Quat.identity
+          // Rotation is identity since triangles are already in world space
+          let rotation = Quat.identity
 
-            // Create body settings
-            let bodySettings = BodyCreationSettings(
-              shape: meshShape,
-              position: RVec3(x: position.x, y: position.y, z: position.z),
-              rotation: rotation,
-              motionType: .static,
-              objectLayer: staticLayer
-            )
+          // Create body settings
+          let bodySettings = BodyCreationSettings(
+            shape: meshShape,
+            position: RVec3(x: position.x, y: position.y, z: position.z),
+            rotation: rotation,
+            motionType: .static,
+            objectLayer: staticLayer
+          )
 
-            // Create and add body to physics system
-            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-            if bodyID != 0 {
-              collisionBodyIDs.append(bodyID)
-              logger.trace("✅ Created collision body ID: \(bodyID) for node '\(name)'")
-            } else {
-              logger.error("❌ Failed to create collision body for node '\(name)'")
-            }
+          // Create and add body to physics system
+          let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+          if bodyID != 0 {
+            collisionBodyIDs.append(bodyID)
+            logger.trace("✅ Created collision body ID: \(bodyID) for node '\(name)'")
+          } else {
+            logger.error("❌ Failed to create collision body for node '\(name)'")
           }
         }
       }
-      for child in node.children { traverse(child) }
     }
-    traverse(scene.rootNode)
   }
 
-  /// Load action bodies from scene
+  /// Load action bodies from scene (includes both @Action and @Door nodes)
   public func loadActionBodies(scene: Scene) {
     let bodyInterface = physicsSystem.bodyInterface()
 
     // Simple object layer for static action bodies (same as collision bodies)
     let staticLayer: ObjectLayer = 1
 
-    func traverse(_ node: Node) {
-      if let name = node.name, name.contains("-action") {
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    // Use scene.actionNodes and scene.doorNodes (treat doors as actions for interaction)
+    let allActionNodes = scene.actionNodes + scene.doorNodes
+    for node in allActionNodes {
+      let name = node.name
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
-        // Get mesh from this node
-        if node.numberOfMeshes > 0 {
-          let meshIndex = node.meshes[0]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
+      // Get mesh from this node
+      if node.numberOfMeshes > 0 {
+        let meshIndex = node.meshes[0]
+        if meshIndex < scene.meshes.count {
+          let mesh = scene.meshes[Int(meshIndex)]
 
-            // Extract triangles from mesh and transform them to world space
-            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+          // Extract triangles from mesh and transform them to world space
+          let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
 
-            guard !triangles.isEmpty else { return }
+          guard !triangles.isEmpty else { continue }
 
-            // Create mesh shape from triangles (already in world space)
-            let meshShape = MeshShape(triangles: triangles)
+          // Create mesh shape from triangles (already in world space)
+          let meshShape = MeshShape(triangles: triangles)
 
-            // Position is at origin since triangles are already in world space
-            let position = vec3(0, 0, 0)
-            let rotation = Quat.identity
+          // Position is at origin since triangles are already in world space
+          let position = vec3(0, 0, 0)
+          let rotation = Quat.identity
 
-            // Create body settings - mark as sensor so it doesn't collide but triggers
-            let bodySettings = BodyCreationSettings(
-              shape: meshShape,
-              position: RVec3(x: position.x, y: position.y, z: position.z),
-              rotation: rotation,
-              motionType: .static,
-              objectLayer: staticLayer
-            )
-            bodySettings.isSensor = true  // Make it a sensor/trigger
+          // Create body settings - mark as sensor so it doesn't collide but triggers
+          let bodySettings = BodyCreationSettings(
+            shape: meshShape,
+            position: RVec3(x: position.x, y: position.y, z: position.z),
+            rotation: rotation,
+            motionType: .static,
+            objectLayer: staticLayer
+          )
+          bodySettings.isSensor = true  // Make it a sensor/trigger
 
-            // Create and add body to physics system
-            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-            if bodyID != 0 {
-              // Store mapping from body ID to node name
-              actionBodyNames[bodyID] = name
-              logger.trace("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
-            } else {
-              logger.error("❌ Failed to create action trigger body for node '\(name)'")
-            }
+          // Create and add body to physics system
+          let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+          if bodyID != 0 {
+            // Store mapping from body ID to node name
+            actionBodyNames[bodyID] = name
+            logger.trace("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
+          } else {
+            logger.error("❌ Failed to create action trigger body for node '\(name)'")
           }
         }
       }
-      for child in node.children { traverse(child) }
     }
-    traverse(scene.rootNode)
   }
 
   /// Load trigger bodies from scene
@@ -290,53 +287,53 @@ public final class PhysicsWorld {
     // Simple object layer for static trigger bodies (same as collision bodies)
     let staticLayer: ObjectLayer = 1
 
-    func traverse(_ node: Node) {
-      if let name = node.name, name.contains("-trigger") || name.hasPrefix("CameraTrigger_") {
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    // Use scene.triggerNodes and scene.cameraTriggerNodes instead of manual traversal
+    let allTriggerNodes = scene.triggerNodes + scene.cameraTriggerNodes
 
-        // Get mesh from this node
-        if node.numberOfMeshes > 0 {
-          let meshIndex = node.meshes[0]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
+    for node in allTriggerNodes {
+      let name = node.name
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
 
-            // Extract triangles from mesh and transform them to world space
-            let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+      // Get mesh from this node
+      if node.numberOfMeshes > 0 {
+        let meshIndex = node.meshes[0]
+        if meshIndex < scene.meshes.count {
+          let mesh = scene.meshes[Int(meshIndex)]
 
-            guard !triangles.isEmpty else { return }
+          // Extract triangles from mesh and transform them to world space
+          let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
 
-            // Create mesh shape from triangles (already in world space)
-            let meshShape = MeshShape(triangles: triangles)
+          guard !triangles.isEmpty else { continue }
 
-            // Position is at origin since triangles are already in world space
-            let position = vec3(0, 0, 0)
-            let rotation = Quat.identity
+          // Create mesh shape from triangles (already in world space)
+          let meshShape = MeshShape(triangles: triangles)
 
-            // Create body settings - mark as sensor so it doesn't collide but triggers
-            let bodySettings = BodyCreationSettings(
-              shape: meshShape,
-              position: RVec3(x: position.x, y: position.y, z: position.z),
-              rotation: rotation,
-              motionType: .static,
-              objectLayer: staticLayer
-            )
-            bodySettings.isSensor = true  // Make it a sensor/trigger
+          // Position is at origin since triangles are already in world space
+          let position = vec3(0, 0, 0)
+          let rotation = Quat.identity
 
-            // Create and add body to physics system
-            let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-            if bodyID != 0 {
-              // Store mapping from body ID to node name
-              triggerBodyNames[bodyID] = name
-              logger.trace("✅ Created trigger body ID: \(bodyID) for node '\(name)'")
-            } else {
-              logger.error("❌ Failed to create trigger body for node '\(name)'")
-            }
+          // Create body settings - mark as sensor so it doesn't collide but triggers
+          let bodySettings = BodyCreationSettings(
+            shape: meshShape,
+            position: RVec3(x: position.x, y: position.y, z: position.z),
+            rotation: rotation,
+            motionType: .static,
+            objectLayer: staticLayer
+          )
+          bodySettings.isSensor = true  // Make it a sensor/trigger
+
+          // Create and add body to physics system
+          let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+          if bodyID != 0 {
+            // Store mapping from body ID to node name
+            triggerBodyNames[bodyID] = name
+            logger.trace("✅ Created trigger body ID: \(bodyID) for node '\(name)'")
+          } else {
+            logger.error("❌ Failed to create trigger body for node '\(name)'")
           }
         }
       }
-      for child in node.children { traverse(child) }
     }
-    traverse(scene.rootNode)
   }
 
   /// Create ground plane

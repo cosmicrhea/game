@@ -297,7 +297,7 @@ final class InventoryView: RenderLoop {
       if let slotData = slotGrid.getSlotData(at: slotIndex), let item = slotData.item {
         logger.trace("Discarding item: \(item.name)")
         if slotGrid.equippedWeaponIndex == slotIndex { slotGrid.setEquippedWeaponIndex(nil) }
-        slotGrid.setSlotData(nil, at: slotIndex)
+        slotGrid.setSlotData(ItemSlotData(item: nil, quantity: nil), at: slotIndex)
       }
       break
     case .store, .retrieve:

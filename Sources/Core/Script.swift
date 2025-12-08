@@ -20,9 +20,44 @@ class Character {
 
   func play(animation animationName: String) {}
 
-  func teleport(to waypointName: String) {}
-  func walk(to waypointName: String) {}
-  func run(to waypointName: String) {}
+  @MainActor
+  func teleport(to waypointName: String) {
+    // Use scene.waypointNode(named:) to find waypoints
+    guard let mainLoop = MainLoop.shared,
+      let scene = mainLoop.scene,
+      scene.waypointNode(named: waypointName) != nil
+    else {
+      logger.warning("⚠️ Waypoint '\(waypointName)' not found")
+      return
+    }
+    // TODO: Implement teleportation logic
+  }
+
+  @MainActor
+  func walk(to waypointName: String) {
+    // Use scene.waypointNode(named:) to find waypoints
+    guard let mainLoop = MainLoop.shared,
+      let scene = mainLoop.scene,
+      scene.waypointNode(named: waypointName) != nil
+    else {
+      logger.warning("⚠️ Waypoint '\(waypointName)' not found")
+      return
+    }
+    // TODO: Implement walking logic
+  }
+
+  @MainActor
+  func run(to waypointName: String) {
+    // Use scene.waypointNode(named:) to find waypoints
+    guard let mainLoop = MainLoop.shared,
+      let scene = mainLoop.scene,
+      scene.waypointNode(named: waypointName) != nil
+    else {
+      logger.warning("⚠️ Waypoint '\(waypointName)' not found")
+      return
+    }
+    // TODO: Implement running logic
+  }
 
 }
 
@@ -121,57 +156,34 @@ class Script {
   }
 
   /// Find a node by name, searching from the root node
-  /// Matches exact names or names with dashed suffixes (e.g., "CatStatue" matches "CatStatue-fg")
+  /// Matches base names (e.g., "CatStatue" matches "@Foreground CatStatue")
   func findNode(_ name: String) -> Node? {
-    return findNode(named: name, in: scene.rootNode)
-  }
-
-  private func findNode(named name: String, in node: Node) -> Node? {
-    // Check if this node matches (exact match or starts with name followed by dash)
-    if let nodeName = node.name {
-      if nodeName == name || nodeName.hasPrefix("\(name)-") {
+    // Use node's baseName property to match base names
+    func search(_ node: Node) -> Node? {
+      if node.baseName == name {
         return node
       }
-    }
-
-    // Recursively search children
-    for child in node.children {
-      if let found = findNode(named: name, in: child) {
-        return found
+      for child in node.children {
+        if let found = search(child) {
+          return found
+        }
       }
+      return nil
     }
-
-    return nil
+    return search(scene.rootNode)
   }
 
   /// Find a camera by name
-  /// The name should match the camera's name property (e.g., "Camera_desk" or "desk" -> "Camera_desk")
-  /// Tries exact match, then with Camera_ prefix, then lowercase variations
+  /// The name should match the camera's base name (e.g., "desk" finds "@Camera desk")
+  /// Uses scene.camera(named:) to find the Assimp.Camera
   func findCamera(_ name: String) -> Assimp.Camera? {
-    // Try exact match first
-    if let camera = scene.cameras.first(where: { $0.name == name }) {
-      return camera
-    }
-
-    // Try with Camera_ prefix if not already present
-    let cameraName = name.hasPrefix("Camera_") ? name : "Camera_\(name)"
-    if let camera = scene.cameras.first(where: { $0.name == cameraName }) {
-      return camera
-    }
-
-    // Try lowercase version (e.g., "Camera_Desk" -> "Camera_desk")
-    let lowercaseName = cameraName.lowercased()
-    if lowercaseName != cameraName {
-      return scene.cameras.first(where: { $0.name == lowercaseName })
-    }
-
-    return nil
+    return scene.camera(named: name)
   }
 
   func loadScene(_ name: String, entry entryName: String? = nil) {}
 
   /// Transition to a different entry in the current scene
-  /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
+  /// - Parameter entry: The entry name (e.g., "hallway", "@Entry 2")
   @MainActor func goTo(entry entryName: String) {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
@@ -183,7 +195,7 @@ class Script {
   }
 
   /// Transition to a different entry in the current scene (async version that waits for completion)
-  /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
+  /// - Parameter entry: The entry name (e.g., "hallway", "@Entry 2")
   @MainActor func goTo(entry entryName: String) async {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
@@ -195,7 +207,7 @@ class Script {
   /// Transition to a different scene
   /// - Parameters:
   ///   - scene: The scene name to load
-  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  ///   - entry: Optional entry name (defaults to "1" if not specified)
   @MainActor func goTo(scene sceneName: String, entry: String? = nil) {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
@@ -209,7 +221,7 @@ class Script {
   /// Transition to a different scene (async version that waits for completion)
   /// - Parameters:
   ///   - scene: The scene name to load
-  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  ///   - entry: Optional entry name (defaults to "1" if not specified)
   @MainActor func goTo(scene sceneName: String, entry: String? = nil) async {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot transition: MainLoop.shared is nil")
@@ -221,7 +233,7 @@ class Script {
   /// Transition to a different scene (type-safe version)
   /// - Parameters:
   ///   - scene: The scene to load (from auto-generated Scene.Name enum)
-  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  ///   - entry: Optional entry name (defaults to "1" if not specified)
   @MainActor func goTo(scene: Scene.Name, entry: String? = nil) {
     goTo(scene: scene.rawValue, entry: entry)
   }
@@ -229,7 +241,7 @@ class Script {
   /// Transition to a different scene (async type-safe version that waits for completion)
   /// - Parameters:
   ///   - scene: The scene to load (from auto-generated Scene.Name enum)
-  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  ///   - entry: Optional entry name (defaults to "1" if not specified)
   @MainActor func goTo(scene: Scene.Name, entry: String? = nil) async {
     await goTo(scene: scene.rawValue, entry: entry)
   }
@@ -237,7 +249,7 @@ class Script {
   /// Runs work while forcing the camera to a specific closeup.
   /// Camera triggers are temporarily ignored until the closure finishes.
   /// - Parameters:
-  ///   - cameraName: Name of the camera trigger/cut (e.g., "stove.001" or "Entry_1").
+  ///   - cameraName: Name of the camera trigger/cut (e.g., "stove.001" or "@Entry 1").
   ///   - perform: The work to execute during the closeup.
   @discardableResult
   func withCloseup<T>(on cameraName: String, perform: () throws -> T) rethrows -> T {

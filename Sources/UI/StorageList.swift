@@ -182,7 +182,7 @@ final class StorageList {
     case .f, .space, .enter, .numpadEnter:
       // Show menu for selected item, or handle empty row
       if let slotData = getSlotData(at: selectedIndex), slotData.item != nil {
-        showMenuForSelectedItem()
+        showMenuForSelectedItem(openedWithKeyboard: true)
       } else {
         // Empty row - trigger special action
         onItemSelected?(selectedIndex)
@@ -223,7 +223,7 @@ final class StorageList {
     if rowIndex == selectedIndex {
       // Same item clicked - show menu if item, or trigger empty row action
       if let slotData = getSlotData(at: selectedIndex), slotData.item != nil {
-        showMenuForSelectedItem()
+        showMenuForSelectedItem(openedWithKeyboard: false)
       } else {
         onItemSelected?(selectedIndex)
         UISound.select()
@@ -234,7 +234,7 @@ final class StorageList {
     return true
   }
 
-  private func showMenuForSelectedItem() {
+  private func showMenuForSelectedItem(openedWithKeyboard: Bool = false) {
     guard let slotData = getSlotData(at: selectedIndex), slotData.item != nil else { return }
 
     // Get row position for menu
@@ -260,7 +260,8 @@ final class StorageList {
       actions: [
         ("Retrieve", .retrieve),
         ("Inspect", .inspect),
-      ]
+      ],
+      openedWithKeyboard: openedWithKeyboard
     )
     UISound.select()
   }
@@ -306,7 +307,7 @@ final class StorageList {
     // Collect all non-empty slots with their indices
     var itemsWithIndices: [(index: Int, slotData: ItemSlotData)] = []
     for (index, slotData) in inventory.slots.enumerated() {
-      if let slotData = slotData, slotData.item != nil {
+      if slotData.item != nil {
         itemsWithIndices.append((index: index, slotData: slotData))
       }
     }

@@ -118,14 +118,14 @@ class NodeAnimator {
     let nodeTransform = node.transformation.mat4Representation
 
     // Get animated transform if available
-    let animatedTransform = nodeTransforms[node.name ?? ""] ?? mat4(1)
+    let animatedTransform = nodeTransforms[node.name] ?? mat4(1)
 
     // Calculate global transform
     let globalTransform = parentTransform * nodeTransform * animatedTransform
 
     // Store the transform if this is a bone
-    if let nodeName = node.name, !nodeName.isEmpty {
-      boneTransforms[nodeName] = globalTransform
+    if !node.name.isEmpty {
+      boneTransforms[node.name] = globalTransform
     }
 
     // Process children

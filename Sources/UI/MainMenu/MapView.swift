@@ -155,6 +155,13 @@ class MapView: RenderLoop {
     "chiefs_office": "Chief's Office",
   ]
 
+  // Override area display names for specific scenes
+  // Key: "sceneName:areaName", Value: display name (can include newlines)
+  private let areaDisplayNames: [String: String] = [
+    "shooting_range:Control Room": "Control\nRoom",
+    "shooting_range:Hallway": "",
+  ]
+
   var currentMapName: String {
     guard currentMapIndex >= 0 && currentMapIndex < availableMaps.count else {
       return availableMaps[0]
@@ -237,7 +244,7 @@ class MapView: RenderLoop {
         let scenePath = Bundle.game.path(forResource: "Scenes/\(mapName)", ofType: "glb")!
         let assimpScene = try Assimp.Scene(
           file: scenePath,
-          flags: [.triangulate, .flipUVs, .calcTangentSpace]
+          flags: [.triangulate, .flipUVs, .calcTangentSpace, .removeComponent]
         )
         await MainActor.run {
           self.scene = Scene(assimpScene)
@@ -251,35 +258,26 @@ class MapView: RenderLoop {
   private func setupMapRendering() {
     guard let scene = scene else { return }
 
-    // Find and set up Camera_0 (debug/orthographic camera)
-    if let cameraNode = scene.rootNode.findNode(named: "Camera_0") {
+    // Find and set up @Camera 0 (debug/orthographic camera)
+    if let cameraNode = scene.cameraNode(named: "0") {
       debugCameraNode = cameraNode
       debugCameraWorldTransform = cameraNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
     }
 
-    if let camera = scene.cameras.first(where: { $0.name == "Camera_0" }) {
+    if let cameraNode = scene.cameraNode(named: "0"),
+      let camera = scene.cameras.first(where: { $0.name == cameraNode.name })
+    {
       debugCamera = camera
     }
 
-    // Find floor nodes (children of area nodes)
-    let floorNodes = findNodesContaining(keywords: ["Floor"], in: scene.rootNode)
+    // Use scene.floorNodes instead of manual traversal
+    let floorNodes = scene.floorNodes
 
-    // Find door action nodes: must contain "Door" and end with "-action"
-    let allDoorNodes = findNodesContaining(keywords: ["Door"], in: scene.rootNode)
-    let doorActionNodes = allDoorNodes.filter { node in
-      guard let name = node.name else { return false }
-      return name.hasSuffix("-action")
-    }
+    // Use all door nodes (doors are treated the same as actions for interaction)
+    let doorActionNodes = scene.doorNodes
 
-    // Find actual area nodes (exclude parent "Rooms" node - only get nodes that end with "-col" or are children)
-    let allAreaNodes = findNodesContaining(keywords: ["Room"], in: scene.rootNode)
-    let areaNodes = allAreaNodes.filter { node in
-      // Only include nodes that are actual areas (have "-col" suffix or are children of Rooms)
-      if let name = node.name {
-        return name.contains("-col") || name == "HallwayRoom-col" || name == "ShootingRangeRoom-col"
-      }
-      return false
-    }
+    // Find actual area nodes: use scene.areaNodes
+    let areaNodes = scene.areaNodes
 
     // Store area data for labels (only actual area nodes)
     for node in areaNodes {
@@ -1199,7 +1197,9 @@ class MapView: RenderLoop {
 
     // Setup rendering on first draw when scene is loaded (when GraphicsContext is guaranteed to be available)
     if !isSetupComplete {
-      setupMapRendering()
+      logger.measure("Setup map rendering") {
+        setupMapRendering()
+      }
       isSetupComplete = true
     }
 
@@ -1378,7 +1378,7 @@ class MapView: RenderLoop {
         continue
       }
       let nodeName = meshInstance.node?.name ?? ""
-      let isLocked = nodeName.contains("frontdoor") || nodeName.lowercased().contains("front")
+      let isLocked = !nodeName.isEmpty && (nodeName.contains("frontdoor") || nodeName.lowercased().contains("front"))
 
       // Use appropriate door color based on lock status
       let doorColor = isLocked ? doorLockedColor : doorUnlockedColor
@@ -1488,11 +1488,12 @@ class MapView: RenderLoop {
 
     let labelStyle = TextStyle.itemDescription
       .withFontSize(scaledFontSize)
+      .withAlignment(.center)
       .withShadow(width: shadowBlur, offset: shadowOffset, color: shadowColor)
 
     // Draw area labels
     var areaNumber = 1
-    for (index, (_, floorNode, boundingBox)) in areaData.enumerated() {
+    for (index, (areaNode, floorNode, boundingBox)) in areaData.enumerated() {
       // Check area visibility mask
       if !isAreaVisible(index: index) {
         areaNumber += 1  // Still increment to keep numbering consistent
@@ -1516,22 +1517,32 @@ class MapView: RenderLoop {
       // Note: We flip the sign to match the map's coordinate system
       let screenY = centerY + ndcY * (viewportSize.height / 2.0)
 
-      // Get label from Floor node's metadata or name, otherwise use default
+      // Get label from areaDisplayNames override, area node's baseName, Floor node's metadata/name, or default
       let labelText: String
-      if let floorNode = floorNode {
-        // First try metadata
+
+      // First check for display name override
+      let areaBaseName = areaNode.baseName
+      let sceneName = currentMapName
+      let overrideKey = "\(sceneName):\(areaBaseName)"
+      if let overrideName = areaDisplayNames[overrideKey] {
+        labelText = overrideName
+      } else if !areaBaseName.isEmpty && areaBaseName != areaNode.name {
+        // Use area node's baseName (e.g., "@Area Hallway" -> "Hallway")
+        labelText = areaBaseName
+      } else if let floorNode = floorNode {
+        // Try floor node's metadata
         if let metadata = floorNode.metadata?.metadata["label"],
           case .string(let labelString) = metadata
         {
           labelText = labelString
-        }
-        // Then try extracting from node name using regex: "Floor (Label Text)"
-        else if let nodeName = floorNode.name,
-          let match = nodeName.firstMatch(of: /Floor\s*\(([^)]+)\)/)
-        {
-          labelText = String(match.1)
         } else {
-          labelText = "Area \(areaNumber)"
+          // Try floor node's baseName
+          let floorBaseName = floorNode.baseName
+          if !floorBaseName.isEmpty && floorBaseName != floorNode.name {
+            labelText = floorBaseName
+          } else {
+            labelText = "Area \(areaNumber)"
+          }
         }
       } else {
         labelText = "Area \(areaNumber)"
@@ -1815,7 +1826,8 @@ class MapView: RenderLoop {
   private func findMapMarkers(in scene: Scene) {
     mapMarkers.removeAll()
 
-    let markerNodes = findNodesContaining(keywords: ["MapMarker"], in: scene.rootNode)
+    // Use scene.mapMarkerNodes instead of manual traversal
+    let markerNodes = scene.mapMarkerNodes
 
     for node in markerNodes {
       let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
@@ -1898,33 +1910,15 @@ class MapView: RenderLoop {
     }
   }
 
-  /// Find all nodes containing any of the specified keywords in their names
-  private func findNodesContaining(keywords: [String], in node: Node) -> [Node] {
-    var result: [Node] = []
-
-    if let nodeName = node.name {
-      for keyword in keywords {
-        if nodeName.contains(keyword) {
-          result.append(node)
-          break
-        }
-      }
-    }
-
-    for child in node.children {
-      result.append(contentsOf: findNodesContaining(keywords: keywords, in: child))
-    }
-
-    return result
-  }
-
   /// Find the Floor node within an area node's children
   private func findFloorNode(in areaNode: Node) -> Node? {
-    // Search recursively through children for a node with "Floor" in its name
-    if let nodeName = areaNode.name, nodeName.contains("Floor") {
+    // Check if this node itself is a floor node
+    guard let scene = scene else { return nil }
+    if scene.hasHint(areaNode, hint: .floor) {
       return areaNode
     }
 
+    // Search recursively through children for a floor node
     for child in areaNode.children {
       if let floorNode = findFloorNode(in: child) {
         return floorNode

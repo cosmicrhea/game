@@ -8,6 +8,12 @@
       "localizations" : {
         "da" : {
           "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%(variableName)@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
             "state" : "translated",
             "value" : "%@"
           }

@@ -213,95 +213,83 @@ private let startingEntry = "1"
     }
   }
 
-  /// Load foreground meshes from nodes with -fg suffix (recursively includes subnodes)
+  /// Load foreground meshes from nodes with @Foreground hint
   private func loadForegroundMeshes(scene: Scene) {
     foregroundMeshInstances.removeAll()
 
-    func traverse(_ node: Node) {
-      // Check if this node has -fg suffix
-      if let name = node.name, name.hasSuffix("-fg") {
-        // Get all meshes from this node (create MeshInstance regardless of isHidden)
-        // Visibility is checked at render time
-        for i in 0..<node.numberOfMeshes {
-          let meshIndex = node.meshes[i]
-          if meshIndex < scene.meshes.count {
-            let mesh = scene.meshes[Int(meshIndex)]
+    // Use scene.foregroundNodes instead of manual traversal
+    for node in scene.foregroundNodes {
+      let name = node.name
 
-            // Only create instance if mesh has vertices
-            guard mesh.numberOfVertices > 0 else { continue }
+      // Get all meshes from this node (create MeshInstance regardless of isHidden)
+      // Visibility is checked at render time
+      for i in 0..<node.numberOfMeshes {
+        let meshIndex = node.meshes[i]
+        if meshIndex < scene.meshes.count {
+          let mesh = scene.meshes[Int(meshIndex)]
 
-            // Get transform matrix for this mesh
-            let transformMatrix = scene.getTransformMatrix(for: mesh)
+          // Only create instance if mesh has vertices
+          guard mesh.numberOfVertices > 0 else { continue }
 
-            // Create MeshInstance (reusing existing init!)
-            let meshInstance = MeshInstance(
-              scene: scene,
-              mesh: mesh,
-              transformMatrix: transformMatrix,
-              sceneIdentifier: scene.filePath
-            )
+          // Get transform matrix for this mesh
+          let transformMatrix = scene.getTransformMatrix(for: mesh)
 
-            // Store node reference for checking visibility at render time
-            meshInstance.node = node
+          // Create MeshInstance (reusing existing init!)
+          let meshInstance = MeshInstance(
+            scene: scene,
+            mesh: mesh,
+            transformMatrix: transformMatrix,
+            sceneIdentifier: scene.filePath
+          )
 
-            foregroundMeshInstances.append(meshInstance)
-            logger.trace("✅ Created foreground MeshInstance for node '\(name)' mesh \(i)")
-          }
+          // Store node reference for checking visibility at render time
+          meshInstance.node = node
+
+          foregroundMeshInstances.append(meshInstance)
+          logger.trace("✅ Created foreground MeshInstance for node '\(name)' mesh \(i)")
         }
-      }
-
-      // Recursively traverse children (even if this node doesn't have -fg, children might)
-      for child in node.children {
-        traverse(child)
       }
     }
 
-    traverse(scene.rootNode)
     logger.trace("✅ Loaded \(foregroundMeshInstances.count) foreground mesh instances")
   }
 
-  /// Extract enemy spawn points from Enemy_* nodes in the scene
+  /// Extract enemy spawn points from @Enemy nodes in the scene
   private func extractEnemySpawnPoints(from scene: Scene) -> [EnemySpawnPoint] {
     var spawnPoints: [EnemySpawnPoint] = []
 
-    func traverse(_ node: Node) {
-      // Check if this node is an enemy spawn point
-      if let nodeName = node.name, nodeName.hasPrefix("Enemy_") {
-        // Extract enemy type from name (e.g., "Enemy_Civilian", "Enemy_Dog.001")
-        let enemyTypeName = String(nodeName.dropFirst("Enemy_".count))
+    // Use scene.enemyNodes instead of manual traversal
+    for node in scene.enemyNodes {
+      let nodeName = node.name
 
-        // Remove any numeric suffix (e.g., ".001", ".002") for type matching
-        let baseTypeName: String
-        if let dotIndex = enemyTypeName.firstIndex(of: ".") {
-          baseTypeName = String(enemyTypeName[..<dotIndex])
-        } else {
-          baseTypeName = enemyTypeName
-        }
+      // Extract enemy type from base name (e.g., "@Enemy Civilian", "@Enemy Dog.001")
+      let baseName = scene.extractBaseName(from: nodeName)
 
-        // Get world transform for position and rotation
-        let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-        let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
-
-        // Extract forward direction and calculate rotation (same as entry positioning)
-        let forward = vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
-        let yaw = atan2(forward.x, forward.z)
-        let rotation = yaw - (.pi * 0.5)
-
-        spawnPoints.append(
-          EnemySpawnPoint(
-            position: position,
-            rotation: rotation,
-            typeName: baseTypeName
-          ))
+      // Remove any numeric suffix (e.g., ".001", ".002") for type matching
+      let baseTypeName: String
+      if let dotIndex = baseName.firstIndex(of: ".") {
+        baseTypeName = String(baseName[..<dotIndex])
+      } else {
+        baseTypeName = baseName
       }
 
-      // Recursively traverse children
-      for child in node.children {
-        traverse(child)
-      }
+      // Get world transform for position and rotation
+      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
+
+      // Extract forward direction and calculate rotation (same as entry positioning)
+      let forward = vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
+      let yaw = atan2(forward.x, forward.z)
+      let rotation = yaw - (.pi * 0.5)
+
+      spawnPoints.append(
+        EnemySpawnPoint(
+          position: position,
+          rotation: rotation,
+          typeName: baseTypeName
+        ))
     }
 
-    traverse(scene.rootNode)
     return spawnPoints
   }
 
@@ -874,23 +862,20 @@ private let startingEntry = "1"
   }
 
   /// Normalize entries/camera identifiers so area comparisons stay consistent
-  /// - "Entry_1" -> "1"
-  /// - "Entry_hallway" -> "hallway"
+  /// - "@Entry 1" -> "1"
+  /// - "@Entry hallway" -> "hallway"
   /// - "hallway_2" -> "hallway"
   /// - "hallway" -> "hallway"
   /// - "1" -> "1"
   private func normalizedAreaIdentifier(_ name: String) -> String {
     guard !name.isEmpty else { return name }
 
-    var identifier = name
+    guard let scene = self.scene else { return name }
 
-    if identifier.hasPrefix("Entry_") {
-      let suffix = identifier.dropFirst("Entry_".count)
-      if !suffix.isEmpty {
-        identifier = String(suffix)
-      }
-    }
+    // Extract base name using scene's extractBaseName (handles @Entry format)
+    var identifier = scene.extractBaseName(from: name)
 
+    // Remove numeric suffix if present (e.g., "hallway_2" -> "hallway")
     if let underscoreIndex = identifier.lastIndex(of: "_") {
       let suffixStart = identifier.index(after: underscoreIndex)
       if suffixStart < identifier.endIndex {
@@ -906,31 +891,24 @@ private let startingEntry = "1"
 
   /// Determine the best camera node to activate when loading/transitioning scenes
   private func preferredCameraNodeName(for entry: String, in scene: Scene) -> String? {
-    var candidates: [String] = []
-    var seen: Set<String> = []
+    // Extract base name from entry (handles @Entry format)
+    let entryBaseName = scene.extractBaseName(from: entry)
 
-    func addCandidate(_ name: String) {
-      guard !name.isEmpty, !seen.contains(name) else { return }
-      candidates.append(name)
-      seen.insert(name)
-    }
-
-    if !entry.hasPrefix("Entry_") {
-      addCandidate("Camera_\(entry)_1")
-    }
-
-    addCandidate("Camera_1")
-
-    for camera in scene.cameras {
-      if let cameraName = camera.name {
-        addCandidate(cameraName)
+    // Try entry-specific camera first (e.g., "hallway" -> "@Camera hallway_1")
+    if !entryBaseName.isEmpty {
+      if let cameraNode = scene.cameraNode(named: "\(entryBaseName)_1") {
+        return cameraNode.name
       }
     }
 
-    for candidate in candidates {
-      if scene.rootNode.findNode(named: candidate) != nil {
-        return candidate
-      }
+    // Try default camera "1"
+    if let cameraNode = scene.cameraNode(named: "1") {
+      return cameraNode.name
+    }
+
+    // Fall back to first available camera node
+    if let firstCameraNode = scene.cameraNodes.first {
+      return firstCameraNode.name
     }
 
     return nil
@@ -938,19 +916,15 @@ private let startingEntry = "1"
 
   /// Position player at an entry node
   /// - Parameters:
-  ///   - entryName: The entry name (e.g., "Entry_1", "hallway" will look for "Entry_hallway")
+  ///   - entryName: The entry name (e.g., "@Entry 1", "1" will look for "@Entry 1")
   ///   - scene: The scene to search for the entry in
   private func positionPlayerAtEntry(_ entryName: String, in scene: Scene) {
-    // Try to find entry with exact name first, then try with "Entry_" prefix
-    let entryNodeName: String
-    if entryName.hasPrefix("Entry_") {
-      entryNodeName = entryName
-    } else {
-      entryNodeName = "Entry_\(entryName)"
-    }
+    // Extract base name from entry (handles @Entry format)
+    let entryBaseName = scene.extractBaseName(from: entryName)
 
-    guard let entryNode = scene.rootNode.findNode(named: entryNodeName) else {
-      logger.warning("⚠️ Entry node not found: \(entryNodeName)")
+    // Use scene.entryNode(named:) to find the entry
+    guard let entryNode = scene.entryNode(named: entryBaseName) else {
+      logger.warning("⚠️ Entry node not found: \(entryBaseName)")
       return
     }
 
@@ -969,7 +943,7 @@ private let startingEntry = "1"
     playerController.setPosition(adjustedPosition, rotation: entryRotation)
     playerController.setSpawn(position: extractedPosition, rotation: entryRotation)  // Keep spawn position at feet for reference
 
-    logger.trace("🚀 Positioned player at \(entryNodeName): \(extractedPosition)")
+    logger.trace("🚀 Positioned player at \(entryBaseName): \(extractedPosition)")
   }
 
   /// Transition to a different entry in the current scene
@@ -990,31 +964,37 @@ private let startingEntry = "1"
     positionPlayerAtEntry(entry, in: currentScene)
 
     // Try to switch camera based on convention:
-    // - Named areas (like "hallway"): try "Camera_hallway_1", fall back to "Camera_1"
-    // - Unnamed areas (like "Entry_1"): try "Camera_1"
-    let cameraName: String
+    // - Named areas (like "@Entry hallway"): try "@Camera hallway_1", fall back to "@Camera 1"
+    // - Unnamed areas (like "@Entry 1"): try "@Camera 1"
+    let entryBaseName = currentScene.extractBaseName(from: entry)
+    let cameraNodeName: String
     let prerenderedCameraName: String
-    if entry.hasPrefix("Entry_") {
-      // Unnamed area - just use Camera_1
-      cameraName = "Camera_1"
-      // For prerendered environment, Entry_1 -> "1", Entry_2 -> "2", etc.
-      let entrySuffix = String(entry.dropFirst(6))  // Remove "Entry_" prefix
-      prerenderedCameraName = entrySuffix
-    } else {
-      // Named area - try "Camera_{area}_1", fall back to "Camera_1"
-      let areaCameraName = "Camera_\(entry)_1"
-      if currentScene.rootNode.findNode(named: areaCameraName) != nil {
-        cameraName = areaCameraName
-        // For prerendered environment, "hallway" -> "hallway_1"
-        prerenderedCameraName = "\(entry)_1"
+
+    // Check if entry base name is just a number (unnamed area)
+    if entryBaseName.allSatisfy({ $0.isNumber }) {
+      // Unnamed area - just use Camera 1
+      if let cameraNode = currentScene.cameraNode(named: "1") {
+        cameraNodeName = cameraNode.name
       } else {
-        cameraName = "Camera_1"
+        cameraNodeName = "@Camera 1"
+      }
+      prerenderedCameraName = entryBaseName
+    } else {
+      // Named area - try "@Camera {area}_1", fall back to "@Camera 1"
+      if let cameraNode = currentScene.cameraNode(named: "\(entryBaseName)_1") {
+        cameraNodeName = cameraNode.name
+        prerenderedCameraName = "\(entryBaseName)_1"
+      } else if let cameraNode = currentScene.cameraNode(named: "1") {
+        cameraNodeName = cameraNode.name
+        prerenderedCameraName = "1"
+      } else {
+        cameraNodeName = "@Camera 1"
         prerenderedCameraName = "1"
       }
     }
 
     // Switch 3D camera
-    cameraSystem.syncActiveCamera(name: cameraName)
+    cameraSystem.syncActiveCamera(name: cameraNodeName)
 
     // Switch prerendered environment camera
     try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
@@ -1036,7 +1016,7 @@ private let startingEntry = "1"
   /// Transition to a different scene
   /// - Parameters:
   ///   - scene: The scene name to load
-  ///   - entry: Optional entry name (defaults to "Entry_1" if not specified)
+  ///   - entry: Optional entry name (defaults to "1" if not specified)
   @MainActor func transition(toScene scene: String, entry: String? = nil) async {
     // Play door open sound before fading out
     UISound.doorOpenA()
@@ -1044,33 +1024,29 @@ private let startingEntry = "1"
     // Fade out
     await ScreenFade.shared.fadeToBlack(duration: 0.3)
 
-    // Load the new scene and position at entry (defaults to Entry_1 if not specified)
-    let entryName = entry ?? "Entry_1"
+    // Load the new scene and position at entry (defaults to "1" if not specified)
+    let entryName = entry ?? "1"
 
     // Determine prerendered camera name based on entry (same logic as transition(to:))
     // We need to determine this before loading the scene, but we'll need the scene to check for named cameras
     // So we'll load with a default and update if needed
-    let defaultPrerenderedCameraName: String
-    if entryName.hasPrefix("Entry_") {
-      // Unnamed area - Entry_1 -> "1", Entry_2 -> "2", etc.
-      let entrySuffix = String(entryName.dropFirst(6))  // Remove "Entry_" prefix
-      defaultPrerenderedCameraName = entrySuffix
-    } else {
-      // For named areas, we'll default to "1" and update after scene loads if needed
-      defaultPrerenderedCameraName = "1"
-    }
+    // Note: We can't use scene.extractBaseName yet since scene isn't loaded, so we'll handle this after loading
+    let defaultPrerenderedCameraName: String = "1"
 
     // Load the scene
     await loadScene(scene, entry: entryName, prerenderedCameraName: defaultPrerenderedCameraName)
 
     // If it's a named area, check if we need to update the camera
-    if !entryName.hasPrefix("Entry_"), let currentScene = self.scene {
-      let areaCameraName = "Camera_\(entryName)_1"
-      if currentScene.rootNode.findNode(named: areaCameraName) != nil {
-        let prerenderedCameraName = "\(entryName)_1"
+    if let currentScene = self.scene {
+      let entryBaseName = currentScene.extractBaseName(from: entryName)
+      // Check if entry base name is not just a number (named area)
+      if !entryBaseName.allSatisfy({ $0.isNumber }),
+        let cameraNode = currentScene.cameraNode(named: "\(entryBaseName)_1")
+      {
+        let prerenderedCameraName = "\(entryBaseName)_1"
         try? prerenderedEnvironment?.switchToCamera(prerenderedCameraName)
         cameraSystem.selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? prerenderedCameraName
-        cameraSystem.syncActiveCamera(name: areaCameraName)
+        cameraSystem.syncActiveCamera(name: cameraNode.name)
       }
     }
 
@@ -1086,10 +1062,9 @@ private let startingEntry = "1"
   /// Load a scene by name, setting up everything (scene, physics, prerendered environment, player position)
   /// - Parameters:
   ///   - sceneName: The scene name to load
-  ///   - entry: The entry name to position player at (defaults to "Entry_1")
+  ///   - entry: The entry name to position player at (defaults to "1")
   ///   - prerenderedCameraName: Optional camera name for prerendered environment (defaults to "1")
-  @MainActor func loadScene(_ sceneName: String, entry: String = "Entry_1", prerenderedCameraName: String? = nil) async
-  {
+  @MainActor func loadScene(_ sceneName: String, entry: String = "1", prerenderedCameraName: String? = nil) async {
     do {
       // Update scene name
       self.sceneName = sceneName
@@ -1104,8 +1079,10 @@ private let startingEntry = "1"
       // Wrap in our Scene wrapper
       let scene = Scene(assimpScene)
 
-      print("\(scene.rootNode)")
-      //scene.cameras.forEach { logger.trace("\($0)") }
+      // Print debug description of all game-related nodes
+      logger.trace("📋 Scene loaded: \(sceneName)")
+      // Print each line separately for better readability
+      print(scene.debugDescription)
 
       // Set the scene
       self.scene = scene
@@ -1176,9 +1153,8 @@ private let startingEntry = "1"
         if let currentScene = self.scene {
           let activeCameraName = cameraSystem.selectedCamera
           if !activeCameraName.isEmpty {
-            let cameraNodeName = "Camera_\(activeCameraName)"
-            if currentScene.rootNode.findNode(named: cameraNodeName) != nil {
-              cameraSystem.syncActiveCamera(name: cameraNodeName)
+            if let cameraNode = currentScene.cameraNode(named: activeCameraName) {
+              cameraSystem.syncActiveCamera(name: cameraNode.name)
             }
           }
         }
@@ -1210,30 +1186,27 @@ private let startingEntry = "1"
   }
 
   private func drawEntryArrows(scene: Scene, debugRenderer: DebugRenderer) {
-    func traverse(_ node: Node) {
-      if let name = node.name, name.hasPrefix("Entry_") {
-        let world = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-        let origin = vec3(world[3].x, world[3].y, world[3].z)
-        // Extract forward direction from Z basis vector
-        let forwardZ = vec3(world[2].x, world[2].y, world[2].z)
-        // Rotate 90° around Y axis: swap X and Z, negate Z
-        // This rotates the forward vector to align with our coordinate system
-        let forward = vec3(-forwardZ.z, forwardZ.y, forwardZ.x)
+    // Use scene.entryNodes instead of manual traversal
+    for node in scene.entryNodes {
+      let world = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let origin = vec3(world[3].x, world[3].y, world[3].z)
+      // Extract forward direction from Z basis vector
+      let forwardZ = vec3(world[2].x, world[2].y, world[2].z)
+      // Rotate 90° around Y axis: swap X and Z, negate Z
+      // This rotates the forward vector to align with our coordinate system
+      let forward = vec3(-forwardZ.z, forwardZ.y, forwardZ.x)
 
-        // Draw arrow using Jolt debug renderer
-        let arrowLength: Float = 2.0
-        let to = origin + normalize(forward) * arrowLength
-        let magentaColor: Jolt.Color = 0xFFFF_00FF  // RGBA: magenta
-        debugRenderer.drawArrow(
-          from: RVec3(x: origin.x, y: origin.y, z: origin.z),
-          to: RVec3(x: to.x, y: to.y, z: to.z),
-          color: magentaColor,
-          size: 0.5
-        )
-      }
-      for child in node.children { traverse(child) }
+      // Draw arrow using Jolt debug renderer
+      let arrowLength: Float = 2.0
+      let to = origin + normalize(forward) * arrowLength
+      let magentaColor: Jolt.Color = 0xFFFF_00FF  // RGBA: magenta
+      debugRenderer.drawArrow(
+        from: RVec3(x: origin.x, y: origin.y, z: origin.z),
+        to: RVec3(x: to.x, y: to.y, z: to.z),
+        color: magentaColor,
+        size: 0.5
+      )
     }
-    traverse(scene.rootNode)
   }
 
   func update(window: Window, deltaTime: Float) {
@@ -1724,9 +1697,19 @@ private let startingEntry = "1"
 
     // Add camera triggers line if there are any
     if !interactionSystem.currentCameraTriggers.isEmpty {
-      overlayLines.append(
-        "Camera Triggers: \(interactionSystem.currentCameraTriggers.map { $0.prefix(1).lowercased() + $0.dropFirst() }.joined(separator: ", "))"
-      )
+      // Extract just the number part from camera trigger names (e.g., "Trigger 1" -> "1", "1" -> "1")
+      let triggerNames = interactionSystem.currentCameraTriggers.map { baseName in
+        // If baseName ends with a number, extract just the number part
+        if let lastSpaceIndex = baseName.lastIndex(of: " "),
+          let number = Int(String(baseName[baseName.index(after: lastSpaceIndex)...])),
+          number > 0
+        {
+          return String(number)
+        }
+        // Otherwise, return the baseName as-is
+        return baseName
+      }
+      overlayLines.append("Camera Triggers: \(triggerNames.joined(separator: ", "))")
     }
 
     let overlay = overlayLines.joined(separator: "\n")

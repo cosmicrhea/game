@@ -94,7 +94,8 @@ public final class SlotMenu: PopupMenu {
     at position: Point,
     slotIndex: Int,
     slotPosition: Point,
-    actions: [(LocalizedStringResource, SlotAction)]
+    actions: [(LocalizedStringResource, SlotAction)],
+    openedWithKeyboard: Bool = false
   ) {
     self.slotIndex = slotIndex
     self.slotPosition = slotPosition
@@ -110,7 +111,7 @@ public final class SlotMenu: PopupMenu {
       }
     }
 
-    show(at: position, items: menuItems)
+    show(at: position, items: menuItems, openedWithKeyboard: openedWithKeyboard)
   }
 
   // MARK: - Private Methods

@@ -316,8 +316,8 @@ final class ModelViewer: RenderLoop {
   private func findNodeNameRecursive(node: Node, meshIndex: Int) -> String? {
     // Check if this node contains the mesh
     if node.meshes.contains(meshIndex) {
-      logger.trace("ModelViewer: Found node '\(node.name ?? "unnamed")' for mesh index \(meshIndex)")
-      return node.name
+      logger.trace("ModelViewer: Found node '\(node.name.isEmpty ? "unnamed" : node.name)' for mesh index \(meshIndex)")
+      return node.name.isEmpty ? nil : node.name
     }
 
     // Search in child nodes

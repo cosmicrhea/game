@@ -689,17 +689,14 @@ public final class GLRenderer: Renderer {
 
       // Calculate X offset based on text alignment (not positioning alignment)
       let lineXOffset: Float
-      if let wrapWidth = wrapWidth {
-        switch textAlignment {
-        case .left:
-          lineXOffset = 0
-        case .center:
-          lineXOffset = (wrapWidth - line.width) / 2
-        case .right:
-          lineXOffset = wrapWidth - line.width
-        }
-      } else {
+      let referenceWidth = wrapWidth ?? layoutResult.totalWidth
+      switch textAlignment {
+      case .left:
         lineXOffset = 0
+      case .center:
+        lineXOffset = (referenceWidth - line.width) / 2
+      case .right:
+        lineXOffset = referenceWidth - line.width
       }
 
       let lineVertices = generateTextLineVertices(

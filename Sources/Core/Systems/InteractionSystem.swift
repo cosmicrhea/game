@@ -69,7 +69,13 @@ public final class InteractionSystem {
       let contacts = characterController.activeContacts()
       for contact in contacts {
         if contact.isSensorB, let actionName = physicsWorld.actionBodyNames[contact.bodyID] {
-          detectedActionName = actionName.replacing(/-action$/, with: "")
+          // Extract base name from action body name using scene's extractBaseName
+          if let scene = MainLoop.shared?.scene {
+            detectedActionName = scene.extractBaseName(from: actionName)
+          } else {
+            // Fallback: remove -action suffix if scene not available
+            detectedActionName = actionName.replacing(/-action$/, with: "")
+          }
           break  // Just show first detected action
         }
       }
@@ -98,7 +104,13 @@ public final class InteractionSystem {
         for result in cachedActionQueryResults {
           let bodyID = result.bodyID2
           if let actionName = physicsWorld.actionBodyNames[bodyID] {
-            detectedActionName = actionName.replacing(/-action$/, with: "")
+            // Extract base name from action body name using scene's extractBaseName
+            if let scene = MainLoop.shared?.scene {
+              detectedActionName = scene.extractBaseName(from: actionName)
+            } else {
+              // Fallback: remove -action suffix if scene not available
+              detectedActionName = actionName.replacing(/-action$/, with: "")
+            }
             break  // Just show first detected action
           }
         }
@@ -113,27 +125,31 @@ public final class InteractionSystem {
       // Check character controller contacts for triggers (always check these, they're fast)
       for contact in contacts {
         if contact.isSensorB, let triggerName = physicsWorld.triggerBodyNames[contact.bodyID] {
-          // Handle camera triggers
-          if triggerName.hasPrefix("CameraTrigger_") {
-            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
-            currentCameraTriggers.append(cameraName)
+          // Extract base name from trigger body name using scene's extractBaseName
+          guard let scene = MainLoop.shared?.scene,
+            let triggerNode = scene.rootNode.findNode(named: triggerName)
+          else { continue }
+          let baseName = scene.extractBaseName(from: triggerName)
+
+          // Check if this is a camera trigger by checking for .cameraTrigger hint
+          if scene.hasHint(triggerNode, hint: .cameraTrigger) {
+            currentCameraTriggers.append(baseName)
             // Check if we're not already on this camera - switch if needed
             if let cameraSystem = cameraSystem {
               let currentCamera = cameraSystem.selectedCamera
               let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
-              let shouldHandleTrigger = currentCamera != cameraName || needsInitialSync
+              let shouldHandleTrigger = currentCamera != baseName || needsInitialSync
               if shouldHandleTrigger {
                 cameraSystem.handleCameraTrigger(
-                  cameraName: cameraName,
+                  cameraName: baseName,
                   currentAreaName: currentAreaName,
                   normalizedAreaIdentifier: normalizedAreaIdentifier
                 )
               }
             }
           } else {
-            let cleanName = triggerName.replacing(/-trigger$/, with: "")
-            currentTriggers.append(cleanName)
-            newTriggers.insert(cleanName)
+            currentTriggers.append(baseName)
+            newTriggers.insert(baseName)
           }
         }
       }
@@ -154,27 +170,31 @@ public final class InteractionSystem {
       for result in cachedTriggerQueryResults {
         let bodyID = result.bodyID2
         if let triggerName = physicsWorld.triggerBodyNames[bodyID] {
-          // Handle camera triggers
-          if triggerName.hasPrefix("CameraTrigger_") {
-            let cameraName = String(triggerName.dropFirst("CameraTrigger_".count))
-            currentCameraTriggers.append(cameraName)
+          // Extract base name from trigger body name using scene's extractBaseName
+          guard let scene = MainLoop.shared?.scene,
+            let triggerNode = scene.rootNode.findNode(named: triggerName)
+          else { continue }
+          let baseName = scene.extractBaseName(from: triggerName)
+
+          // Check if this is a camera trigger by checking for .cameraTrigger hint
+          if scene.hasHint(triggerNode, hint: .cameraTrigger) {
+            currentCameraTriggers.append(baseName)
             // Check if we're not already on this camera - switch if needed
             if let cameraSystem = cameraSystem {
               let currentCamera = cameraSystem.selectedCamera
               let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
-              let shouldHandleTrigger = currentCamera != cameraName || needsInitialSync
+              let shouldHandleTrigger = currentCamera != baseName || needsInitialSync
               if shouldHandleTrigger {
                 cameraSystem.handleCameraTrigger(
-                  cameraName: cameraName,
+                  cameraName: baseName,
                   currentAreaName: currentAreaName,
                   normalizedAreaIdentifier: normalizedAreaIdentifier
                 )
               }
             }
           } else {
-            let cleanName = triggerName.replacing(/-trigger$/, with: "")
-            currentTriggers.append(cleanName)
-            newTriggers.insert(cleanName)
+            currentTriggers.append(baseName)
+            newTriggers.insert(baseName)
           }
         }
       }

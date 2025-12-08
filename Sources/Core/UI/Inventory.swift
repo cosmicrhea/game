@@ -1,11 +1,11 @@
 /// A box for an array of slots.
 @MainActor
 public final class Inventory {
-  public var slots: [ItemSlotData?]
+  public var slots: [ItemSlotData]
   /// Slot index of the currently equipped weapon, if any
   public var equippedWeaponIndex: Int? = nil
 
-  public init(slots: [ItemSlotData?], equippedWeaponIndex: Int? = nil) {
+  public init(slots: [ItemSlotData], equippedWeaponIndex: Int? = nil) {
     self.slots = slots
     self.equippedWeaponIndex = equippedWeaponIndex
   }
@@ -100,7 +100,7 @@ public final class Inventory {
   public static var storage: Inventory {
     if _storage == nil {
       // Create storage inventory with one of each available item
-      var storageSlots: [ItemSlotData?] = []
+      var storageSlots: [ItemSlotData] = []
 
       // Add all available items
       let allItems: [Item] = [
@@ -148,10 +148,10 @@ public final class Inventory {
         storageSlots.append(ItemSlotData(item: item, quantity: quantity))
       }
 
-      // Fill remaining slots with nil (empty)
+      // Fill remaining slots with blank slots (empty)
       let totalSlots = 6 * 4  // 6 columns * 4 rows = 24 slots
       while storageSlots.count < totalSlots {
-        storageSlots.append(nil)
+        storageSlots.append(ItemSlotData(item: nil, quantity: nil))
       }
 
       _storage = Inventory(slots: storageSlots)

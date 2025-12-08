@@ -67,20 +67,33 @@ public final class CameraSystem {
   func syncActiveCamera(name: String) {
     guard let scene = self.scene else { return }
     let nodeName = name
-    if let node = scene.rootNode.findNode(named: nodeName) {
+
+    // Extract base name to find camera node (handles both "@Camera 1" and "@CameraTrigger 1")
+    let baseName = scene.extractBaseName(from: nodeName)
+
+    // Find camera node by base name
+    if let node = scene.cameraNode(named: baseName) {
       cameraNode = node
       cameraWorldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-      logger.trace("✅ Active camera node: \(nodeName)")
+      logger.trace("✅ Active camera node: \(node.name)")
       // Debug: Print camera transform
       let cameraPos = vec3(cameraWorldTransform[3].x, cameraWorldTransform[3].y, cameraWorldTransform[3].z)
       logger.trace("📷 Camera world transform position: \(cameraPos)")
     } else {
-      logger.warning("⚠️ Camera node not found: \(nodeName)")
-      cameraNode = nil
-      cameraWorldTransform = mat4(1)
+      // Fallback: try finding by full name
+      if let node = scene.rootNode.findNode(named: nodeName) {
+        cameraNode = node
+        cameraWorldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+        logger.trace("✅ Active camera node (by full name): \(nodeName)")
+      } else {
+        logger.warning("⚠️ Camera node not found: \(nodeName)")
+        cameraNode = nil
+        cameraWorldTransform = mat4(1)
+      }
     }
 
-    if let cam = scene.cameras.first(where: { $0.name == nodeName }) {
+    // Find camera struct by base name using scene.camera(named:)
+    if let cam = scene.camera(named: baseName) {
       camera = cam
       // Sync projection and mist params
       prerenderedEnvironment?.near = cam.clipPlaneNear
@@ -90,8 +103,15 @@ public final class CameraSystem {
         "✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
       )
     } else {
-      logger.warning("⚠️ Camera struct not found for name: \(nodeName)")
-      camera = nil
+      // Fallback: try finding by full name
+      if let cam = scene.cameras.first(where: { $0.name == nodeName }) {
+        camera = cam
+        prerenderedEnvironment?.near = cam.clipPlaneNear
+        prerenderedEnvironment?.far = cam.clipPlaneFar
+      } else {
+        logger.warning("⚠️ Camera struct not found for name: \(nodeName) (baseName: \(baseName))")
+        camera = nil
+      }
     }
   }
 
@@ -115,27 +135,30 @@ public final class CameraSystem {
       return
     }
 
-    // Extract area from camera name
-    // Examples: "hallway_1" -> "hallway", "Entry_1" -> "Entry_1"
+    guard let scene = self.scene else { return }
+
+    // Extract area from camera name using scene's extractBaseName
+    // Examples: "@CameraTrigger hallway_1" -> "hallway_1" -> "hallway", "@CameraTrigger Entry 1" -> "Entry 1"
+    let baseName = scene.extractBaseName(from: cameraName)
     let triggerArea: String
-    if cameraName.hasPrefix("Entry_") {
-      // Entry areas keep the full name (e.g., "Entry_1")
-      triggerArea = cameraName
+    if baseName.hasPrefix("Entry ") {
+      // Entry areas keep the full name (e.g., "Entry 1")
+      triggerArea = baseName
     } else {
       // Named areas: remove trailing "_1", "_2", etc. (e.g., "hallway_1" -> "hallway")
-      if let lastUnderscoreIndex = cameraName.lastIndex(of: "_") {
-        let beforeUnderscore = String(cameraName[..<lastUnderscoreIndex])
+      if let lastUnderscoreIndex = baseName.lastIndex(of: "_") {
+        let beforeUnderscore = String(baseName[..<lastUnderscoreIndex])
         // Check if after underscore is just a number
-        let afterUnderscore = String(cameraName[cameraName.index(after: lastUnderscoreIndex)...])
+        let afterUnderscore = String(baseName[baseName.index(after: lastUnderscoreIndex)...])
         if afterUnderscore.allSatisfy({ $0.isNumber }) {
           triggerArea = beforeUnderscore
         } else {
           // Not a numbered camera, use full name
-          triggerArea = cameraName
+          triggerArea = baseName
         }
       } else {
         // No underscore, use full name
-        triggerArea = cameraName
+        triggerArea = baseName
       }
     }
 
@@ -156,13 +179,20 @@ public final class CameraSystem {
       return
     }
 
-    // Switch 3D camera (e.g., "hallway_1" -> "Camera_hallway_1")
-    let cameraNodeName = "Camera_\(cameraName)"
-    syncActiveCamera(name: cameraNodeName)
+    // Switch 3D camera using scene.cameraTriggerNode(named:) or scene.cameraNode(named:)
+    if let cameraTriggerNode = scene.cameraTriggerNode(named: baseName) {
+      syncActiveCamera(name: cameraTriggerNode.name)
+    } else if let cameraNode = scene.cameraNode(named: baseName) {
+      syncActiveCamera(name: cameraNode.name)
+    } else {
+      // Fallback: construct name (shouldn't happen with proper @Camera format)
+      let cameraNodeName = "@Camera \(baseName)"
+      syncActiveCamera(name: cameraNodeName)
+    }
 
     // Switch prerendered environment camera (e.g., "hallway_1" -> "hallway_1")
-    try? prerenderedEnvironment?.switchToCamera(cameraName)
-    selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? cameraName
+    try? prerenderedEnvironment?.switchToCamera(baseName)
+    selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? baseName
 
     // Update MainLoop area tracking: only named triggers define areas
     if let mainLoop = MainLoop.shared {
@@ -237,21 +267,21 @@ public final class CameraSystem {
   }
 
   private func resolveCameraNames(from rawName: String) -> (nodeName: String, environmentName: String)? {
+    guard let scene = self.scene else { return nil }
+
     let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
-    var normalized = trimmed
-    if normalized.hasPrefix("CameraTrigger_") {
-      normalized = String(normalized.dropFirst("CameraTrigger_".count))
+    // Extract base name using scene's extractBaseName (handles @Camera and @CameraTrigger formats)
+    let baseName = scene.extractBaseName(from: trimmed)
+
+    // Try to find camera node by base name
+    if let cameraNode = scene.cameraNode(named: baseName) {
+      return (cameraNode.name, baseName)
     }
 
-    if normalized.hasPrefix("Camera_") {
-      let suffix = String(normalized.dropFirst("Camera_".count))
-      guard !suffix.isEmpty else { return nil }
-      return (normalized, suffix)
-    }
-
-    return ("Camera_\(normalized)", normalized)
+    // Fallback: construct name (shouldn't happen with proper @Camera format)
+    return ("@Camera \(baseName)", baseName)
   }
 
   // MARK: - Debug Camera Override
@@ -263,21 +293,36 @@ public final class CameraSystem {
   public func cycleToNextCamera() {
     prerenderedEnvironment?.cycleToNextCamera()
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-    // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
-    syncActiveCamera(name: "Camera_\(selectedCamera)")
+    // Sync to corresponding Assimp camera using scene.cameraNode(named:)
+    if let scene = self.scene, let cameraNode = scene.cameraNode(named: selectedCamera) {
+      syncActiveCamera(name: cameraNode.name)
+    } else {
+      // Fallback: construct name (shouldn't happen with proper @Camera format)
+      syncActiveCamera(name: "@Camera \(selectedCamera)")
+    }
   }
 
   public func cycleToPreviousCamera() {
     prerenderedEnvironment?.cycleToPreviousCamera()
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-    // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
-    syncActiveCamera(name: "Camera_\(selectedCamera)")
+    // Sync to corresponding Assimp camera using scene.cameraNode(named:)
+    if let scene = self.scene, let cameraNode = scene.cameraNode(named: selectedCamera) {
+      syncActiveCamera(name: cameraNode.name)
+    } else {
+      // Fallback: construct name (shouldn't happen with proper @Camera format)
+      syncActiveCamera(name: "@Camera \(selectedCamera)")
+    }
   }
 
   public func switchToDebugCamera() {
     prerenderedEnvironment?.switchToDebugCamera()
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-    // Sync to corresponding Assimp camera (e.g., "1" -> "Camera_1", "stove.001" -> "Camera_stove.001")
-    syncActiveCamera(name: "Camera_\(selectedCamera)")
+    // Sync to corresponding Assimp camera using scene.cameraNode(named:)
+    if let scene = self.scene, let cameraNode = scene.cameraNode(named: selectedCamera) {
+      syncActiveCamera(name: cameraNode.name)
+    } else {
+      // Fallback: construct name (shouldn't happen with proper @Camera format)
+      syncActiveCamera(name: "@Camera \(selectedCamera)")
+    }
   }
 }

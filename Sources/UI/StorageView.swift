@@ -219,55 +219,39 @@ final class StorageView: RenderLoop {
     }
 
     // Handle retrieve/take out modes first (but only if menus aren't visible)
-    let menuVisible: Bool = {
-      if focusedGrid == .player && playerGrid.slotMenu.isVisible {
-        return true
-      }
-      if focusedGrid == .storage {
-        switch storageViewStyle {
-        case .list:
-          return storageListView?.isSlotMenuVisible == true
-        case .grid:
-          return storageGrid?.slotMenu.isVisible == true
-        }
-      }
-      return false
-    }()
-
-    if !menuVisible && (retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil) {
+    if !isAnyMenuVisible && (retrieveModeSourceIndex != nil || takeOutModeDestinationSlot != nil) {
       if key == .f || key == .space || key == .enter || key == .numpadEnter {
         if focusedGrid == .player {
           let targetSlot = playerGrid.selectedIndex
 
           // Retrieve mode: place item from list to selected grid slot
-          if let sourceDisplayIndex = retrieveModeSourceIndex {
-            if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex),
-              let sourceSlotData = Inventory.storage.slots[inventoryIndex]
-            {
-              // Check if target slot is empty
-              if let targetSlotData = playerGrid.getSlotData(at: targetSlot), targetSlotData.isEmpty {
-                // Move item from storage to player grid
-                playerGrid.setSlotData(sourceSlotData, at: targetSlot)
-                Inventory.storage.slots[inventoryIndex] = nil
-                storageListView?.rebuildDisplayList()
-                // Clear retrieve mode
-                retrieveModeSourceIndex = nil
-                playerGrid.highlightedSlotIndex = nil
-                UISound.select()
-                return
-              } else {
-                UISound.error()  // Slot not empty
-                return
-              }
+        if let sourceDisplayIndex = retrieveModeSourceIndex {
+          if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex) {
+            let sourceSlotData = Inventory.storage.slots[inventoryIndex]
+            // Check if target slot is empty
+            if let targetSlotData = playerGrid.getSlotData(at: targetSlot), targetSlotData.isEmpty {
+              // Move item from storage to player grid
+              playerGrid.setSlotData(sourceSlotData, at: targetSlot)
+              Inventory.storage.slots[inventoryIndex] = ItemSlotData(item: nil, quantity: nil)
+              storageListView?.rebuildDisplayList()
+              // Clear retrieve mode
+              retrieveModeSourceIndex = nil
+              playerGrid.highlightedSlotIndex = nil
+              UISound.select()
+              return
+            } else {
+              UISound.error()  // Slot not empty
+              return
             }
           }
+        }
           // Take out mode: place item from selected grid slot to storage
           else if takeOutModeDestinationSlot != nil {
             if let sourceSlotData = playerGrid.getSlotData(at: targetSlot), sourceSlotData.item != nil {
               // Find or create empty slot in storage (storage never fills up)
               let emptyInventoryIndex = findFirstEmptyStorageInventorySlot()
               // Move item from player grid to storage
-              playerGrid.setSlotData(nil, at: targetSlot)
+              playerGrid.setSlotData(ItemSlotData(item: nil, quantity: nil), at: targetSlot)
               // Handle equipped state
               if playerGrid.equippedWeaponIndex == targetSlot {
                 playerGrid.setEquippedWeaponIndex(nil)
@@ -328,7 +312,7 @@ final class StorageView: RenderLoop {
     // Forward F/space/enter to grid/list to show menu or handle selection
     if key == .f || key == .space || key == .enter || key == .numpadEnter {
       // Check if menus are visible first - if so, forward to menu
-      if menuVisible {
+      if isAnyMenuVisible {
         // Menu is visible - let it handle the key
         switch focusedGrid {
         case .player:
@@ -431,8 +415,13 @@ final class StorageView: RenderLoop {
     case .grid:
       storageGrid?.handleMouseMove(at: mousePosition)
     case .list:
-      // Handle both scroll dragging and selection hover
-      _ = storageListView?.handleMouseMove(at: mousePosition)
+      // Block scroll dragging when storage list menu is open
+      if focusedGrid == .storage, storageListView?.isSlotMenuVisible == true {
+        // Don't allow scroll dragging when menu is visible
+      } else {
+        // Handle both scroll dragging and selection hover
+        _ = storageListView?.handleMouseMove(at: mousePosition)
+      }
     }
   }
 
@@ -445,7 +434,12 @@ final class StorageView: RenderLoop {
 
     let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
+    // Block scroll dragging when storage list menu is open
     if focusedGrid == .storage, case .list = storageViewStyle {
+      if isAnyMenuVisible {
+        // Don't allow scroll dragging when menu is visible
+        return
+      }
       if button == .left {
         if state == .pressed {
           _ = storageListView?.handleMouseDown(at: mousePosition)
@@ -507,14 +501,13 @@ final class StorageView: RenderLoop {
       if let slotIndex = playerGrid.slotIndex(at: mousePosition) {
         // Retrieve mode: place item from list to clicked grid slot
         if let sourceDisplayIndex = retrieveModeSourceIndex {
-          if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex),
+          if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex) {
             let sourceSlotData = Inventory.storage.slots[inventoryIndex]
-          {
             // Check if target slot is empty
             if let targetSlotData = playerGrid.getSlotData(at: slotIndex), targetSlotData.isEmpty {
               // Move item from storage to player grid
               playerGrid.setSlotData(sourceSlotData, at: slotIndex)
-              Inventory.storage.slots[inventoryIndex] = nil
+              Inventory.storage.slots[inventoryIndex] = ItemSlotData(item: nil, quantity: nil)
               storageListView?.rebuildDisplayList()
               // Clear retrieve mode
               retrieveModeSourceIndex = nil
@@ -533,7 +526,7 @@ final class StorageView: RenderLoop {
             // Find or create empty slot in storage (storage never fills up)
             let emptyInventoryIndex = findFirstEmptyStorageInventorySlot()
             // Move item from player grid to storage
-            playerGrid.setSlotData(nil, at: slotIndex)
+            playerGrid.setSlotData(ItemSlotData(item: nil, quantity: nil), at: slotIndex)
             // Handle equipped state
             if playerGrid.equippedWeaponIndex == slotIndex {
               playerGrid.setEquippedWeaponIndex(nil)
@@ -591,6 +584,11 @@ final class StorageView: RenderLoop {
       return
     }
 
+    // Block scrolling when slot menus are open
+    if isAnyMenuVisible {
+      return
+    }
+
     let mousePosition = Point(Float(lastMouseX), Float(Engine.viewportSize.height) - Float(lastMouseY))
 
     if focusedGrid == .storage, case .list = storageViewStyle {
@@ -645,21 +643,7 @@ final class StorageView: RenderLoop {
     guard isLeft || isRight else { return false }
 
     // Don't allow cross-grid navigation when menus are visible
-    let menuVisible: Bool = {
-      if focusedGrid == .player && playerGrid.slotMenu.isVisible {
-        return true
-      }
-      if focusedGrid == .storage {
-        switch storageViewStyle {
-        case .list:
-          return storageListView?.isSlotMenuVisible == true
-        case .grid:
-          return storageGrid?.slotMenu.isVisible == true
-        }
-      }
-      return false
-    }()
-    if menuVisible {
+    if isAnyMenuVisible {
       return false
     }
 
@@ -765,6 +749,22 @@ final class StorageView: RenderLoop {
 
   // MARK: - Helpers
 
+  /// Check if any slot menu is currently visible
+  private var isAnyMenuVisible: Bool {
+    if focusedGrid == .player && playerGrid.slotMenu.isVisible {
+      return true
+    }
+    if focusedGrid == .storage {
+      switch storageViewStyle {
+      case .list:
+        return storageListView?.isSlotMenuVisible == true
+      case .grid:
+        return storageGrid?.slotMenu.isVisible == true
+      }
+    }
+    return false
+  }
+
   // MARK: - Menu Action Handlers
 
   private func handlePlayerGridSlotAction(_ action: SlotAction, slotIndex: Int) {
@@ -775,7 +775,7 @@ final class StorageView: RenderLoop {
         // Find first empty slot in storage
         if let emptyIndex = findFirstEmptyStorageSlot() {
           // Move item to storage
-          playerGrid.setSlotData(nil, at: slotIndex)
+          playerGrid.setSlotData(ItemSlotData(item: nil, quantity: nil), at: slotIndex)
           // Handle equipped state
           if playerGrid.equippedWeaponIndex == slotIndex {
             playerGrid.setEquippedWeaponIndex(nil)
@@ -858,7 +858,7 @@ final class StorageView: RenderLoop {
       }
       // If grid is full, expand storage inventory and return new index
       let newIndex = Inventory.storage.slots.count
-      Inventory.storage.slots.append(nil)
+      Inventory.storage.slots.append(ItemSlotData(item: nil, quantity: nil))
       // Note: The grid view might need to be updated to reflect new slots, but for now
       // we'll return the index and let the grid handle it
       return newIndex < (storageGrid.columns * storageGrid.rows) ? newIndex : nil
@@ -871,13 +871,13 @@ final class StorageView: RenderLoop {
   private func findFirstEmptyStorageInventorySlot() -> Int {
     // Find first empty slot, or create a new one if all are full
     for (index, slot) in Inventory.storage.slots.enumerated() {
-      if slot == nil || slot?.isEmpty == true {
+      if slot.isEmpty {
         return index
       }
     }
     // No empty slot found - append a new one
     let newIndex = Inventory.storage.slots.count
-    Inventory.storage.slots.append(nil)
+    Inventory.storage.slots.append(ItemSlotData(item: nil, quantity: nil))
     return newIndex
   }
 

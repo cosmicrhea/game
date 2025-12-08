@@ -46,9 +46,8 @@ public struct RefMacro: AccessorMacro, PeerMacro {
     let findMethod: String
     let errorMessage: String
     if isCamera {
-      // For cameras, convert to Camera_X format if needed
-      let cameraNodeName = rawName.hasPrefix("Camera_") ? rawName : "Camera_\(rawName)"
-      searchName = cameraNodeName
+      // For cameras, use base name (scene.cameraNode(named:) handles @Camera format)
+      searchName = rawName
       findMethod = "findCamera"
       errorMessage = "Camera"
     } else {

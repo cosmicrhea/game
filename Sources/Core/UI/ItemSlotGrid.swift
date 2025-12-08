@@ -119,10 +119,10 @@ public final class ItemSlotGrid {
   /// Inventory instance - when set, uses inventory.slots instead of slotData
   public var inventory: Inventory? = nil
   /// Direct slot data array (used when inventory is nil)
-  public var slotData: [ItemSlotData?] = []
+  public var slotData: [ItemSlotData] = []
 
   /// Get the effective slot data array (from inventory if set, otherwise slotData)
-  private var effectiveSlotData: [ItemSlotData?] {
+  private var effectiveSlotData: [ItemSlotData] {
     if let inventory = inventory {
       return inventory.slots
     }
@@ -182,7 +182,7 @@ public final class ItemSlotGrid {
 
   /// Set the slot data array (should match the grid size)
   /// Note: If inventory is set, this will update inventory.slots instead
-  public func setSlotData(_ data: [ItemSlotData?]) {
+  public func setSlotData(_ data: [ItemSlotData]) {
     if let inventory = inventory {
       inventory.slots = data
     } else {
@@ -310,12 +310,14 @@ public final class ItemSlotGrid {
 
   /// Set slot data at a specific index
   public func setSlotData(_ data: ItemSlotData?, at index: Int) {
+    // Convert nil to blank slot
+    let slotDataValue = data ?? ItemSlotData(item: nil, quantity: nil)
     if let inventory = inventory {
       guard index >= 0 && index < inventory.slots.count else { return }
-      inventory.slots[index] = data
+      inventory.slots[index] = slotDataValue
     } else {
       guard index >= 0 && index < slotData.count else { return }
-      slotData[index] = data
+      slotData[index] = slotDataValue
     }
   }
 
@@ -733,9 +735,9 @@ public final class ItemSlotGrid {
   /// Compute available actions for a given slot based on its item kind
   private func actionsForSlot(at index: Int) -> [SlotAction] {
     let data = effectiveSlotData
-    guard index >= 0 && index < data.count, let slotData = data[index], let item = slotData.item else {
-      return []
-    }
+    guard index >= 0 && index < data.count else { return [] }
+    let slotData = data[index]
+    guard let item = slotData.item else { return [] }
     let exchangeAction: [SlotAction] = TWO_PLAYER_MODE ? [.exchange] : []
     switch item.kind {
     case .weapon:
@@ -928,7 +930,7 @@ public final class ItemSlotGrid {
         shader.setFloat("uNoiseStrength", value: noiseStrength)
         // Show radial gradient on slots with items, or on blank slots that are selected/hovered
         let data = effectiveSlotData
-        let hasItem = (i < data.count) && (data[i]?.item != nil)
+        let hasItem = (i < data.count) && (data[i].item != nil)
         let isSelectedOrHovered = (isFocused && i == selectedIndex) || (isFocused && i == hoveredIndex)
         shader.setFloat(
           "uRadialGradientStrength", value: (hasItem || isSelectedOrHovered) ? radialGradientStrength : 0.0)
@@ -945,60 +947,63 @@ public final class ItemSlotGrid {
 
       // Draw item image if slot has data
       let data = effectiveSlotData
-      if i < data.count, let slotData = data[i], let item = slotData.item, let image = item.image {
-        let imageSize = min(slotSize * 0.8, min(image.naturalSize.width, image.naturalSize.height))
-        let imageRect = Rect(
-          x: slotPosition.x + (slotSize - imageSize) * 0.5,
-          y: slotPosition.y + (slotSize - imageSize) * 0.5,
-          width: imageSize,
-          height: imageSize
-        )
-        // Dim image if slot is dimmed (non-combinable in combine mode)
-        if slotDimmed {
-          // Animate image dimming to match slot dimming
-          let dimmedAlpha: Float = 0.6
-          let imageAlpha = 1.0 - (1.0 - combineDimmingProgress) * (1.0 - dimmedAlpha)
-          image.draw(in: imageRect, tint: Color.white.withAlphaComponent(imageAlpha))
-        } else {
-          image.draw(in: imageRect)
-        }
+      if i < data.count {
+        let slotData = data[i]
+        if let item = slotData.item, let image = item.image {
+          let imageSize = min(slotSize * 0.8, min(image.naturalSize.width, image.naturalSize.height))
+          let imageRect = Rect(
+            x: slotPosition.x + (slotSize - imageSize) * 0.5,
+            y: slotPosition.y + (slotSize - imageSize) * 0.5,
+            width: imageSize,
+            height: imageSize
+          )
+          // Dim image if slot is dimmed (non-combinable in combine mode)
+          if slotDimmed {
+            // Animate image dimming to match slot dimming
+            let dimmedAlpha: Float = 0.6
+            let imageAlpha = 1.0 - (1.0 - combineDimmingProgress) * (1.0 - dimmedAlpha)
+            image.draw(in: imageRect, tint: Color.white.withAlphaComponent(imageAlpha))
+          } else {
+            image.draw(in: imageRect)
+          }
 
-        // Draw quantity number with configurable bottom anchor if should show quantity
-        if slotData.shouldShowQuantity {
-          let quantityText = "\(slotData.quantity!)"
+          // Draw quantity number with configurable bottom anchor if should show quantity
+          if slotData.shouldShowQuantity {
+            let quantityText = "\(slotData.quantity!)"
 
-          let fadeWidth: Float = 8 + quantityText.size(with: .slotQuantity).width * 2
-          let fadeOrigin: Point = {
-            switch quantityAnchor {
-            case .bottomRight:
-              return Point(slotPosition.x + slotSize - fadeWidth - 3, slotPosition.y + 5)
-            default:
-              return Point(slotPosition.x + 3, slotPosition.y + 5)
-            }
-          }()
-          let fadeRect = Rect(origin: fadeOrigin, size: Size(fadeWidth, 19))
-          let gradient: Gradient = {
-            switch quantityAnchor {
-            case .bottomRight:
-              return Gradient(startingColor: .clear, endingColor: .black.withAlphaComponent(0.8))
-            default:
-              return Gradient(startingColor: .black.withAlphaComponent(0.8), endingColor: .clear)
-            }
-          }()
-          GraphicsContext.current?.drawLinearGradient(gradient, in: fadeRect, angle: 0)
+            let fadeWidth: Float = 8 + quantityText.size(with: .slotQuantity).width * 2
+            let fadeOrigin: Point = {
+              switch quantityAnchor {
+              case .bottomRight:
+                return Point(slotPosition.x + slotSize - fadeWidth - 3, slotPosition.y + 5)
+              default:
+                return Point(slotPosition.x + 3, slotPosition.y + 5)
+              }
+            }()
+            let fadeRect = Rect(origin: fadeOrigin, size: Size(fadeWidth, 19))
+            let gradient: Gradient = {
+              switch quantityAnchor {
+              case .bottomRight:
+                return Gradient(startingColor: .clear, endingColor: .black.withAlphaComponent(0.8))
+              default:
+                return Gradient(startingColor: .black.withAlphaComponent(0.8), endingColor: .clear)
+              }
+            }()
+            GraphicsContext.current?.drawLinearGradient(gradient, in: fadeRect, angle: 0)
 
-          // Position with proper padding based on anchor
-          let quantityX: Float = {
-            switch quantityAnchor {
-            case .bottomRight:
-              return slotPosition.x + slotSize - 9
-            default:
-              return slotPosition.x + 9
-            }
-          }()
-          let quantityY = slotPosition.y + 6
-          let textAnchor: AnchorPoint = (quantityAnchor == .bottomRight) ? .bottomRight : .bottomLeft
-          quantityText.draw(at: Point(quantityX, quantityY), style: .slotQuantity, anchor: textAnchor)
+            // Position with proper padding based on anchor
+            let quantityX: Float = {
+              switch quantityAnchor {
+              case .bottomRight:
+                return slotPosition.x + slotSize - 9
+              default:
+                return slotPosition.x + 9
+              }
+            }()
+            let quantityY = slotPosition.y + 6
+            let textAnchor: AnchorPoint = (quantityAnchor == .bottomRight) ? .bottomRight : .bottomLeft
+            quantityText.draw(at: Point(quantityX, quantityY), style: .slotQuantity, anchor: textAnchor)
+          }
         }
       }
     }
@@ -1055,10 +1060,10 @@ public final class ItemSlotGrid {
 
     if let inventory = inventory {
       inventory.slots[targetIndex] = ItemSlotData(item: resultItem, quantity: resultQuantity)
-      inventory.slots[sourceIndex] = nil
+      inventory.slots[sourceIndex] = ItemSlotData(item: nil, quantity: nil)
     } else {
       slotData[targetIndex] = ItemSlotData(item: resultItem, quantity: resultQuantity)
-      slotData[sourceIndex] = nil
+      slotData[sourceIndex] = ItemSlotData(item: nil, quantity: nil)
     }
 
     // Update equipped weapon index if source was equipped
@@ -1103,15 +1108,15 @@ public final class ItemSlotGrid {
       let targetData = inventory.slots[targetIndex]
 
       logger.trace("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
-      logger.trace("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
-      logger.trace("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Source has item: \(sourceData.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Target has item: \(targetData.item?.name ?? "nil")")
 
-      // Swap even if one side is nil (acts as move into empty)
+      // Swap even if one side is blank (acts as move into empty)
       inventory.slots[targetIndex] = sourceData
       inventory.slots[sourceIndex] = targetData
 
-      logger.trace("SlotGrid: After move - Source now has: \(inventory.slots[sourceIndex]?.item?.name ?? "nil")")
-      logger.trace("SlotGrid: After move - Target now has: \(inventory.slots[targetIndex]?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Source now has: \(inventory.slots[sourceIndex].item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Target now has: \(inventory.slots[targetIndex].item?.name ?? "nil")")
 
       // Update equipped weapon index if it was moved
       if equippedWeaponIndex == sourceIndex {
@@ -1133,15 +1138,15 @@ public final class ItemSlotGrid {
       let targetData = slotData[targetIndex]
 
       logger.trace("SlotGrid: Moving from \(sourceIndex) to \(targetIndex)")
-      logger.trace("SlotGrid: Source has item: \(sourceData?.item?.name ?? "nil")")
-      logger.trace("SlotGrid: Target has item: \(targetData?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Source has item: \(sourceData.item?.name ?? "nil")")
+      logger.trace("SlotGrid: Target has item: \(targetData.item?.name ?? "nil")")
 
-      // Swap even if one side is nil (acts as move into empty)
+      // Swap even if one side is blank (acts as move into empty)
       slotData[targetIndex] = sourceData
       slotData[sourceIndex] = targetData
 
-      logger.trace("SlotGrid: After move - Source now has: \(slotData[sourceIndex]?.item?.name ?? "nil")")
-      logger.trace("SlotGrid: After move - Target now has: \(slotData[targetIndex]?.item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Source now has: \(slotData[sourceIndex].item?.name ?? "nil")")
+      logger.trace("SlotGrid: After move - Target now has: \(slotData[targetIndex].item?.name ?? "nil")")
 
       // Update equipped weapon index if it was moved
       if equippedWeaponIndex == sourceIndex {

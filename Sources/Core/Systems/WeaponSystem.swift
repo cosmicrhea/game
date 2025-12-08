@@ -487,8 +487,7 @@ public final class WeaponSystem {
     for ammoItem in ammoPriority {
       // Find ammo slot
       for (index, inventorySlot) in inventory.slots.enumerated() {
-        guard let inventorySlot = inventorySlot,
-          let inventoryItem = inventorySlot.item,
+        guard let inventoryItem = inventorySlot.item,
           inventoryItem.id == ammoItem.id,
           let ammoQuantity = inventorySlot.quantity,
           ammoQuantity > 0
@@ -536,8 +535,8 @@ public final class WeaponSystem {
           )
           inventory.slots[index] = updatedAmmoSlot
         } else {
-          // Remove ammo slot if empty
-          inventory.slots[index] = nil
+          // Clear ammo slot if empty
+          inventory.slots[index] = ItemSlotData(item: nil, quantity: nil)
         }
 
         logger.trace("🔫 WeaponSystem: Reload successful")
