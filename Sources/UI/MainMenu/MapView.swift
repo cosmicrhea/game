@@ -143,6 +143,7 @@ class MapView: RenderLoop {
     "nexus",
     //"radar_office",
     "chiefs_office",
+    "tunnels",
   ]
 
   private var currentMapIndex: Int = 1  // Start with shooting_range

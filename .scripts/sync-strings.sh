@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_DIR="$HOME/Library/Developer/Xcode/DerivedData/glass-dzbopunajrifkffhaviyfcmewtip/Build/Intermediates.noindex/Game.build"
+BASE_DIR="$HOME/Library/Developer/Xcode/DerivedData/Game-dunifivdezlbgxbsvkhneadkmfrb/Build/Intermediates.noindex/Game.build"
 
 scenes_files=()
 ui_files=()
@@ -15,10 +15,10 @@ while IFS= read -r -d '' file; do
   fi
 done < <(find "$BASE_DIR" -name '*.stringsdata' -print0)
 
-# 1) files that *contain* /Sources/Scenes/ -> UI.xcstrings
+# 1) files that *contain* /Sources/Scenes/ -> Localizable.xcstrings
 if ((${#ui_files[@]})); then
-  echo xcrun xcstringstool sync Assets/UI.xcstrings --stringsdata "${ui_files[@]}"
-  xcrun xcstringstool sync Assets/UI.xcstrings --stringsdata "${ui_files[@]}"
+  echo xcrun xcstringstool sync Assets/Localizable.xcstrings --stringsdata "${ui_files[@]}"
+  xcrun xcstringstool sync Assets/Localizable.xcstrings --stringsdata "${ui_files[@]}"
 else
   echo "no UI-related .stringsdata files found (with /Sources/Scenes/)"
 fi

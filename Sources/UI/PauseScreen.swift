@@ -18,7 +18,8 @@ final class PauseScreen: Screen {
       },
 
       ListMenu.MenuItem(id: "give_up", label: "Give Up") {
-
+        // Return to title screen
+        MainLoop.shared?.showTitleScreen()
       },
     ])
   }

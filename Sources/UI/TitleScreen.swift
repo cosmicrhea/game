@@ -14,6 +14,8 @@ final class TitleScreen: Screen {
     let menuItems = [
       ListMenu.MenuItem(id: "new_game", label: "New Game") {
         logger.trace("Starting new game...")
+        // Hide title screen and return to game
+        MainLoop.shared?.hideTitleScreen()
       },
 
       ListMenu.MenuItem(id: "continue", label: "Continue", isEnabled: false) {

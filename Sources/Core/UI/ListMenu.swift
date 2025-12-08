@@ -1,6 +1,14 @@
 /// A reusable menu component that can be used in different screens
 @MainActor
 public class ListMenu {
+  // MARK: - Style
+  public enum Style {
+    /// Default style: left-aligned, red selected text, indentation animation
+    case `default`
+    /// Boxed style: centered, white/gray text, focus ring around selected item
+    case boxed
+  }
+
   // MARK: - MenuItem
   public struct MenuItem {
     public let id: String
@@ -30,11 +38,13 @@ public class ListMenu {
   // MARK: - Properties
   public private(set) var selectedIndex: Int = 0
   public private(set) var menuItems: [MenuItem] = []
+  public var style: Style = .default
 
   // MARK: - Positioning
   public var position: Point = Point(96, 0)  // Default left-aligned position
   public var spacing: Float = 60
   public var indentAmount: Float = 20
+  public var itemWidth: Float = 280  // Width for boxed style hit detection and focus ring
 
   // MARK: - Animation
   public var animationDuration: Float = 0.3
@@ -42,6 +52,20 @@ public class ListMenu {
   private var isAnimating: Bool = false
   private var previousSelectedIndex: Int = 0
   private let menuAnimationEasing: Easing = .easeOutCubic
+
+  // MARK: - Focus Ring (for boxed style)
+  private lazy var focusRing: FocusRing = {
+    let ring = FocusRing(isInterior: true)
+    ring.cornerRadius = 6
+    ring.ringThickness = 3
+    ring.glowThickness = 6
+    ring.baseAlpha = 0.6
+    ring.glowAlpha = 0.3
+    ring.pulseStrength = 0.12
+    ring.showBackground = true
+    ring.backgroundColor = Color(0.2, 0.2, 0.22, 0.7)
+    return ring
+  }()
 
   // MARK: - Callbacks
   public var onSelectionChanged: ((Int) -> Void)?
@@ -121,33 +145,21 @@ public class ListMenu {
   public func draw() {
     guard !menuItems.isEmpty else { return }
 
-    let screenHeight = Float(Engine.viewportSize.height)
-    let menuStartY = screenHeight - 64 - (Float(menuItems.count) * spacing)
+    // If position.y is 0, use auto-calculated Y (default behavior for existing menus)
+    // Otherwise, use the custom position.y
+    let menuStartY: Float
+    if position.y == 0 {
+      let screenHeight = Float(Engine.viewportSize.height)
+      menuStartY = screenHeight - 64 - (Float(menuItems.count) * spacing)
+    } else {
+      menuStartY = position.y
+    }
 
     for (index, item) in menuItems.enumerated() {
       let isSelected = selectedIndex == index
       let isDisabled = !item.isEnabled
 
-      let finalStyle = TextStyle.menuItem(selected: isSelected, disabled: isDisabled)
-
-      // Calculate animated position
-      let baseX = position.x
       let baseY = menuStartY + Float(menuItems.count - 1 - index) * spacing
-
-      var finalX = baseX
-      let finalY = baseY
-
-      // Apply indentation animation for selected item
-      if isSelected {
-        let animationProgress = isAnimating ? (animationTime / animationDuration) : 1.0
-        let easedProgress = menuAnimationEasing.apply(animationProgress)
-        finalX = baseX + (indentAmount * easedProgress)
-      } else if isAnimating && index == previousSelectedIndex {
-        // Animate the previously selected item back to normal position
-        let animationProgress = (animationTime / animationDuration)
-        let easedProgress = menuAnimationEasing.apply(animationProgress)
-        finalX = baseX + (indentAmount * (1.0 - easedProgress))
-      }
 
       let effectiveLabel =
         if !item.labelKey.isEmpty {
@@ -156,8 +168,47 @@ public class ListMenu {
           item.label
         }
 
-      // print(Bundle.game, effectiveLabel)
-      effectiveLabel.draw(at: Point(finalX, finalY), style: finalStyle)
+      switch style {
+      case .default:
+        // Default style: left-aligned with indentation and red selection
+        let finalStyle = TextStyle.menuItem(selected: isSelected, disabled: isDisabled)
+        let baseX = position.x
+
+        var finalX = baseX
+
+        // Apply indentation animation for selected item
+        if isSelected {
+          let animationProgress = isAnimating ? (animationTime / animationDuration) : 1.0
+          let easedProgress = menuAnimationEasing.apply(animationProgress)
+          finalX = baseX + (indentAmount * easedProgress)
+        } else if isAnimating && index == previousSelectedIndex {
+          // Animate the previously selected item back to normal position
+          let animationProgress = (animationTime / animationDuration)
+          let easedProgress = menuAnimationEasing.apply(animationProgress)
+          finalX = baseX + (indentAmount * (1.0 - easedProgress))
+        }
+
+        effectiveLabel.draw(at: Point(finalX, baseY), style: finalStyle)
+
+      case .boxed:
+        // Boxed style: centered with focus ring and white/gray text
+        let finalStyle = TextStyle.menuItemBoxed(selected: isSelected, disabled: isDisabled)
+        let centerX = position.x
+
+        // Draw focus ring first
+        if isSelected {
+          let itemRect = Rect(
+            x: centerX - itemWidth / 2,
+            y: baseY - 6,
+            width: itemWidth,
+            height: 44
+          )
+          focusRing.draw(around: itemRect, intensity: 1.0, padding: 4)
+        }
+
+        // Draw text on top
+        effectiveLabel.draw(at: Point(centerX, baseY), style: finalStyle, anchor: .bottom)
+      }
     }
   }
 
@@ -193,18 +244,37 @@ public class ListMenu {
   }
 
   private func getItemIndexAt(_ mousePosition: Point) -> Int? {
-    let screenHeight = Float(Engine.viewportSize.height)
-    let menuStartY = screenHeight - 64 - (Float(menuItems.count) * spacing)
+    // Use same Y logic as draw()
+    let menuStartY: Float
+    if position.y == 0 {
+      let screenHeight = Float(Engine.viewportSize.height)
+      menuStartY = screenHeight - 64 - (Float(menuItems.count) * spacing)
+    } else {
+      menuStartY = position.y
+    }
     let menuItemHeight: Float = 40
 
     for (index, _) in menuItems.enumerated() {
       let itemY = menuStartY + Float(menuItems.count - 2 - index) * spacing
-      let itemBounds = Rect(
-        x: position.x,
-        y: itemY,
-        width: 300,  // Approximate width
-        height: menuItemHeight
-      )
+
+      let itemBounds: Rect
+      switch style {
+      case .default:
+        itemBounds = Rect(
+          x: position.x,
+          y: itemY,
+          width: 300,
+          height: menuItemHeight
+        )
+      case .boxed:
+        // Centered hit detection
+        itemBounds = Rect(
+          x: position.x - itemWidth / 2,
+          y: itemY,
+          width: itemWidth,
+          height: menuItemHeight
+        )
+      }
 
       if itemBounds.contains(mousePosition) {
         return index

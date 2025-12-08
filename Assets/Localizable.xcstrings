@@ -79,10 +79,13 @@
         "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skift side"
+            "value" : "Bladre"
           }
         }
       }
+    },
+    "Click forward to repeat this sequence!" : {
+      "shouldTranslate" : false
     },
     "Close" : {
       "localizations" : {
@@ -344,6 +347,16 @@
         }
       }
     },
+    "Load Game" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indlæs spil"
+          }
+        }
+      }
+    },
     "Loading..." : {
       "localizations" : {
         "da" : {
@@ -557,6 +570,12 @@
         }
       }
     },
+    "The typewriter effect creates a nice reading experience." : {
+      "shouldTranslate" : false
+    },
+    "This text will type out character by character." : {
+      "shouldTranslate" : false
+    },
     "Toggle" : {
       "localizations" : {
         "da" : {
@@ -617,6 +636,9 @@
         }
       }
     },
+    "Welcome to the dialog demo!" : {
+      "shouldTranslate" : false
+    },
     "Windowed" : {
       "localizations" : {
         "da" : {
@@ -626,6 +648,19 @@
           }
         }
       }
+    },
+    "Y O U   A R E   D E A D" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "D U   E R   D Ø D"
+          }
+        }
+      }
+    },
+    "You can display messages that wrap to two lines maximum, centered at the bottom of the screen." : {
+      "shouldTranslate" : false
     },
     "Zoom" : {
       "localizations" : {

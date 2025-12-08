@@ -3,8 +3,11 @@ import CJolt
 import Foundation
 import Jolt
 
-private let startingScene = "nexus"
-private let startingEntry = "8"
+private let startingScene = "tunnels"
+private let startingEntry = "1"
+
+// private let startingScene = "nexus"
+// private let startingEntry = "8"
 
 // private let startingScene = "chiefs_office"
 // private let startingEntry = "1"
@@ -110,6 +113,14 @@ private let startingEntry = "8"
   private let pauseScreenStack: PauseScreenStack
   private var showingPauseScreen: Bool = false
 
+  // Death screen system
+  private let deathScreenStack: DeathScreenStack
+  private var showingDeathScreen: Bool = false
+
+  // Title screen system
+  private let titleScreenStack: TitleScreenStack
+  private var showingTitleScreen: Bool = false
+
   // Dialog system
   private(set) var dialogView: DialogView!
   // Persisted scene flags
@@ -132,6 +143,12 @@ private let startingEntry = "8"
 
     // Initialize pause screen
     pauseScreenStack = PauseScreenStack()
+
+    // Initialize death screen
+    deathScreenStack = DeathScreenStack()
+
+    // Initialize title screen (not shown by default)
+    titleScreenStack = TitleScreenStack()
 
     // Initialize systems (order matters - physicsWorld must be first)
     physicsWorld = PhysicsWorld(renderLoop: self)
@@ -379,6 +396,11 @@ private let startingEntry = "8"
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     guard Input.player1.isEnabled else { return }
 
+    if showingTitleScreen {
+      titleScreenStack.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      return
+    }
+
     if showingPickupView {
       // Forward input to pickup view
       pickupView?.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
@@ -401,6 +423,16 @@ private let startingEntry = "8"
       }
       // Forward input to pause screen (including escape if not at root)
       pauseScreenStack.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+      return
+    }
+
+    if showingDeathScreen {
+      // Don't process input if we're fading out
+      if deathScreenStack.isFadingOut {
+        return
+      }
+      // Forward input to death screen
+      deathScreenStack.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
       return
     }
 
@@ -568,10 +600,14 @@ private let startingEntry = "8"
   func onMouseMove(window: Window, x: Double, y: Double) {
     guard Input.player1.isEnabled else { return }
 
-    if showingPickupView {
+    if showingTitleScreen {
+      titleScreenStack.onMouseMove(window: window, x: x, y: y)
+    } else if showingPickupView {
       pickupView?.onMouseMove(window: window, x: x, y: y)
     } else if showingPauseScreen {
       pauseScreenStack.onMouseMove(window: window, x: x, y: y)
+    } else if showingDeathScreen {
+      deathScreenStack.onMouseMove(window: window, x: x, y: y)
     } else if showingMainMenu {
       mainMenu.onMouseMove(window: window, x: x, y: y)
     }
@@ -580,10 +616,14 @@ private let startingEntry = "8"
   func onMouseButton(window: Window, button: Mouse.Button, state: ButtonState, mods: Keyboard.Modifier) {
     guard Input.player1.isEnabled else { return }
 
-    if showingPickupView {
+    if showingTitleScreen {
+      titleScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
+    } else if showingPickupView {
       pickupView?.onMouseButton(window: window, button: button, state: state, mods: mods)
     } else if showingPauseScreen {
       pauseScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
+    } else if showingDeathScreen {
+      deathScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
     } else if showingMainMenu {
       mainMenu.onMouseButton(window: window, button: button, state: state, mods: mods)
     }
@@ -591,6 +631,11 @@ private let startingEntry = "8"
 
   func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {
     guard Input.player1.isEnabled else { return }
+
+    if showingTitleScreen {
+      titleScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
+      return
+    }
 
     if showingPickupView {
       pickupView?.onMouseButtonPressed(window: window, button: button, mods: mods)
@@ -603,6 +648,15 @@ private let startingEntry = "8"
         return
       }
       pauseScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
+      return
+    }
+
+    if showingDeathScreen {
+      // Don't process input if we're fading out
+      if deathScreenStack.isFadingOut {
+        return
+      }
+      deathScreenStack.onMouseButtonPressed(window: window, button: button, mods: mods)
       return
     }
 
@@ -687,6 +741,31 @@ private let startingEntry = "8"
     // Start fade-out animation
     pauseScreenStack.startFadeOut()
     // Don't set showingPauseScreen = false yet - let it fade out first
+  }
+
+  func showDeathScreen() {
+    showingDeathScreen = true
+    deathScreenStack.onAttach(window: Engine.shared.window)
+  }
+
+  func hideDeathScreen() {
+    // Start fade-out animation
+    deathScreenStack.startFadeOut()
+    // Don't set showingDeathScreen = false yet - let it fade out first
+  }
+
+  func showTitleScreen() {
+    // Hide any other screens first
+    showingPauseScreen = false
+    showingDeathScreen = false
+    showingMainMenu = false
+    showingPickupView = false
+
+    showingTitleScreen = true
+  }
+
+  func hideTitleScreen() {
+    showingTitleScreen = false
   }
 
   private var pickupViewContinuation: CheckedContinuation<Bool, Never>?
@@ -876,7 +955,7 @@ private let startingEntry = "8"
     }
 
     let entryWorld = entryNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-    let extractedPos = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
+    let extractedPosition = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
     let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
     let yaw = atan2(fwd.x, fwd.z)
     let entryRotation = yaw - (.pi * 0.5)
@@ -884,13 +963,13 @@ private let startingEntry = "8"
     // The entry position is at the feet, but character controller uses center position
     // Adjust Y position to account for capsule half-height
     let capsuleHalfHeight: Float = 0.8
-    let adjustedPos = vec3(extractedPos.x, extractedPos.y + capsuleHalfHeight, extractedPos.z)
+    let adjustedPosition = vec3(extractedPosition.x, extractedPosition.y + capsuleHalfHeight, extractedPosition.z)
 
     // Update player position and rotation via PlayerController
-    playerController.setPosition(adjustedPos, rotation: entryRotation)
-    playerController.setSpawn(position: extractedPos, rotation: entryRotation)  // Keep spawn position at feet for reference
+    playerController.setPosition(adjustedPosition, rotation: entryRotation)
+    playerController.setSpawn(position: extractedPosition, rotation: entryRotation)  // Keep spawn position at feet for reference
 
-    logger.trace("🚀 Positioned player at \(entryNodeName): \(extractedPos)")
+    logger.trace("🚀 Positioned player at \(entryNodeName): \(extractedPosition)")
   }
 
   /// Transition to a different entry in the current scene
@@ -1158,7 +1237,10 @@ private let startingEntry = "8"
   }
 
   func update(window: Window, deltaTime: Float) {
-    if showingPickupView {
+    if showingTitleScreen {
+      // Update title screen (takes over everything)
+      titleScreenStack.update(deltaTime: deltaTime)
+    } else if showingPickupView {
       // Update pickup view
       pickupView?.update(window: window, deltaTime: deltaTime)
     } else if showingPauseScreen {
@@ -1168,6 +1250,14 @@ private let startingEntry = "8"
       if pauseScreenStack.isFadeOutComplete {
         showingPauseScreen = false
         pauseScreenStack.onDetach(window: Engine.shared.window)
+      }
+    } else if showingDeathScreen {
+      // Update death screen
+      deathScreenStack.update(deltaTime: deltaTime)
+      // Check if fade-out is complete and actually hide the death screen
+      if deathScreenStack.isFadeOutComplete {
+        showingDeathScreen = false
+        deathScreenStack.onDetach(window: Engine.shared.window)
       }
     } else if showingMainMenu {
       // Update main menu
@@ -1237,6 +1327,12 @@ private let startingEntry = "8"
   }
 
   func draw() {
+    if showingTitleScreen {
+      // Draw title screen (takes over everything)
+      titleScreenStack.draw()
+      return
+    }
+
     if showingPickupView {
       // Draw pickup view
       pickupView?.draw()
@@ -1555,6 +1651,11 @@ private let startingEntry = "8"
     // Draw pause screen as overlay on top of game (if showing)
     if showingPauseScreen {
       pauseScreenStack.draw()
+    }
+
+    // Draw death screen as overlay on top of game (if showing)
+    if showingDeathScreen {
+      deathScreenStack.draw()
     }
   }
 

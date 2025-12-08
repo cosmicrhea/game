@@ -1,4 +1,3 @@
-// TODO:
 public final class ProgressIndicator {
   let image = Image("UI/Icons/phosphor-icons/circle-notch.svg")
   private var angle: Float = 0

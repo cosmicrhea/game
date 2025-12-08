@@ -91,12 +91,14 @@ let package = Package(
       path: ".",
 
       exclude: [
+        "README.md",
+        "Assets/Localizable.xcstrings",
+        "Assets/Scenes.xcstrings",
+        "Assets/UI.xcstrings",
         "Sources/Assets",
         "Sources/Core/Build",
         "Sources/Core/Macros",
         //"Sources/Core/Shell",
-        "README.md",
-        "Assets/Localizable.xcstrings",  // Processed by build tool, not included as resource
       ],
 
       resources: [
@@ -106,10 +108,10 @@ let package = Package(
         .copy("Assets/Effects"),
         .copy("Assets/Fonts"),
         .copy("Assets/Items"),
+        .copy("Assets/Localizations"),
         .copy("Assets/Metal"),
         .copy("Assets/Scenes"),
         .copy("Assets/UI"),
-        .copy("Assets/Localizations"),  // Generated .lproj directories from xcstrings
       ],
 
       cSettings: [

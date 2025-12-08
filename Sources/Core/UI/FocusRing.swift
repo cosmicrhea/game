@@ -12,8 +12,12 @@ final class FocusRing {
   var padding: Float = 0
   let isInterior: Bool
 
+  // Background fill options
+  var showBackground: Bool = false
+  var backgroundColor: Color = Color(0.15, 0.15, 0.18, 0.85)
+
   private var ringColor: Color = Color(0.7, 0.75, 0.85, 1.0)  // zinc/very-bright-blue
-  private var glowColor: Color = Color(0.75, 0.8, 0.9, 0.6)   // lighter zinc/blue glow
+  private var glowColor: Color = Color(0.75, 0.8, 0.9, 0.6)  // lighter zinc/blue glow
 
   init(isInterior: Bool = true) {
     self.isInterior = isInterior
@@ -29,6 +33,12 @@ final class FocusRing {
       width: rect.size.width + inset * 2,
       height: rect.size.height + inset * 2
     )
+
+    // Draw background fill if enabled
+    if showBackground {
+      let bgColor = backgroundColor.withAlphaComponent(backgroundColor.alpha * intensity)
+      RoundedRect(expandedRect, cornerRadius: cornerRadius + inset * 0.5).draw(color: bgColor)
+    }
 
     effect.draw { program in
       program.setVec2("uRectCenter", value: (expandedRect.midX, expandedRect.midY))
@@ -55,6 +65,12 @@ final class FocusRing {
       width: rect.size.width + paddingX * 2,
       height: rect.size.height + paddingY * 2
     )
+
+    // Draw background fill if enabled
+    if showBackground {
+      let bgColor = backgroundColor.withAlphaComponent(backgroundColor.alpha * intensity)
+      RoundedRect(expandedRect, cornerRadius: cornerRadius + (paddingX + paddingY) * 0.25).draw(color: bgColor)
+    }
 
     effect.draw { program in
       program.setVec2("uRectCenter", value: (expandedRect.midX, expandedRect.midY))

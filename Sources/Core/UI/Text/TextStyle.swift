@@ -6,6 +6,16 @@ extension TextStyle {
     color: .white
   )
 
+  static let deathScreenTitle = TextStyle(
+    fontName: "Kenyan Coffee Rg",
+    fontSize: 64,
+    color: Color(0.92, 0.9, 0.88, 1.0),
+    alignment: .center,
+    shadowWidth: 2,
+    shadowOffset: Point(0, -3),
+    shadowColor: .black.withAlphaComponent(0.4)
+  )
+
   static let largeTitle = TextStyle(
     fontName: "CreatoDisplay-ExtraBold",
     fontSize: 40,
@@ -165,6 +175,22 @@ extension TextStyle {
     } else {
       // Normal styling for unselected items
       return baseStyle.withColor(.gray300)
+    }
+  }
+
+  /// Creates a boxed menu item style (RE-style) based on selection and disabled state
+  /// White for selected, gray for unselected, centered text
+  static func menuItemBoxed(selected: Bool, disabled: Bool) -> TextStyle {
+    let baseStyle = menuItem.withAlignment(.center)
+
+    if disabled {
+      return baseStyle.withColor(.gray500).withStroke(width: 2, color: .gray900)
+    } else if selected {
+      // White text for selected
+      return baseStyle.withColor(.white).withStroke(width: 2, color: .gray700)
+    } else {
+      // Gray text for unselected
+      return baseStyle.withColor(.gray400).withStroke(width: 2, color: .gray700)
     }
   }
 

@@ -264,6 +264,8 @@ public final class Engine {
 
       //PauseScreenStack(),
 
+      DeathScreenStack(),
+
       //DialogDemo(),
       MapView(),
       ItemView(item: .sigp320),

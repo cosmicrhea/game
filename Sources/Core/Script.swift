@@ -385,12 +385,17 @@ class Script {
   func fadeOut() {}
   func fadeIn() {}
 
-  /// Shake the screen with the specified intensity
+  /// Shake the screen with the specified intensity.
   /// - Parameters:
   ///   - intensity: The intensity of the shake (.subtle or .heavy)
   ///   - axis: Optional axis to limit shake to (.horizontal or .vertical). If nil, shakes on both axes.
   func shakeScreen(_ intensity: ScreenShake.Intensity, axis: Axis? = nil) {
     ScreenShake.shared.shake(intensity, axis: axis)
+  }
+
+  /// Instantly kill the player and show the death screen.
+  func die() {
+    MainLoop.shared?.showDeathScreen()
   }
 
   func openStorage() {}

@@ -101,7 +101,7 @@ for camera in cameras:
 	for layer in scene.view_layers:
 		# print(camera, layer, camera.users_collection, layer_collection.exclude)
 		layer_collection = find_layer_collection(layer.layer_collection, camera.users_collection[0])
-		layer.use = not layer.name.startswith("_") and not layer_collection.exclude
+		layer.use = not layer.name.startswith("_")# and not layer_collection.exclude
 
 		if not layer.use:
 			# print("Skipping layer " + layer.name, flush=True)

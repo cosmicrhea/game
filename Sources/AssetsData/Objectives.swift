@@ -8,6 +8,7 @@ private let objectives = [
   "Defeat the monster",
   "Traverse the tunnels",
   "Make your way to Kastellet",
+  "Defeat the monster",
   "Secure the northern bridge",
   "Talk to the chief",
   "Make you way to Perring HQ",
