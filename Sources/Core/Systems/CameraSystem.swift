@@ -6,9 +6,9 @@ import Foundation
 public final class CameraSystem {
   // MARK: - State
 
-  private var camera: Assimp.Camera?
-  private var cameraNode: Node?
-  private(set) var cameraWorldTransform: mat4 = mat4(1)
+  public private(set) var camera: Assimp.Camera?
+  public private(set) var cameraNode: Node?
+  public private(set) var cameraWorldTransform: mat4 = mat4(1)
 
   // Debug camera override mode - when enabled, camera triggers are ignored
   private(set) var isDebugCameraOverrideMode: Bool = false
@@ -63,13 +63,12 @@ public final class CameraSystem {
 
   // MARK: - Camera Syncing
 
-  /// Syncs `camera`, its node/world transform and prerender near/far from the given camera name
-  func syncActiveCamera(name: String) {
-    guard let scene = self.scene else { return }
-    let nodeName = name
+  /// Syncs `camera`, its node/world transform and prerender near/far from the given camera name.
+  func syncActiveCamera(name nodeName: String) {
+    guard let scene else { return }
 
-    // Extract base name to find camera node (handles both "@Camera 1" and "@CameraTrigger 1")
-    let baseName = scene.extractBaseName(from: nodeName)
+    // Extract base name to find camera node
+    let baseName = Scene.extractBaseName(from: nodeName)
 
     // Find camera node by base name
     if let node = scene.cameraNode(named: baseName) {
@@ -115,18 +114,12 @@ public final class CameraSystem {
     }
   }
 
-  /// Get the current camera (for rendering)
-  func getCamera() -> Assimp.Camera? {
-    return camera
-  }
-
   // MARK: - Camera Triggers
 
   /// Handle camera trigger activation
   func handleCameraTrigger(
     cameraName: String,
-    currentAreaName: String?,
-    normalizedAreaIdentifier: (String) -> String
+    currentAreaName: String?
   ) {
     // Ignore camera triggers when a manual or scripted override is active
     if isCameraOverrideActive {
@@ -137,9 +130,9 @@ public final class CameraSystem {
 
     guard let scene = self.scene else { return }
 
-    // Extract area from camera name using scene's extractBaseName
+    // Extract area from camera name using Scene's extractBaseName
     // Examples: "@CameraTrigger hallway_1" -> "hallway_1" -> "hallway", "@CameraTrigger Entry 1" -> "Entry 1"
-    let baseName = scene.extractBaseName(from: cameraName)
+    let baseName = Scene.extractBaseName(from: cameraName)
     let triggerArea: String
     if baseName.hasPrefix("Entry ") {
       // Entry areas keep the full name (e.g., "Entry 1")
@@ -165,8 +158,8 @@ public final class CameraSystem {
     // Check if player is in the correct area
     let currentArea = currentAreaName
     let currentAreaDescription = currentArea ?? "unknown"
-    let normalizedCurrentArea = currentArea.map(normalizedAreaIdentifier)
-    let normalizedTriggerArea = normalizedAreaIdentifier(triggerArea)
+    let normalizedCurrentArea = currentArea.map(Scene.normalizedAreaIdentifier)
+    let normalizedTriggerArea = Scene.normalizedAreaIdentifier(triggerArea)
     let triggerHasNamedArea = normalizedTriggerArea.rangeOfCharacter(from: .letters) != nil
 
     if triggerHasNamedArea,
@@ -209,7 +202,7 @@ public final class CameraSystem {
 
   // MARK: - Script Camera Overrides
 
-  public func withScriptCameraOverride<T>(
+  public func withScriptedCameraOverride<T>(
     on cameraName: String,
     perform: () async throws -> T
   ) async rethrows -> T {
@@ -218,7 +211,7 @@ public final class CameraSystem {
     return try await perform()
   }
 
-  public func withScriptCameraOverride<T>(
+  public func withScriptedCameraOverride<T>(
     on cameraName: String,
     perform: () throws -> T
   ) rethrows -> T {
@@ -272,8 +265,8 @@ public final class CameraSystem {
     let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
-    // Extract base name using scene's extractBaseName (handles @Camera and @CameraTrigger formats)
-    let baseName = scene.extractBaseName(from: trimmed)
+    // Extract base name using Scene's extractBaseName (handles @Camera and @CameraTrigger formats)
+    let baseName = Scene.extractBaseName(from: trimmed)
 
     // Try to find camera node by base name
     if let cameraNode = scene.cameraNode(named: baseName) {

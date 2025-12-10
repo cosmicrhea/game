@@ -22,6 +22,21 @@ public final class PlayerController {
   private let footstepDistanceWalk: Float = 1.2  // Distance between footsteps when walking
   private let footstepDistanceRun: Float = 1.5  // Distance between footsteps when running (faster rate)
 
+  // MARK: - Sensor Box Dimensions
+
+  /// Width of the action detection sensor box.
+  private let sensorWidth: Float = 0.6
+
+  /// Height of the action detection sensor box.
+  private let sensorHeight: Float = 1.75
+
+  /// Depth of the action detection sensor box.
+  /// This is how far forward the sensor extends from the player.
+  private let sensorDepth: Float = 0.4
+
+  /// Distance from player position to the front edge of the sensor box.
+  private let sensorDistance: Float = 0
+
   // MARK: - Character Controller
 
   private var characterController: CharacterVirtual?
@@ -50,6 +65,14 @@ public final class PlayerController {
 
     // If character controller already exists, remove it first
     if characterController != nil {
+      // Remove old sensor body if it exists
+      if let sensorBodyID = capsuleSensorBodyID {
+        // Unregister from contact listener before removing
+        physicsWorld.unregisterSensorBody(sensorBodyID)
+        let bodyInterface = physicsWorld.bodyInterface()
+        bodyInterface.removeAndDestroyBody(sensorBodyID)
+        logger.trace("✅ Removed old capsule sensor body ID: \(sensorBodyID)")
+      }
       characterController = nil
       capsuleSensorBodyID = nil
     }
@@ -87,48 +110,58 @@ public final class PlayerController {
     // Initialize footstep tracking position
     previousPlayerPosition = position
 
-    // Create a sensor sphere in front of the capsule for detecting action triggers
-    createCapsuleSensor(at: position, rotation: rotation)
+    // Create action sensor box in front of player
+    //createActionSensorBox(at: position, rotation: rotation)
 
     logger.trace("✅ Created character controller at position (\(position.x), \(position.y), \(position.z))")
   }
 
-  /// Create sensor body in front of capsule
-  private func createCapsuleSensor(at position: vec3, rotation: Float) {
-    guard let physicsWorld = physicsWorld else { return }
-    let bodyInterface = physicsWorld.bodyInterface()
+  // /// Create action sensor box in front of player (box shape, not capsule)
+  // private func createActionSensorBox(at position: vec3, rotation: Float) {
+  //   guard let physicsWorld = physicsWorld else { return }
+  //   let bodyInterface = physicsWorld.bodyInterface()
 
-    // Create a small sphere sensor in front of the capsule
-    // Position it slightly in front and at the same height as the capsule
-    let sensorRadius: Float = 0.5
-    let sensorDistance: Float = 1.2  // Distance in front of capsule
-    let sensorShape = SphereShape(radius: sensorRadius)
+  //   // Create a box sensor in front of the capsule
+  //   // Box extends forward from player position
+  //   // Dimensions are defined as class constants above
 
-    // Position sensor in front of capsule (using forward direction)
-    let forwardX = GLMath.sin(rotation)
-    let forwardZ = GLMath.cos(rotation)
-    let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
-    let sensorPosition = position + sensorOffset
+  //   let boxHalfExtents = Vec3(x: sensorWidth * 0.5, y: sensorHeight * 0.5, z: sensorDepth * 0.5)
+  //   let sensorShape = BoxShape(halfExtent: boxHalfExtents)
 
-    // Create body settings - make it a kinematic sensor so it moves with the capsule
-    let bodySettings = BodyCreationSettings(
-      shape: sensorShape,
-      position: RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z),
-      rotation: Quat.identity,
-      motionType: .kinematic,
-      objectLayer: 2  // Same layer as character
-    )
-    bodySettings.isSensor = true  // Make it a sensor
+  //   // Position sensor in front of capsule (using forward direction)
+  //   let forwardX = GLMath.sin(rotation)
+  //   let forwardZ = GLMath.cos(rotation)
+  //   // Center the box at sensorDistance + depth/2 in front of player
+  //   let sensorOffset = vec3(
+  //     forwardX * (sensorDistance + sensorDepth * 0.5), 0, forwardZ * (sensorDistance + sensorDepth * 0.5))
+  //   let sensorPosition = position + sensorOffset
 
-    // Create and add sensor body
-    let sensorBodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
-    if sensorBodyID != 0 {
-      capsuleSensorBodyID = sensorBodyID
-      logger.trace("✅ Created capsule sensor body ID: \(sensorBodyID)")
-    } else {
-      logger.error("❌ Failed to create capsule sensor")
-    }
-  }
+  //   // Create rotation quaternion for the box (aligned with player rotation)
+  //   let rotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
+
+  //   // Create body settings - make it a kinematic sensor so it moves with the capsule
+  //   let bodySettings = BodyCreationSettings(
+  //     shape: sensorShape,
+  //     position: RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z),
+  //     rotation: rotationQuat,
+  //     motionType: .kinematic,
+  //     objectLayer: 2  // Same layer as character
+  //   )
+  //   bodySettings.isSensor = true  // Make it a sensor
+
+  //   // Create and add sensor body
+  //   let sensorBodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+  //   if sensorBodyID != 0 {
+  //     capsuleSensorBodyID = sensorBodyID
+  //     // Register sensor body for contact tracking
+  //     physicsWorld.registerSensorBody(sensorBodyID)
+  //     // Register body name for debugging
+  //     physicsWorld.registerBodyName(sensorBodyID, name: "Player Action Sensor Box")
+  //     logger.trace("✅ Created action sensor box body ID: \(sensorBodyID)")
+  //   } else {
+  //     logger.error("❌ Failed to create action sensor box")
+  //   }
+  // }
 
   /// Get character controller (for InteractionSystem to check contacts)
   public func getCharacterController() -> CharacterVirtual? {
@@ -254,6 +287,31 @@ public final class PlayerController {
     let rotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
     characterController.rotation = rotationQuat
 
+    // // Update sensor body position BEFORE physics update so contacts are detected correctly
+    // // Use character controller's current position (which will be updated this frame)
+    // if let sensorBodyID = capsuleSensorBodyID {
+    //   let bodyInterface = physicsWorld.bodyInterface()
+
+    //   // Get current character controller position
+    //   let currentCharPos = characterController.position
+    //   let currentPos = vec3(currentCharPos.x, currentCharPos.y, currentCharPos.z)
+
+    //   // Calculate position in front of capsule based on current rotation
+    //   // Sensor should stay at fixed distance in front, not move forward with player
+    //   let forwardX = GLMath.sin(rotation)
+    //   let forwardZ = GLMath.cos(rotation)
+    //   // Center the box at sensorDistance + depth/2 in front of player
+    //   let sensorOffset = vec3(
+    //     forwardX * (sensorDistance + sensorDepth * 0.5), 0, forwardZ * (sensorDistance + sensorDepth * 0.5))
+    //   let sensorPosition = currentPos + sensorOffset
+
+    //   // Update sensor position and rotation using Body wrapper
+    //   var sensorBody = bodyInterface.body(sensorBodyID, in: physicsWorld.getPhysicsSystem())
+    //   sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
+    //   let sensorRotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
+    //   sensorBody.rotation = sensorRotationQuat
+    // }
+
     // Update physics system FIRST (jobSystem is required)
     // This internally waits for all jobs to complete, so it's synchronous
     // This ensures the physics world is in a consistent state before character controller updates
@@ -302,26 +360,54 @@ public final class PlayerController {
     previousPlayerPosition = newPosition
     position = newPosition
 
-    // Update capsule sensor position to follow the capsule in front
-    if let sensorBodyID = capsuleSensorBodyID {
-      let bodyInterface = physicsWorld.bodyInterface()
-
-      // Calculate position in front of capsule based on current rotation
-      let forwardX = GLMath.sin(rotation)
-      let forwardZ = GLMath.cos(rotation)
-      let sensorDistance: Float = 1.2
-      let sensorOffset = vec3(forwardX * sensorDistance, 0, forwardZ * sensorDistance)
-      let sensorPosition = position + sensorOffset
-
-      // Update sensor position using Body wrapper
-      var sensorBody = bodyInterface.body(sensorBodyID, in: physicsWorld.getPhysicsSystem())
-      sensorBody.position = RVec3(x: sensorPosition.x, y: sensorPosition.y, z: sensorPosition.z)
-    }
+    // Note: Sensor body position is now updated BEFORE physics update (see above)
+    // This ensures contacts are detected correctly during the physics step
   }
 
   /// Clear character controller (when scene changes)
   public func clear() {
+    // Remove sensor body from physics world before clearing
+    if let sensorBodyID = capsuleSensorBodyID, let physicsWorld = physicsWorld {
+      // Unregister from contact listener before removing
+      physicsWorld.unregisterSensorBody(sensorBodyID)
+      let bodyInterface = physicsWorld.bodyInterface()
+      bodyInterface.removeAndDestroyBody(sensorBodyID)
+      logger.trace("✅ Removed action sensor box body ID: \(sensorBodyID)")
+    }
+
     characterController = nil
     capsuleSensorBodyID = nil
+  }
+
+  // MARK: - Sensor Box Query Support
+
+  /// Get sensor box transform for collision queries
+  public func getSensorBoxTransform() -> (position: vec3, rotation: Quat, halfExtents: Vec3) {
+    // Get current character controller position
+    let currentCharPos = characterController?.position ?? RVec3(x: position.x, y: position.y, z: position.z)
+    let currentPos = vec3(currentCharPos.x, currentCharPos.y, currentCharPos.z)
+
+    // Calculate position in front of capsule based on current rotation
+    let forwardX = GLMath.sin(rotation)
+    let forwardZ = GLMath.cos(rotation)
+    // Center the box at sensorDistance + depth/2 in front of player
+    // Align sensor box bottom with capsule bottom
+    // Capsule: radius 0.4, halfHeight 0.8, so bottom is at position.y - 1.2
+    // Sensor box: height 1.75, halfHeight 0.875
+    // To align bottoms: offset Y by -(1.2) + 0.875 = -0.325
+    let capsuleRadius: Float = 0.4
+    let capsuleHalfHeight: Float = 0.8
+    let verticalOffset = -(capsuleHalfHeight + capsuleRadius) + (sensorHeight * 0.5)
+    let sensorOffset = vec3(
+      forwardX * (sensorDistance + sensorDepth * 0.5), verticalOffset, forwardZ * (sensorDistance + sensorDepth * 0.5))
+    let sensorPosition = currentPos + sensorOffset
+
+    // Create rotation quaternion for the box (aligned with player rotation)
+    let sensorRotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
+
+    // Box half extents
+    let halfExtents = Vec3(x: sensorWidth * 0.5, y: sensorHeight * 0.5, z: sensorDepth * 0.5)
+
+    return (position: sensorPosition, rotation: sensorRotationQuat, halfExtents: halfExtents)
   }
 }

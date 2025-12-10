@@ -1,9 +1,9 @@
 import Jolt
 
-final class DebugRendererImplementation: DebugRendererProcs {
+public final class DebugRendererImplementation: DebugRendererProcs {
   weak var renderLoop: MainLoop?
 
-  func drawLine(from: RVec3, to: RVec3, color: Jolt.Color) {
+  public func drawLine(from: RVec3, to: RVec3, color: Jolt.Color) {
     guard let renderLoop = renderLoop else { return }
     let fromVec = vec3(Float(from.x), Float(from.y), Float(from.z))
     let toVec = vec3(Float(to.x), Float(to.y), Float(to.z))
@@ -26,7 +26,7 @@ final class DebugRendererImplementation: DebugRendererProcs {
     }
   }
 
-  func drawTriangle(
+  public func drawTriangle(
     v1: RVec3, v2: RVec3, v3: RVec3, color: Jolt.Color, castShadow: DebugRenderer.CastShadow
   ) {
     // Draw triangle as wireframe using lines
@@ -35,7 +35,7 @@ final class DebugRendererImplementation: DebugRendererProcs {
     drawLine(from: v3, to: v1, color: color)
   }
 
-  func drawText3D(position: RVec3, text: String, color: Jolt.Color, height: Float) {
+  public func drawText3D(position: RVec3, text: String, color: Jolt.Color, height: Float) {
     logger.trace("\(#function) \(text)")
     // For now, just ignore text rendering
     // TODO: Implement 3D text rendering if needed

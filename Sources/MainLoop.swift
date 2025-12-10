@@ -3,16 +3,17 @@ import CJolt
 import Foundation
 import Jolt
 
-private let startingScene = "tunnels"
-private let startingEntry = "1"
+// private let startingScene = "tunnels"
+// private let startingEntry = "1"
 
 // private let startingScene = "nexus"
 // private let startingEntry = "8"
 
 // private let startingScene = "chiefs_office"
 // private let startingEntry = "1"
-// private let startingScene = "shooting_range"
-// private let startingEntry = "range"
+
+private let startingScene = "shooting_range"
+private let startingEntry = "hallway"
 
 @Editable final class MainLoop: RenderLoop {
   static var shared: MainLoop?
@@ -64,6 +65,7 @@ private let startingEntry = "1"
   @Editor var visualizePhysics: Bool = false
   @Editor var visualizeEntries: Bool = false
   @Editor var disableDepth: Bool = false
+  @Editor @ConfigValue var disableEnemies: Bool = false
   private var showDebugText: Bool = true
   @Editor var showEnemyDebugOverlay: Bool = false
 
@@ -75,12 +77,8 @@ private let startingEntry = "1"
   private(set) var scene: Scene?
 
   // Camera access (delegated to CameraSystem)
-  private var camera: Assimp.Camera? {
-    return cameraSystem.getCamera()
-  }
-  private var cameraWorldTransform: mat4 {
-    return cameraSystem.cameraWorldTransform
-  }
+  private var camera: Assimp.Camera? { cameraSystem.camera }
+  private var cameraWorldTransform: mat4 { cameraSystem.cameraWorldTransform }
 
   // Scene lights
   private var sceneLights: [(light: Assimp.Light, worldTransform: mat4)] = []
@@ -263,7 +261,7 @@ private let startingEntry = "1"
       let nodeName = node.name
 
       // Extract enemy type from base name (e.g., "@Enemy Civilian", "@Enemy Dog.001")
-      let baseName = scene.extractBaseName(from: nodeName)
+      let baseName = Scene.extractBaseName(from: nodeName)
 
       // Remove any numeric suffix (e.g., ".001", ".002") for type matching
       let baseTypeName: String
@@ -861,38 +859,10 @@ private let startingEntry = "1"
     return capitalized.joined()
   }
 
-  /// Normalize entries/camera identifiers so area comparisons stay consistent
-  /// - "@Entry 1" -> "1"
-  /// - "@Entry hallway" -> "hallway"
-  /// - "hallway_2" -> "hallway"
-  /// - "hallway" -> "hallway"
-  /// - "1" -> "1"
-  private func normalizedAreaIdentifier(_ name: String) -> String {
-    guard !name.isEmpty else { return name }
-
-    guard let scene = self.scene else { return name }
-
-    // Extract base name using scene's extractBaseName (handles @Entry format)
-    var identifier = scene.extractBaseName(from: name)
-
-    // Remove numeric suffix if present (e.g., "hallway_2" -> "hallway")
-    if let underscoreIndex = identifier.lastIndex(of: "_") {
-      let suffixStart = identifier.index(after: underscoreIndex)
-      if suffixStart < identifier.endIndex {
-        let suffix = identifier[suffixStart...]
-        if suffix.allSatisfy({ $0.isNumber }) {
-          identifier = String(identifier[..<underscoreIndex])
-        }
-      }
-    }
-
-    return identifier
-  }
-
   /// Determine the best camera node to activate when loading/transitioning scenes
   private func preferredCameraNodeName(for entry: String, in scene: Scene) -> String? {
     // Extract base name from entry (handles @Entry format)
-    let entryBaseName = scene.extractBaseName(from: entry)
+    let entryBaseName = Scene.extractBaseName(from: entry)
 
     // Try entry-specific camera first (e.g., "hallway" -> "@Camera hallway_1")
     if !entryBaseName.isEmpty {
@@ -920,7 +890,7 @@ private let startingEntry = "1"
   ///   - scene: The scene to search for the entry in
   private func positionPlayerAtEntry(_ entryName: String, in scene: Scene) {
     // Extract base name from entry (handles @Entry format)
-    let entryBaseName = scene.extractBaseName(from: entryName)
+    let entryBaseName = Scene.extractBaseName(from: entryName)
 
     // Use scene.entryNode(named:) to find the entry
     guard let entryNode = scene.entryNode(named: entryBaseName) else {
@@ -966,7 +936,7 @@ private let startingEntry = "1"
     // Try to switch camera based on convention:
     // - Named areas (like "@Entry hallway"): try "@Camera hallway_1", fall back to "@Camera 1"
     // - Unnamed areas (like "@Entry 1"): try "@Camera 1"
-    let entryBaseName = currentScene.extractBaseName(from: entry)
+    let entryBaseName = Scene.extractBaseName(from: entry)
     let cameraNodeName: String
     let prerenderedCameraName: String
 
@@ -1038,7 +1008,7 @@ private let startingEntry = "1"
 
     // If it's a named area, check if we need to update the camera
     if let currentScene = self.scene {
-      let entryBaseName = currentScene.extractBaseName(from: entryName)
+      let entryBaseName = Scene.extractBaseName(from: entryName)
       // Check if entry base name is not just a number (named area)
       if !entryBaseName.allSatisfy({ $0.isNumber }),
         let cameraNode = currentScene.cameraNode(named: "\(entryBaseName)_1")
@@ -1170,19 +1140,40 @@ private let startingEntry = "1"
   }
 
   @MainActor
-  func withScriptCameraOverride<T>(
+  func withScriptedCameraOverride<T>(
     on cameraName: String,
     perform: () async throws -> T
   ) async rethrows -> T {
-    return try await cameraSystem.withScriptCameraOverride(on: cameraName, perform: perform)
+    return try await cameraSystem.withScriptedCameraOverride(on: cameraName, perform: perform)
   }
 
   @MainActor
-  func withScriptCameraOverride<T>(
+  func withScriptedCameraOverride<T>(
     on cameraName: String,
     perform: () throws -> T
   ) rethrows -> T {
-    return try cameraSystem.withScriptCameraOverride(on: cameraName, perform: perform)
+    return try cameraSystem.withScriptedCameraOverride(on: cameraName, perform: perform)
+  }
+
+  @MainActor
+  func withScriptedPlayerOverride<T>(
+    position: vec3,
+    rotation: Float,
+    perform: () async throws -> T
+  ) async rethrows -> T {
+    // Save current position and rotation
+    let savedPosition = playerController.position
+    let savedRotation = playerController.rotation
+
+    // Set new position and rotation
+    playerController.setPosition(position, rotation: rotation)
+
+    defer {
+      // Restore original position and rotation
+      playerController.setPosition(savedPosition, rotation: savedRotation)
+    }
+
+    return try await perform()
   }
 
   private func drawEntryArrows(scene: Scene, debugRenderer: DebugRenderer) {
@@ -1249,8 +1240,7 @@ private let startingEntry = "1"
         // Update interaction system (detect actions/triggers)
         interactionSystem.update(
           sceneScript: sceneScript,
-          currentAreaName: currentAreaName,
-          normalizedAreaIdentifier: normalizedAreaIdentifier
+          currentAreaName: currentAreaName
         )
 
         // Handle weapon system hold mode and firing
@@ -1258,7 +1248,9 @@ private let startingEntry = "1"
         weaponSystem.update(deltaTime: deltaTime)
 
         // Update enemy system
-        enemySystem.update(deltaTime: deltaTime)
+        if !disableEnemies {
+          enemySystem.update(deltaTime: deltaTime)
+        }
 
         // Handle hold mode for Space
         if !weaponSystem.usesToggledAiming {
@@ -1460,41 +1452,43 @@ private let startingEntry = "1"
       }
 
       // Draw enemy capsules
-      let aliveEnemies = enemySystem.aliveEnemies
-      if !aliveEnemies.isEmpty && !capsuleMeshInstances.isEmpty {
-        glEnable(GL_DEPTH_TEST)
-        glDepthMask(true)
-        glDepthFunc(GL_LEQUAL)
+      if !disableEnemies {
+        let aliveEnemies = enemySystem.aliveEnemies
+        if !aliveEnemies.isEmpty && !capsuleMeshInstances.isEmpty {
+          glEnable(GL_DEPTH_TEST)
+          glDepthMask(true)
+          glDepthFunc(GL_LEQUAL)
 
-        let lighting = getSceneLighting()
-        let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+          let lighting = getSceneLighting()
+          let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
 
-        for enemy in aliveEnemies {
-          // Create model matrix: translate to enemy position, then rotate around Y axis
-          // Offset Y downward so capsule sits on floor (assuming origin is at center)
-          var adjustedPosition = enemy.position
-          adjustedPosition.y -= capsuleHeightOffset
-          var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
-          modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
+          for enemy in aliveEnemies {
+            // Create model matrix: translate to enemy position, then rotate around Y axis
+            // Offset Y downward so capsule sits on floor (assuming origin is at center)
+            var adjustedPosition = enemy.position
+            adjustedPosition.y -= capsuleHeightOffset
+            var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
+            modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
 
-          for meshInstance in capsuleMeshInstances {
-            // Combine the mesh's original transform with enemy transform
-            let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
+            for meshInstance in capsuleMeshInstances {
+              // Combine the mesh's original transform with enemy transform
+              let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
 
-            // Use a slightly different color to distinguish from player (tint red)
-            meshInstance.draw(
-              projection: projection,
-              view: view,
-              modelMatrix: combinedModelMatrix,
-              cameraPosition: cameraPosition,
-              lightDirection: lighting.mainLight.direction,
-              lightColor: lighting.mainLight.color,
-              lightIntensity: lighting.mainLight.intensity,
-              fillLightDirection: lighting.fillLight.direction,
-              fillLightColor: lighting.fillLight.color,
-              fillLightIntensity: lighting.fillLight.intensity,
-              diffuseOnly: false
-            )
+              // Use a slightly different color to distinguish from player (tint red)
+              meshInstance.draw(
+                projection: projection,
+                view: view,
+                modelMatrix: combinedModelMatrix,
+                cameraPosition: cameraPosition,
+                lightDirection: lighting.mainLight.direction,
+                lightColor: lighting.mainLight.color,
+                lightIntensity: lighting.mainLight.intensity,
+                fillLightDirection: lighting.fillLight.direction,
+                fillLightColor: lighting.fillLight.color,
+                fillLightIntensity: lighting.fillLight.intensity,
+                diffuseOnly: false
+              )
+            }
           }
         }
       }
@@ -1545,45 +1539,112 @@ private let startingEntry = "1"
             debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF00FF, size: 2.0)
             physicsWorld.drawBodies(debugRenderer: debugRenderer)
 
-            // Draw character controllers (player and enemies)
-            // Player character controller
-            if let characterController = playerController.getCharacterController() {
-              let worldTransform = characterController.getWorldTransform()
-              // Draw capsule: halfHeight 0.8, radius 0.4
-              debugRenderer.drawCapsule(
-                worldTransform,
-                halfHeightOfCylinder: 0.8,
-                radius: 0.4,
-                color: 0xFF00FF00,  // Green for player
-                castShadow: .off,
-                drawMode: .wireframe
-              )
+            // Draw sensor box query shape in purple
+            let sensorBox = playerController.getSensorBoxTransform()
+            let halfExtents = sensorBox.halfExtents
+            let pos = sensorBox.position
+            let rot = sensorBox.rotation
+
+            // Convert quaternion to rotation matrix
+            let q = rot
+            let x2 = q.x + q.x
+            let y2 = q.y + q.y
+            let z2 = q.z + q.z
+            let xx = q.x * x2
+            let xy = q.x * y2
+            let xz = q.x * z2
+            let yy = q.y * y2
+            let yz = q.y * z2
+            let zz = q.z * z2
+            let wx = q.w * x2
+            let wy = q.w * y2
+            let wz = q.w * z2
+
+            let rotMat = mat4(
+              1 - (yy + zz), xy + wz, xz - wy, 0,
+              xy - wz, 1 - (xx + zz), yz + wx, 0,
+              xz + wy, yz - wx, 1 - (xx + yy), 0,
+              0, 0, 0, 1
+            )
+
+            // Box corners in local space
+            let corners: [vec3] = [
+              vec3(-halfExtents.x, -halfExtents.y, -halfExtents.z),
+              vec3(halfExtents.x, -halfExtents.y, -halfExtents.z),
+              vec3(halfExtents.x, halfExtents.y, -halfExtents.z),
+              vec3(-halfExtents.x, halfExtents.y, -halfExtents.z),
+              vec3(-halfExtents.x, -halfExtents.y, halfExtents.z),
+              vec3(halfExtents.x, -halfExtents.y, halfExtents.z),
+              vec3(halfExtents.x, halfExtents.y, halfExtents.z),
+              vec3(-halfExtents.x, halfExtents.y, halfExtents.z),
+            ]
+
+            // Transform corners to world space
+            let worldCorners = corners.map { corner in
+              let rotated = rotMat * vec4(corner.x, corner.y, corner.z, 1.0)
+              return vec3(rotated.x, rotated.y, rotated.z) + pos
             }
 
-            // Enemy character controllers
-            for enemy in enemySystem.aliveEnemies {
-              if let characterController = enemy.characterController {
-                let worldTransform = characterController.getWorldTransform()
-                // Determine capsule size based on enemy type
-                let (halfHeight, radius): (Float, Float)
-                if enemy is DogEnemy {
-                  halfHeight = 0.4
-                  radius = 0.25
-                } else {
-                  halfHeight = 0.8
-                  radius = 0.4
-                }
-                // Red for enemies
-                debugRenderer.drawCapsule(
-                  worldTransform,
-                  halfHeightOfCylinder: halfHeight,
-                  radius: radius,
-                  color: 0xFFFF0000,  // Red for enemies
-                  castShadow: .off,
-                  drawMode: .wireframe
+            // Draw box edges in purple (0xFF00FFFF = purple in ABGR)
+            let edges: [(Int, Int)] = [
+              (0, 1), (1, 2), (2, 3), (3, 0),  // Front face
+              (4, 5), (5, 6), (6, 7), (7, 4),  // Back face
+              (0, 4), (1, 5), (2, 6), (3, 7),  // Connecting edges
+            ]
+
+            // Use the debug renderer's drawLine through the implementation
+            // We need to access it through the physics world's debug renderer implementation
+            if let debugRendererImpl = physicsWorld.getDebugRendererImplementation() {
+              for (i, j) in edges {
+                let from = worldCorners[i]
+                let to = worldCorners[j]
+                debugRendererImpl.drawLine(
+                  from: RVec3(x: from.x, y: from.y, z: from.z),
+                  to: RVec3(x: to.x, y: to.y, z: to.z),
+                  color: 0xFFFFFF00  // Cyan in ABGR format
                 )
               }
             }
+
+            // // Draw character controllers (player and enemies)
+            // // Player character controller
+            // if let characterController = playerController.getCharacterController() {
+            //   let worldTransform = characterController.getWorldTransform()
+            //   // Draw capsule: halfHeight 0.8, radius 0.4
+            //   debugRenderer.drawCapsule(
+            //     worldTransform,
+            //     halfHeightOfCylinder: 0.8,
+            //     radius: 0.4,
+            //     color: 0xFF00FF00,  // Green for player
+            //     castShadow: .off,
+            //     drawMode: .wireframe
+            //   )
+            // }
+
+            // // Enemy character controllers
+            // for enemy in enemySystem.aliveEnemies {
+            //   if let characterController = enemy.characterController {
+            //     let worldTransform = characterController.getWorldTransform()
+            //     // Determine capsule size based on enemy type
+            //     let (halfHeight, radius): (Float, Float)
+            //     if enemy is DogEnemy {
+            //       halfHeight = 0.4
+            //       radius = 0.25
+            //     } else {
+            //       halfHeight = 0.8
+            //       radius = 0.4
+            //     }
+            //     // Red for enemies
+            //     debugRenderer.drawCapsule(
+            //       worldTransform,
+            //       halfHeightOfCylinder: halfHeight,
+            //       radius: radius,
+            //       color: 0xFFFF0000,  // Red for enemies
+            //       castShadow: .off,
+            //       drawMode: .wireframe
+            //     )
+            //   }
+            // }
 
             // Draw gun ray if available
             if let rayInfo = weaponSystem.getLastRayInfo() {
@@ -1610,7 +1671,7 @@ private let startingEntry = "1"
         }
 
         // Enemy debug overlay (health bars and state labels)
-        if showEnemyDebugOverlay {
+        if showEnemyDebugOverlay && !disableEnemies {
           drawEnemyDebugOverlay(projection: projection, view: view)
         }
 

@@ -196,11 +196,30 @@ public final class Scene {
     return baseName.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  /// Extract the base name from a node name, removing all hint prefixes (instance method)
-  /// - Parameter nodeName: The node name to extract base name from
-  /// - Returns: The base name without any hint prefixes
-  public func extractBaseName(from nodeName: String) -> String {
-    return Self.extractBaseName(from: nodeName)
+  /// Normalize entries/camera identifiers so area comparisons stay consistent
+  /// - "@Entry 1" -> "1"
+  /// - "@Entry hallway" -> "hallway"
+  /// - "hallway_2" -> "hallway"
+  /// - "hallway" -> "hallway"
+  /// - "1" -> "1"
+  public static func normalizedAreaIdentifier(_ name: String) -> String {
+    guard !name.isEmpty else { return name }
+
+    // Extract base name using static extractBaseName (handles @Entry format)
+    var identifier = extractBaseName(from: name)
+
+    // Remove numeric suffix if present (e.g., "hallway_2" -> "hallway")
+    if let underscoreIndex = identifier.lastIndex(of: "_") {
+      let suffixStart = identifier.index(after: underscoreIndex)
+      if suffixStart < identifier.endIndex {
+        let suffix = identifier[suffixStart...]
+        if suffix.allSatisfy({ $0.isNumber }) {
+          identifier = String(identifier[..<underscoreIndex])
+        }
+      }
+    }
+
+    return identifier
   }
 
   // MARK: - Hint-Based Node Collections

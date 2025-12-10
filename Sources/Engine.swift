@@ -100,6 +100,8 @@ public final class Engine {
 
     //LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 
+    //print(ProcessInfo.processInfo.environment)
+
     cli = CLIOptions.parseOrExit()
 
     setupGLFW()

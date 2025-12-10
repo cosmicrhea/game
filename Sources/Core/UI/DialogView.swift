@@ -55,6 +55,17 @@
   // Force more indicator to show even if there are no more chunks
   private var forceMoreIndicator: Bool = false
 
+  // Ask mode state (for inline option selection)
+  private var askText: String?
+  private var askOptions: [String] = []
+  private var askOptionResources: [LocalizedStringResource] = []  // Store original LSRs to return
+  private var selectedOptionIndex: Int = 0
+  private var askContinuation: CheckedContinuation<LocalizedStringResource, Never>?
+  private var wasLeftKeyPressedLastFrame: Bool = false
+  private var wasRightKeyPressedLastFrame: Bool = false
+  private var wasActionKeyPressedLastFrame: Bool = false
+  private let optionCaret = Caret(direction: .right, animationBehavior: .fade)
+
   init() {}
 
   func update(deltaTime: Float) {
@@ -75,6 +86,17 @@
 
     // Update speed multiplier based on held action keys or left mouse button
     updateSpeedMultiplier()
+
+    // Handle ask mode input
+    if let askText = askText {
+      // Ensure layout is done for ask mode
+      if needsLayout {
+        layoutText(askText)
+        needsLayout = false
+      }
+      handleAskModeInput()
+      return
+    }
 
     let fullText = text
     guard !fullText.isEmpty else { return }
@@ -116,11 +138,55 @@
     speedMultiplier = (isActionKeyHeld || isLeftMouseHeld) ? 4.0 : 1.0
   }
 
+  private func handleAskModeInput() {
+    guard let window = Engine.shared.window else { return }
+    let keyboard = window.keyboard
+
+    // Handle left/right navigation (a/d keys)
+    let isLeftPressed = keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed
+    let isRightPressed = keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed
+
+    // Only change selection on key press (not while held)
+    if isLeftPressed && !wasLeftKeyPressedLastFrame {
+      selectedOptionIndex = max(0, selectedOptionIndex - 1)
+    }
+    if isRightPressed && !wasRightKeyPressedLastFrame {
+      selectedOptionIndex = min(askOptions.count - 1, selectedOptionIndex + 1)
+    }
+
+    wasLeftKeyPressedLastFrame = isLeftPressed
+    wasRightKeyPressedLastFrame = isRightPressed
+
+    // Handle selection (action keys)
+    let isActionKeyPressed =
+      keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+      || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+
+    // Only trigger selection on key press (not while held)
+    let actionKeyJustPressed = isActionKeyPressed && !wasActionKeyPressedLastFrame
+
+    if actionKeyJustPressed {
+      // User selected an option
+      let selectedOption = askOptionResources[selectedOptionIndex]
+
+      // Clear ask mode state
+      askText = nil
+      askOptions = []
+      askOptionResources = []
+      text = ""
+
+      // Resume continuation with selected option
+      if let continuation = askContinuation {
+        askContinuation = nil
+        continuation.resume(returning: selectedOption)
+      }
+    }
+
+    wasActionKeyPressedLastFrame = isActionKeyPressed
+  }
+
   func draw() {
     guard !text.isEmpty else { return }
-
-    let displayCount = Int(displayedCharacterCount.rounded(.towardZero))
-    guard displayCount > 0 else { return }
 
     let viewportWidth = Float(Engine.viewportSize.width)
     let viewportHeight = Float(Engine.viewportSize.height)
@@ -130,6 +196,24 @@
 
     // Use left-aligned dialog style
     let dialogStyle = TextStyle.dialog.withAlignment(.left)
+
+    // Handle ask mode rendering
+    if let askText = askText, !askOptions.isEmpty {
+      drawAskMode(
+        questionText: askText,
+        options: askOptions,
+        selectedIndex: selectedOptionIndex,
+        viewportWidth: viewportWidth,
+        viewportHeight: viewportHeight,
+        effectiveMaxWidth: effectiveMaxWidth,
+        dialogStyle: dialogStyle
+      )
+      return
+    }
+
+    // Normal dialog rendering
+    let displayCount = Int(displayedCharacterCount.rounded(.towardZero))
+    guard displayCount > 0 else { return }
 
     // Get visible text for drawing
     let fullTextToShow = getVisibleText(characterCount: displayCount)
@@ -188,6 +272,94 @@
       drawMoreIndicator(textX: textX, textY: textY, textHeight: textBounds.size.height)
     }
     wasCaretVisibleLastFrame = shouldShowCaret
+  }
+
+  private func drawAskMode(
+    questionText: String,
+    options: [String],
+    selectedIndex: Int,
+    viewportWidth: Float,
+    viewportHeight: Float,
+    effectiveMaxWidth: Float,
+    dialogStyle: TextStyle
+  ) {
+    // Layout question text to get line height
+    let questionBounds = questionText.boundingRect(
+      with: dialogStyle,
+      wrapWidth: effectiveMaxWidth
+    )
+
+    // Calculate line height from question text
+    let features = Font.Features(monospaceDigits: dialogStyle.monospaceDigits)
+    guard
+      let font = Font(
+        fontName: dialogStyle.fontName,
+        pixelHeight: dialogStyle.fontSize,
+        features: features
+      )
+    else {
+      return
+    }
+    let layout = TextLayout(font: font, scale: 1.0)
+    let layoutResult = layout.layout(questionText, style: dialogStyle, wrapWidth: effectiveMaxWidth)
+    let calculatedLineHeight = layoutResult.lineHeight
+
+    // Center the text box on screen
+    let textX = (viewportWidth - effectiveMaxWidth) / 2
+    let baseTextY: Float
+    if let context = GraphicsContext.current, !context.isFlipped {
+      // In flipped coordinates, Y=0 is at bottom
+      baseTextY = bottomPadding + questionBounds.size.height + calculatedLineHeight
+    } else {
+      // In normal coordinates, Y=0 is at top
+      baseTextY = viewportHeight - bottomPadding - questionBounds.size.height - calculatedLineHeight
+    }
+
+    // Draw question text on first line
+    questionText.draw(
+      at: Point(textX, baseTextY + calculatedLineHeight),
+      style: dialogStyle,
+      wrapWidth: effectiveMaxWidth,
+      anchor: .bottomLeft
+    )
+
+    // Build options text (without chevron - we'll draw it separately)
+    let optionsText = options.joined(separator: "  ")
+
+    // Calculate chevron position before drawing options
+    let optionsBeforeSelected = options[..<selectedIndex]
+    let textBeforeSelected = optionsBeforeSelected.joined(separator: "  ")
+
+    // Measure text before selected option to position chevron
+    let textBeforeBounds =
+      textBeforeSelected.isEmpty
+      ? Rect.zero
+      : textBeforeSelected.boundingRect(
+        with: dialogStyle,
+        wrapWidth: effectiveMaxWidth
+      )
+
+    // Draw options on second line
+    optionsText.draw(
+      at: Point(textX, baseTextY),
+      style: dialogStyle,
+      wrapWidth: effectiveMaxWidth,
+      anchor: .bottomLeft
+    )
+
+    // Draw animated chevron in front of selected option
+    let chevronSpacing: Float = 8  // Space between chevron and option text
+    let chevronX = textX + textBeforeBounds.size.width - chevronSpacing
+    let chevronY = baseTextY + calculatedLineHeight * 0.5  // Center vertically on second line
+
+    optionCaret.draw(
+      at: Point(chevronX, chevronY),
+      tint: dialogStyle.color,
+      scale: 0.4,
+      deltaTime: deltaTime,
+      strokeWidth: dialogStyle.strokeWidth / 2,
+      strokeColor: dialogStyle.strokeColor
+    )
   }
 
   // MARK: - Public Methods
@@ -365,6 +537,42 @@
         completionContinuation = nil
         continuation.resume()
       }
+    }
+  }
+
+  /// Ask a question with inline options. Returns the selected option.
+  /// - Parameter text: The question text to display
+  /// - Parameter options: Array of option strings to choose from
+  /// - Returns: The selected option as a LocalizedStringResource
+  func ask(text: LocalizedStringResource, options: [LocalizedStringResource]) async -> LocalizedStringResource {
+    // Cancel any existing ask continuation
+    if let continuation = askContinuation {
+      askContinuation = nil
+      continuation.resume(returning: options[0])
+    }
+
+    // Set up ask mode
+    let questionText = String(gameLocalized: text)
+    let optionStrings = options.map { String(gameLocalized: $0) }
+
+    askText = questionText
+    askOptions = optionStrings
+    askOptionResources = options
+    selectedOptionIndex = 0
+    wasLeftKeyPressedLastFrame = false
+    wasRightKeyPressedLastFrame = false
+    wasActionKeyPressedLastFrame = false
+
+    // Set text to question (will be displayed on first line)
+    // In ask mode, we want to show the text immediately (no typewriter effect)
+    self.text = questionText
+    needsLayout = true
+    // Set displayed character count to max so text shows immediately
+    displayedCharacterCount = Float(questionText.count)
+
+    // Wait for user to select an option
+    return await withCheckedContinuation { continuation in
+      askContinuation = continuation
     }
   }
 

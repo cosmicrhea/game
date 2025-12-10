@@ -62,7 +62,7 @@ class Character {
 }
 
 @MainActor
-class Script {
+public class Script {
 
   var scene: Scene {
     guard let mainLoop = MainLoop.shared else {
@@ -257,7 +257,7 @@ class Script {
       logger.warning("⚠️ Cannot activate closeup '\(cameraName)': MainLoop.shared is nil")
       return try perform()
     }
-    return try mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
+    return try mainLoop.withScriptedCameraOverride(on: cameraName, perform: perform)
   }
 
   /// Runs work while forcing the camera to a specific closeup.
@@ -281,7 +281,7 @@ class Script {
       logger.warning("⚠️ Cannot activate closeup '\(cameraName)': MainLoop.shared is nil")
       return try await perform()
     }
-    return try await mainLoop.withScriptCameraOverride(on: cameraName, perform: perform)
+    return try await mainLoop.withScriptedCameraOverride(on: cameraName, perform: perform)
   }
 
   /// Async variant of `withCloseup(on:perform:)`.
@@ -364,10 +364,19 @@ class Script {
     await say(text)
   }
 
-  func ask(_ string: String, options: [String]) -> String { options[0] }
+  @MainActor func ask(_ text: LocalizedStringResource, options: [LocalizedStringResource]) async
+    -> LocalizedStringResource
+  {
+    return await dialogView.ask(text: text, options: options)
+  }
 
-  func confirm(_ string: String, _ optionA: String, _ optionB: String = "Cancel") -> Bool {
-    ask(string, options: [optionA, optionB]) == optionA
+  @MainActor func confirm(
+    _ text: LocalizedStringResource,
+    _ optionA: LocalizedStringResource,
+    _ optionB: LocalizedStringResource = "Cancel"
+  ) async -> Bool {
+    let answer = await ask(text, options: [optionA, optionB])
+    return String(gameLocalized: answer) == String(gameLocalized: optionA)
   }
 
   func pause(_ seconds: Float = 1.0) async {
@@ -413,6 +422,20 @@ class Script {
   func openStorage() {}
 
   func interact(with node: Node, using item: Item?) {}
+
+  /// Temporarily teleports and reorients the player, then restores them after the closure completes.
+  /// - Parameters:
+  ///   - position: The position to teleport the player to
+  ///   - rotation: The rotation (in radians) to set the player to
+  ///   - perform: The work to execute while the player is repositioned
+  @discardableResult
+  func withPlayer<T>(position: vec3, rotation: Float, perform: () async throws -> T) async rethrows -> T {
+    guard let mainLoop = MainLoop.shared else {
+      logger.warning("⚠️ Cannot reposition player: MainLoop.shared is nil")
+      return try await perform()
+    }
+    return try await mainLoop.withScriptedPlayerOverride(position: position, rotation: rotation, perform: perform)
+  }
 
   // Default implementations for @SceneScript macro-generated methods
   // These are overridden by the macro in scene script classes

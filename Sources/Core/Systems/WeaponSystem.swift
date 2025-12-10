@@ -1,4 +1,3 @@
-import CJolt
 import Foundation
 import Jolt
 
@@ -407,33 +406,36 @@ public final class WeaponSystem {
 
     // Position box in front of player
     let boxCenter = playerPosition + normalizedForward * (meleeRange * 0.5)
-    var baseOffset = RVec3(x: boxCenter.x, y: boxCenter.y, z: boxCenter.z)
+    // baseOffset should be zero since we're including position in the transform
+    var baseOffset = RVec3(x: 0, y: 0, z: 0)
 
     // Create rotation matrix for the box (aligned with forward direction)
     let up = vec3(0, 1, 0)
     let right = normalize(cross(up, normalizedForward))
     let correctedUp = normalize(cross(normalizedForward, right))
 
-    // Build rotation matrix (right, up, forward)
-    var boxTransform = JPH_RMat4()
-    boxTransform.column.0 = JPH_Vec4(x: right.x, y: right.y, z: right.z, w: 0)
-    boxTransform.column.1 = JPH_Vec4(x: correctedUp.x, y: correctedUp.y, z: correctedUp.z, w: 0)
-    boxTransform.column.2 = JPH_Vec4(x: normalizedForward.x, y: normalizedForward.y, z: normalizedForward.z, w: 0)
-    boxTransform.column.3 = JPH_Vec4(x: 0, y: 0, z: 0, w: 1)
+    // Build rotation matrix (right, up, forward) with translation
+    // Create RMat44 from column vectors (right, up, forward, position)
+    let boxTransform = RMat44(
+      right.x, correctedUp.x, normalizedForward.x, boxCenter.x,
+      right.y, correctedUp.y, normalizedForward.y, boxCenter.y,
+      right.z, correctedUp.z, normalizedForward.z, boxCenter.z,
+      0, 0, 0, 1
+    )
 
     // Check what's colliding with the melee box (not casting, just checking overlap)
     let results = physicsWorld.getPhysicsSystem().collideShapeAll(
       shape: boxShape,
       scale: Vec3(x: 1, y: 1, z: 1),
-      centerOfMassTransform: boxTransform,
+      centerOfMassTransform: boxTransform.cValue,
       baseOffset: &baseOffset
     )
 
     // Check all hits for enemies
     for result in results {
-      // Create a fake RayHit for the enemy lookup (we only need bodyID)
-      let fakeHit = JPH_RayCastResult(bodyID: result.bodyID2, fraction: 0, subShapeID2: 0)
-      if let enemy = enemySystem.findEnemy(hitByRaycast: RayHit(fakeHit), in: physicsWorld) {
+      // Create a RayHit for the enemy lookup (we only need bodyID)
+      let fakeHit = RayHit(bodyID: result.bodyID2, fraction: 0)
+      if let enemy = enemySystem.findEnemy(hitByRaycast: fakeHit, in: physicsWorld) {
         // Deal melee damage
         let damage: Float = 50.0  // Melee does more damage
         enemy.takeDamage(damage)

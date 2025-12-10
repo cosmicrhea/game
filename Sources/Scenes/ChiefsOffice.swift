@@ -9,6 +9,7 @@ class ChiefsOffice: Script {
   }
 
   func laptop() async {
+    // await withPlayer(position: vec3(3.12, 1.2, -3.86), rotation: -12.32) {
     await withCloseup(on: desk) {
       await say("Looks like chief is working on something.", more: true)
     }
@@ -17,6 +18,7 @@ class ChiefsOffice: Script {
       await pause()
       await say("What the hell?!")
     }
+    // }
   }
 
 }
