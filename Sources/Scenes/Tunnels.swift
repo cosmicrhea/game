@@ -7,17 +7,16 @@ class Tunnels: Script {
     goTo(scene: "nexus", entry: "1")
   }
 
-  func thirdRail() {
+  func thirdRail() async {
     thirdRailTouches += 1
 
-    if thirdRailTouches >= 10 {
-      die()
-    } else if thirdRailTouches >= 7 {
-      say("I really shouldn't keep doing this...")
-    } else if thirdRailTouches >= 4 {
-      say("Maybe I should stop touching this.")
+    if thirdRailTouches < 10 {
+      await say(["It's the third rail.", "I better not touch it."])
     } else {
-      say(["It's the third rail.", "I better not touch it."])
+      await say("It's the third rail.", more: true)
+      if await confirm("Will you touch it?", "Touch it", "Leave it alone") {
+        die()
+      }
     }
   }
 

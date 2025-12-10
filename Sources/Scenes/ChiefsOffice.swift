@@ -9,16 +9,16 @@ class ChiefsOffice: Script {
   }
 
   func laptop() async {
-    // await withPlayer(position: vec3(3.12, 1.2, -3.86), rotation: -12.32) {
-    await withCloseup(on: desk) {
-      await say("Looks like chief is working on something.", more: true)
-    }
+    await withPlayer(position: vec3(3.12, 1.2, -3.86), rotation: -12.32) {
+      await withCloseup(on: desk) {
+        await say("Looks like chief is working on something.", more: true)
+      }
 
-    await withCloseup(on: laptop) {
-      await pause()
-      await say("What the hell?!")
+      await withCloseup(on: laptop) {
+        await pause(1.0)
+        await say("What the hell?!")
+      }
     }
-    // }
   }
 
 }

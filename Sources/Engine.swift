@@ -45,6 +45,11 @@ public final class Engine {
   private nonisolated(unsafe) static var _cachedViewportSize: Size = DESIGN_RESOLUTION
   public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
+  /// Whether the current key event being processed is a repeat event
+  /// This is set by Engine before calling onKeyPressed and can be checked by handlers
+  /// that want to ignore repeat events (e.g., ask mode in DialogView)
+  @MainActor public static var isKeyRepeat: Bool = false
+
   private var config: Config { .current }
 
   private(set) var window: GLFWWindow!
@@ -268,7 +273,7 @@ public final class Engine {
 
       DeathScreenStack(),
 
-      //DialogDemo(),
+      DialogDemo(),
       MapView(),
       ItemView(item: .sigp320),
       //PickupView(item: .catStatue),
@@ -325,9 +330,15 @@ public final class Engine {
         return
       }
       self.activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods)
-      if state == .pressed {
+      // Call onKeyPressed for both pressed and repeated events (menus need repeats for fast navigation)
+      // Set isKeyRepeat flag so handlers can choose to ignore repeats if needed
+      if state == .pressed || state == .repeated {
+        Self.isKeyRepeat = (state == .repeated)
         self.activeLoop.onKeyPressed(window: window, key: key, scancode: Int32(scancode), mods: mods)
-        handleGlobalDebugCommand(key: key, modifiers: mods)
+        if state == .pressed {
+          handleGlobalDebugCommand(key: key, modifiers: mods)
+        }
+        Self.isKeyRepeat = false  // Reset after handling
       }
     }
 

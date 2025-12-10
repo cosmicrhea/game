@@ -346,7 +346,7 @@ final class PrerenderedEnvironment {
 
     currentCameraIndex = index
     selectedCamera = currentCameraName  // Update the editable property
-    logger.info("📷 Switched to camera '\(currentCameraName)' (index \(index))")
+    logger.trace("📷 Switched to camera '\(currentCameraName)' (index \(index))")
 
     // Reload frames for the new camera
     do {

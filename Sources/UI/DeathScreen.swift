@@ -6,6 +6,7 @@ import struct GLFW.Mouse
 /// The death screen menu with Continue, Load Game, and Quit options
 final class DeathScreen: Screen {
   private let listMenu = ListMenu()
+  private var skipInputThisFrame: Bool = true  // Skip input on first frame to avoid immediate selection
 
   override init() {
     super.init()
@@ -44,9 +45,13 @@ final class DeathScreen: Screen {
 
   override func update(deltaTime: Float) {
     listMenu.update(deltaTime: deltaTime)
+    // Clear skip flag after first update
+    skipInputThisFrame = false
   }
 
   override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    // Skip input on first frame to avoid immediate selection from the key that triggered death
+    guard !skipInputThisFrame else { return }
     listMenu.handleKeyPressed(key)
   }
 

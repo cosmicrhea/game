@@ -54,7 +54,7 @@ extension SaveState {
         totalPlaytime: 3 * 3600 + 42 * 60 + 5,
         gameVersion: "0.5.0-dev",
         saveCount: 18,
-        lastSavedAt: base.addingTimeInterval(-3600 * 4 - 720),
+        lastSavedAt: base.addingTimeInterval(-3600 * 66 - 720),
         isAutoSave: false
       ),
       SaveState(

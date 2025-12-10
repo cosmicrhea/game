@@ -87,24 +87,24 @@ public final class InteractionSystem {
       baseOffset: &castBaseOffset
     )
 
-    // Debug: print all cast results
-    if !castResults.isEmpty {
-      logger.debug("🔍 Shape cast found \(castResults.count) bodies:")
-      let bodyInterface = physicsWorld.bodyInterface()
-      for (index, result) in castResults.enumerated() {
-        let bodyID = result.bodyID2
-        let bodyName = physicsWorld.getBodyName(bodyID)
-        let isAction = physicsWorld.actionBodyNames[bodyID] != nil
-        let body = bodyInterface.body(bodyID, in: physicsWorld.getPhysicsSystem())
-        let objectLayer = body.objectLayer
-        let bodyPos = body.position
-        logger.debug(
-          "  [\(index)] BodyID: \(bodyID), name: \(bodyName), layer: \(objectLayer), isAction: \(isAction), pos: (\(bodyPos.x), \(bodyPos.y), \(bodyPos.z)), fraction: \(result.fraction)"
-        )
-      }
-    } else {
-      logger.debug("🔍 Shape cast found 0 bodies")
-    }
+    // // Debug: print all cast results
+    // if !castResults.isEmpty {
+    //   logger.debug("🔍 Shape cast found \(castResults.count) bodies:")
+    //   let bodyInterface = physicsWorld.bodyInterface()
+    //   for (index, result) in castResults.enumerated() {
+    //     let bodyID = result.bodyID2
+    //     let bodyName = physicsWorld.getBodyName(bodyID)
+    //     let isAction = physicsWorld.actionBodyNames[bodyID] != nil
+    //     let body = bodyInterface.body(bodyID, in: physicsWorld.getPhysicsSystem())
+    //     let objectLayer = body.objectLayer
+    //     let bodyPos = body.position
+    //     logger.debug(
+    //       "  [\(index)] BodyID: \(bodyID), name: \(bodyName), layer: \(objectLayer), isAction: \(isAction), pos: (\(bodyPos.x), \(bodyPos.y), \(bodyPos.z)), fraction: \(result.fraction)"
+    //     )
+    //   }
+    // } else {
+    //   logger.debug("🔍 Shape cast found 0 bodies")
+    // }
 
     // Check cast results for action bodies
     for result in castResults {
@@ -112,7 +112,7 @@ public final class InteractionSystem {
       if let actionName = physicsWorld.actionBodyNames[bodyID] {
         // Extract base name from action body name using Scene's extractBaseName
         detectedActionName = Scene.extractBaseName(from: actionName)
-        logger.debug("✅ Detected action via shape cast: \(detectedActionName ?? "nil"), fraction: \(result.fraction)")
+        logger.trace("✅ Detected action via shape cast: \(detectedActionName ?? "nil"), fraction: \(result.fraction)")
         break  // Just show first detected action
       }
     }

@@ -88,6 +88,7 @@ struct SaveStateRow {
     if let state {
       let dateText = Self.formatRelativeDate(state.lastSavedAt)
       let timeText = Self.timeFormatter.string(from: state.lastSavedAt)
+      //let dateTimeText = "\(dateText) \(timeText)"
       dateText.draw(
         at: Point(rightRect.maxX, rightRect.midY + 10),
         style: TextStyle.saveSlotDate,

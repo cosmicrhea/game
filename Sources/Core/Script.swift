@@ -364,19 +364,16 @@ public class Script {
     await say(text)
   }
 
-  @MainActor func ask(_ text: LocalizedStringResource, options: [LocalizedStringResource]) async
-    -> LocalizedStringResource
-  {
-    return await dialogView.ask(text: text, options: options)
+  @MainActor func ask(_ text: LocalizedStringResource, options: [LocalizedStringResource]) async -> Int {
+    return await dialogView.ask(text, options: options)
   }
 
   @MainActor func confirm(
     _ text: LocalizedStringResource,
-    _ optionA: LocalizedStringResource,
-    _ optionB: LocalizedStringResource = "Cancel"
+    _ trueOption: LocalizedStringResource,
+    _ falseOption: LocalizedStringResource = "Cancel"
   ) async -> Bool {
-    let answer = await ask(text, options: [optionA, optionB])
-    return String(gameLocalized: answer) == String(gameLocalized: optionA)
+    return await dialogView.confirm(text, trueOption, falseOption)
   }
 
   func pause(_ seconds: Float = 1.0) async {

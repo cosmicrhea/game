@@ -6,14 +6,14 @@ import Jolt
 // private let startingScene = "tunnels"
 // private let startingEntry = "1"
 
-// private let startingScene = "nexus"
-// private let startingEntry = "8"
+private let startingScene = "nexus"
+private let startingEntry = "8"
 
 // private let startingScene = "chiefs_office"
 // private let startingEntry = "1"
 
-private let startingScene = "shooting_range"
-private let startingEntry = "hallway"
+// private let startingScene = "shooting_range"
+// private let startingEntry = "hallway"
 
 @Editable final class MainLoop: RenderLoop {
   static var shared: MainLoop?
@@ -379,6 +379,13 @@ private let startingEntry = "hallway"
 
   // MARK: Input
 
+  func onKey(window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
+    // Track key releases for DialogView ask mode
+    if state == .released {
+      dialogView.handleKeyRelease(key: key)
+    }
+  }
+
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     guard Input.player1.isEnabled else { return }
 
@@ -454,15 +461,26 @@ private let startingEntry = "hallway"
       // Forward other input to main menu
       mainMenu.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
     } else {
+      // Handle ask mode navigation first (a/d keys)
+      if dialogView.isActive {
+        if dialogView.handleAskModeNavigation(key: key) {
+          return  // Navigation handled
+        }
+      }
+
       // Handle dialog advancement keys first (these always work)
+      // Note: Engine already filters out repeat events, so onKeyPressed only fires for actual presses
       switch key {
       case .f, .enter, .numpadEnter:
         // Handle interaction - either advance dialog or interact with action
         // Dialog advancement keys always work, even when dialog is active
+        // Only process on actual key presses, not repeats
+        guard !Engine.isKeyRepeat else { return }
+
         if dialogView.isActive {
           // If dialog is showing, try to advance it
           if dialogView.tryAdvance() {
-            // Advanced to next page/chunk
+            // Advanced to next page/chunk or selected option in ask mode
             //UISound.select()
           } else if dialogView.isFinished {
             // Dialog finished, dismiss it (disables input synchronously)
@@ -481,7 +499,7 @@ private let startingEntry = "hallway"
         if dialogView.isActive {
           // If dialog is showing, try to advance it
           if dialogView.tryAdvance() {
-            // Advanced to next page/chunk
+            // Advanced to next page/chunk or selected option in ask mode
           } else if dialogView.isFinished {
             dialogView.dismiss()
           }

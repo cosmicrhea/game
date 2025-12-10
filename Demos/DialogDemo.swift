@@ -40,12 +40,12 @@
   private func runDemo() async {
     while !Task.isCancelled {
       // Initial ask
-      let ready = await dialogView.ask(
-        text: "You ready for the demo?",
+      let readyIndex = await dialogView.ask(
+        "You ready for the demo?",
         options: ["Ready", "Not yet"]
       )
 
-      if String(gameLocalized: ready) == String(gameLocalized: "Not yet") {
+      if readyIndex == 1 {
         // If not ready, ask again
         continue
       }
@@ -59,12 +59,12 @@
       ])
 
       // Final ask
-      let answer = await dialogView.ask(
-        text: "Did you get all of that?",
+      let answerIndex = await dialogView.ask(
+        "Did you get all of that?",
         options: ["Got it", "Wait, what?"]
       )
 
-      if String(gameLocalized: answer) == String(gameLocalized: "Got it") {
+      if answerIndex == 0 {
         await dialogView.print(chunks: ["Good. But since we're here, I'll tell you everything again anyway."])
         await dialogView.print(chunks: [])
       } else {

@@ -58,12 +58,15 @@
   // Ask mode state (for inline option selection)
   private var askText: String?
   private var askOptions: [String] = []
-  private var askOptionResources: [LocalizedStringResource] = []  // Store original LSRs to return
   private var selectedOptionIndex: Int = 0
-  private var askContinuation: CheckedContinuation<LocalizedStringResource, Never>?
+  private var previousSelectedOptionIndex: Int = -1  // Track previous selection to reset animation
+  private var askContinuation: CheckedContinuation<Int, Never>?
   private var wasLeftKeyPressedLastFrame: Bool = false
   private var wasRightKeyPressedLastFrame: Bool = false
   private var wasActionKeyPressedLastFrame: Bool = false
+  private var skipInputThisFrame: Bool = false  // Skip input on first frame to avoid immediate selection
+  private var waitingForActionKeyRelease: Bool = false  // Wait for action key to be released before allowing selection
+  private var hasSeenActionKeyRelease: Bool = false  // Track if we've seen the key released after entering ask mode
   private let optionCaret = Caret(direction: .right, animationBehavior: .fade)
 
   init() {}
@@ -87,14 +90,41 @@
     // Update speed multiplier based on held action keys or left mouse button
     updateSpeedMultiplier()
 
-    // Handle ask mode input
+    // Handle ask mode - just update typewriter effect, input is handled via key events
     if let askText = askText {
       // Ensure layout is done for ask mode
       if needsLayout {
         layoutText(askText)
         needsLayout = false
       }
-      handleAskModeInput()
+
+      // Update typewriter effect for question text (same approach as print())
+      // Calculate total characters in wrapped lines (max 2 lines)
+      let totalCharacters = wrappedLines.reduce(0) { $0 + $1.count }
+      let effectiveSpeed = charactersPerSecond * speedMultiplier
+      displayedCharacterCount = min(
+        displayedCharacterCount + effectiveSpeed * deltaTime,
+        Float(totalCharacters)
+      )
+
+      // Update animation tracking for ask mode
+      if selectedOptionIndex != previousSelectedOptionIndex {
+        optionCaret.resetAnimation()
+        previousSelectedOptionIndex = selectedOptionIndex
+      }
+
+      // Check for key release on first frame (check initial state)
+      if skipInputThisFrame {
+        skipInputThisFrame = false
+        guard let window = Engine.shared.window else { return }
+        let keyboard = window.keyboard
+        let isActionKeyPressed =
+          keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+          || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+        waitingForActionKeyRelease = isActionKeyPressed
+        hasSeenActionKeyRelease = !isActionKeyPressed
+      }
+
       return
     }
 
@@ -142,22 +172,100 @@
     guard let window = Engine.shared.window else { return }
     let keyboard = window.keyboard
 
+    // Skip input on first frame to avoid immediate selection from the key that triggered the action
+    if skipInputThisFrame {
+      skipInputThisFrame = false
+      // Check if action key is pressed - if so, wait for it to be released
+      let isActionKeyPressed =
+        keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+        || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+      waitingForActionKeyRelease = isActionKeyPressed
+      hasSeenActionKeyRelease = !isActionKeyPressed  // If not pressed, we've already seen release
+
+      // Still update the "was pressed" flags so we don't trigger on the next frame
+      let isLeftPressed = keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed
+      let isRightPressed = keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed
+      wasLeftKeyPressedLastFrame = isLeftPressed
+      wasRightKeyPressedLastFrame = isRightPressed
+      wasActionKeyPressedLastFrame = isActionKeyPressed
+      return
+    }
+
+    // Wait for action key to be released if it was pressed when entering ask mode
+    if waitingForActionKeyRelease {
+      let isActionKeyPressed =
+        keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+        || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+
+      if !isActionKeyPressed {
+        // Action key has been released, mark that we've seen the release
+        hasSeenActionKeyRelease = true
+        waitingForActionKeyRelease = false
+        wasActionKeyPressedLastFrame = false
+      } else {
+        // Still pressed (key repeat), keep waiting and skip input
+        wasActionKeyPressedLastFrame = isActionKeyPressed
+        return
+      }
+    }
+
+    // If we haven't seen the action key released yet (even if not waiting), don't allow selection
+    // This handles the case where key repeat keeps the key "pressed" continuously
+    if !hasSeenActionKeyRelease {
+      let isActionKeyPressed =
+        keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+        || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+      if !isActionKeyPressed {
+        hasSeenActionKeyRelease = true
+      } else {
+        // Still pressed, update flag but don't allow selection yet
+        wasActionKeyPressedLastFrame = isActionKeyPressed
+        // Continue to navigation handling but skip selection
+      }
+    }
+
     // Handle left/right navigation (a/d keys)
     let isLeftPressed = keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed
     let isRightPressed = keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed
 
     // Only change selection on key press (not while held)
     if isLeftPressed && !wasLeftKeyPressedLastFrame {
-      selectedOptionIndex = max(0, selectedOptionIndex - 1)
+      let newIndex = max(0, selectedOptionIndex - 1)
+      if newIndex != selectedOptionIndex {
+        selectedOptionIndex = newIndex
+        optionCaret.resetAnimation()  // Reset animation when selection changes
+        UISound.navigate()
+      }
     }
     if isRightPressed && !wasRightKeyPressedLastFrame {
-      selectedOptionIndex = min(askOptions.count - 1, selectedOptionIndex + 1)
+      let newIndex = min(askOptions.count - 1, selectedOptionIndex + 1)
+      if newIndex != selectedOptionIndex {
+        selectedOptionIndex = newIndex
+        optionCaret.resetAnimation()  // Reset animation when selection changes
+        UISound.navigate()
+      }
+    }
+
+    // Reset animation if selection changed (for any reason)
+    if selectedOptionIndex != previousSelectedOptionIndex {
+      optionCaret.resetAnimation()
+      previousSelectedOptionIndex = selectedOptionIndex
     }
 
     wasLeftKeyPressedLastFrame = isLeftPressed
     wasRightKeyPressedLastFrame = isRightPressed
 
     // Handle selection (action keys)
+    // Only allow selection if we've seen the key released at least once
+    guard hasSeenActionKeyRelease else {
+      // Update flag but don't allow selection
+      let isActionKeyPressed =
+        keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+        || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+      wasActionKeyPressedLastFrame = isActionKeyPressed
+      return
+    }
+
     let isActionKeyPressed =
       keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
       || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
@@ -167,18 +275,17 @@
 
     if actionKeyJustPressed {
       // User selected an option
-      let selectedOption = askOptionResources[selectedOptionIndex]
+      let selectedIndex = selectedOptionIndex
 
       // Clear ask mode state
       askText = nil
       askOptions = []
-      askOptionResources = []
       text = ""
 
-      // Resume continuation with selected option
+      // Resume continuation with selected index
       if let continuation = askContinuation {
         askContinuation = nil
-        continuation.resume(returning: selectedOption)
+        continuation.resume(returning: selectedIndex)
       }
     }
 
@@ -315,22 +422,38 @@
       baseTextY = viewportHeight - bottomPadding - questionBounds.size.height - calculatedLineHeight
     }
 
-    // Draw question text on first line
-    questionText.draw(
+    // Draw question text on first line with typewriter effect (same approach as print())
+    let displayCount = Int(displayedCharacterCount.rounded(.towardZero))
+    let visibleQuestionText = getVisibleText(characterCount: displayCount)
+    visibleQuestionText.draw(
       at: Point(textX, baseTextY + calculatedLineHeight),
       style: dialogStyle,
       wrapWidth: effectiveMaxWidth,
       anchor: .bottomLeft
     )
 
-    // Build options text (without chevron - we'll draw it separately)
-    let optionsText = options.joined(separator: "  ")
+    // Only show options when question is fully typed out
+    let totalCharacters = wrappedLines.reduce(0) { $0 + $1.count }
+    let isQuestionComplete = displayedCharacterCount >= Float(totalCharacters)
+    guard isQuestionComplete else { return }
 
-    // Calculate chevron position before drawing options
-    let optionsBeforeSelected = options[..<selectedIndex]
-    let textBeforeSelected = optionsBeforeSelected.joined(separator: "  ")
+    // Build options text with padding before each option for caret space
+    let caretWidth: Float = 16  // Approximate width of caret at scale 0.5
+    let caretSpacing: Float = 8  // Space between caret and option text
+    let totalPadding = caretWidth + caretSpacing
 
-    // Measure text before selected option to position chevron
+    // Add padding before each option (using spaces as a simple approach)
+    // We'll measure the actual width needed
+    let paddingText = "   "  // Use a few spaces as padding
+    let separatorText = "   "  // Separator between options
+    let optionsWithPadding = options.map { paddingText + $0 }
+    let optionsText = optionsWithPadding.joined(separator: separatorText)
+
+    // Calculate caret position - measure text before selected option (with padding)
+    let optionsBeforeSelected = optionsWithPadding[..<selectedIndex]
+    let textBeforeSelected = optionsBeforeSelected.joined(separator: separatorText)
+
+    // Measure text before selected option to position caret
     let textBeforeBounds =
       textBeforeSelected.isEmpty
       ? Rect.zero
@@ -338,6 +461,12 @@
         with: dialogStyle,
         wrapWidth: effectiveMaxWidth
       )
+
+    // Measure separator width (needed for positioning after previous options)
+    let separatorBounds = separatorText.boundingRect(
+      with: dialogStyle,
+      wrapWidth: effectiveMaxWidth
+    )
 
     // Draw options on second line
     optionsText.draw(
@@ -347,15 +476,26 @@
       anchor: .bottomLeft
     )
 
-    // Draw animated chevron in front of selected option
-    let chevronSpacing: Float = 8  // Space between chevron and option text
-    let chevronX = textX + textBeforeBounds.size.width - chevronSpacing
-    let chevronY = baseTextY + calculatedLineHeight * 0.5  // Center vertically on second line
+    // Draw animated caret in front of selected option
+    // Position it at the start of the padding for the selected option
+    let caretX: Float
+    if selectedIndex == 0 {
+      // First option: position at start of padding
+      caretX = textX - totalPadding + caretSpacing
+    } else {
+      // Other options: after previous options + separator, then start of padding
+      caretX = textX + textBeforeBounds.size.width + separatorBounds.size.width - totalPadding + caretSpacing
+    }
+
+    // Position caret aligned with text baseline
+    // The text is drawn with anchor .bottomLeft, so baseTextY is the baseline
+    // We want the caret centered vertically on the text line
+    let caretY = baseTextY
 
     optionCaret.draw(
-      at: Point(chevronX, chevronY),
+      at: Point(caretX, caretY),
       tint: dialogStyle.color,
-      scale: 0.4,
+      scale: 0.5,  // Make caret bigger
       deltaTime: deltaTime,
       strokeWidth: dialogStyle.strokeWidth / 2,
       strokeColor: dialogStyle.strokeColor
@@ -366,14 +506,124 @@
 
   /// Try to advance to the next chunk if the current chunk is complete.
   /// Returns true if advanced to a chunk, false if chunk is incomplete or already on the last chunk.
+  /// If the dialog is finished, dismisses it instead.
   @discardableResult
   func tryAdvance() -> Bool {
+    // If in ask mode, handle selection instead
+    if askText != nil {
+      return handleAskModeSelection()
+    }
+
     // Only advance if current chunk is fully displayed
     guard isCurrentChunkComplete() else {
       return false
     }
+    // If finished, dismiss the dialog
+    if isFinished {
+      dismiss()
+      return true
+    }
     // Try to advance to next chunk
     return advanceToNextChunk()
+  }
+
+  /// Handle key release events (used to track when action keys are released)
+  func handleKeyRelease(key: Keyboard.Key) {
+    // Check if this is an action key being released
+    let isActionKey =
+      key == .f || key == .space || key == .enter || key == .numpadEnter
+    if isActionKey && askText != nil {
+      hasSeenActionKeyRelease = true
+      waitingForActionKeyRelease = false
+      // Debug: Swift.print to verify this is being called
+    }
+  }
+
+  /// Handle navigation in ask mode (left/right)
+  /// Returns true if navigation occurred
+  @discardableResult
+  func handleAskModeNavigation(key: Keyboard.Key) -> Bool {
+    guard askText != nil else { return false }
+
+    // Skip input on first frame only (navigation should work independently of action key state)
+    if skipInputThisFrame {
+      return false
+    }
+
+    // Wait until question text has finished typewriting before allowing navigation
+    let totalCharacters = wrappedLines.reduce(0) { $0 + $1.count }
+    let isQuestionComplete = displayedCharacterCount >= Float(totalCharacters)
+    guard isQuestionComplete else {
+      return false
+    }
+
+    // // Ignore repeat events for navigation too (only allow actual key presses)
+    // guard !Engine.isKeyRepeat else {
+    //   return false
+    // }
+
+    switch key {
+    case .a, .left:
+      let newIndex = max(0, selectedOptionIndex - 1)
+      if newIndex != selectedOptionIndex {
+        selectedOptionIndex = newIndex
+        optionCaret.resetAnimation()
+        UISound.navigate()
+        return true
+      }
+    case .d, .right:
+      let newIndex = min(askOptions.count - 1, selectedOptionIndex + 1)
+      if newIndex != selectedOptionIndex {
+        selectedOptionIndex = newIndex
+        optionCaret.resetAnimation()
+        UISound.navigate()
+        return true
+      }
+    default:
+      break
+    }
+    return false
+  }
+
+  /// Handle selection in ask mode
+  /// Returns true if selection occurred
+  private func handleAskModeSelection() -> Bool {
+    guard askText != nil else { return false }
+
+    // Wait until question text has finished typewriting before allowing selection
+    let totalCharacters = wrappedLines.reduce(0) { $0 + $1.count }
+    let isQuestionComplete = displayedCharacterCount >= Float(totalCharacters)
+    guard isQuestionComplete else {
+      return false
+    }
+
+    // Ignore repeat events for ask mode selection (only allow actual key presses)
+    // This check must be first, before any other logic
+    guard !Engine.isKeyRepeat else {
+      return false
+    }
+
+    // Only allow selection if we've seen the key released at least once
+    // (to prevent immediate selection if key was held when entering ask mode)
+    guard hasSeenActionKeyRelease else {
+      return false
+    }
+
+    // User selected an option (this is called from onKeyPressed, so it's an actual press)
+    let selectedIndex = selectedOptionIndex
+
+    // Clear ask mode state
+    askText = nil
+    askOptions = []
+    text = ""
+
+    // Resume continuation with selected index
+    if let continuation = askContinuation {
+      askContinuation = nil
+      continuation.resume(returning: selectedIndex)
+    }
+
+    return true
   }
 
   /// Advance to the next chunk of text if available.
@@ -540,15 +790,15 @@
     }
   }
 
-  /// Ask a question with inline options. Returns the selected option.
+  /// Ask a question with inline options. Returns the index of the selected option.
   /// - Parameter text: The question text to display
   /// - Parameter options: Array of option strings to choose from
-  /// - Returns: The selected option as a LocalizedStringResource
-  func ask(text: LocalizedStringResource, options: [LocalizedStringResource]) async -> LocalizedStringResource {
+  /// - Returns: The index of the selected option (0-based)
+  func ask(_ text: LocalizedStringResource, options: [LocalizedStringResource]) async -> Int {
     // Cancel any existing ask continuation
     if let continuation = askContinuation {
       askContinuation = nil
-      continuation.resume(returning: options[0])
+      continuation.resume(returning: 0)
     }
 
     // Set up ask mode
@@ -557,23 +807,40 @@
 
     askText = questionText
     askOptions = optionStrings
-    askOptionResources = options
     selectedOptionIndex = 0
+    previousSelectedOptionIndex = -1  // Reset to trigger animation reset on first frame
     wasLeftKeyPressedLastFrame = false
     wasRightKeyPressedLastFrame = false
     wasActionKeyPressedLastFrame = false
+    skipInputThisFrame = true  // Skip input on first frame to avoid immediate selection
+    waitingForActionKeyRelease = false  // Will be set on first frame if action key is pressed
+    hasSeenActionKeyRelease = false  // Will be set when we detect key release
+    optionCaret.resetAnimation()  // Reset animation when ask mode first appears
 
-    // Set text to question (will be displayed on first line)
-    // In ask mode, we want to show the text immediately (no typewriter effect)
+    // Set text to question (will be displayed on first line with typewriter effect)
     self.text = questionText
     needsLayout = true
-    // Set displayed character count to max so text shows immediately
-    displayedCharacterCount = Float(questionText.count)
+    // Start typewriter effect from beginning
+    displayedCharacterCount = 0
 
     // Wait for user to select an option
     return await withCheckedContinuation { continuation in
       askContinuation = continuation
     }
+  }
+
+  /// Confirm a question with two options. Returns true if the first option is selected.
+  /// - Parameter text: The question text to display
+  /// - Parameter trueOption: The option that returns true (first option)
+  /// - Parameter falseOption: The option that returns false (second option)
+  /// - Returns: true if trueOption is selected, false if falseOption is selected
+  func confirm(
+    _ text: LocalizedStringResource,
+    _ trueOption: LocalizedStringResource,
+    _ falseOption: LocalizedStringResource = "Cancel"
+  ) async -> Bool {
+    let index = await ask(text, options: [trueOption, falseOption])
+    return index == 0
   }
 
   // MARK: - Private Methods

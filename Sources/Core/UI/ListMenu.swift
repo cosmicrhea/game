@@ -103,6 +103,8 @@ public class ListMenu {
       cycleSelection(direction: +1)
       return true
     case .f, .space, .enter, .numpadEnter:
+      // Only process on actual key presses, not repeats
+      guard !Engine.isKeyRepeat else { return true }
       handleMenuSelection()
       return true
     default:

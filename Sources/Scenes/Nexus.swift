@@ -24,13 +24,46 @@ class Nexus: Script {
     }
   }
 
-  func door1() { goTo(scene: "shooting_range", entry: "range") }
-  func door2() { goTo(scene: "shooting_range", entry: "hallway") }
-  func door3() { goTo(scene: "test") }
-  func door4() { goTo(scene: .tunnels) }
-  func door5() { UISound.lockedA(); say("It's locked.") }
-  func door6() { UISound.lockedB(); say("It's locked.") }
+  func door1() async {
+    if await confirm("Go to the shooting range?", "Go through", "Stay here") {
+      await goTo(scene: "shooting_range", entry: "range")
+    }
+  }
+
+  func door2() async {
+    if await confirm("Go to the shooting range hallway?", "Go through", "Stay here") {
+      await goTo(scene: "shooting_range", entry: "hallway")
+    }
+  }
+
+  func door3() async {
+    if await confirm("Go to the test room?", "Go through", "Stay here") {
+      await goTo(scene: "test")
+    }
+  }
+
+  func door4() async {
+    if await confirm("Go to the tunnels?", "Go through", "Stay here") {
+      await goTo(scene: .tunnels)
+    }
+  }
+
+  func door5() async {
+    if await confirm("Open the door?", "Open", "Stay here") {
+      UISound.lockedA()
+      await say("It's locked.")
+    }
+  }
+
+  func door6() async {
+    print(await ask("What's your favorite number?", options: ["1", "2", "3", "4"]))
+
+    //  UISound.lockedB()
+    //  say("It's locked.")
+  }
+
   func door7() { UISound.lockedA(); say("It's locked.") }
+
   func door8() { goTo(scene: "chiefs_office") }
 
 }
