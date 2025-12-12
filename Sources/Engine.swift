@@ -10,6 +10,8 @@ let DESIGN_RESOLUTION = Size(1280, 800)
 //let DESIGN_RESOLUTION = Size(1920, 1200)
 //let DESIGN_RESOLUTION = Size(1800, 1126)
 
+let WINDOW_SIZE = Size(1920, 1200)
+
 let VIEWPORT_SCALING = false
 
 let TWO_PLAYER_MODE = false
@@ -45,9 +47,9 @@ public final class Engine {
   private nonisolated(unsafe) static var _cachedViewportSize: Size = DESIGN_RESOLUTION
   public nonisolated static var viewportSize: Size { return _cachedViewportSize }
 
-  /// Whether the current key event being processed is a repeat event
+  /// Whether the current key event being processed is a repeat event.
   /// This is set by Engine before calling onKeyPressed and can be checked by handlers
-  /// that want to ignore repeat events (e.g., ask mode in DialogView)
+  /// that want to ignore repeat events (e.g., ask mode in DialogView).
   @MainActor public static var isKeyRepeat: Bool = false
 
   private var config: Config { .current }
@@ -145,8 +147,8 @@ public final class Engine {
 
   private func setupWindow() {
     window = try! GLFWWindow(
-      width: Int(DESIGN_RESOLUTION.width),
-      height: Int(DESIGN_RESOLUTION.height),
+      width: Int(WINDOW_SIZE.width),
+      height: Int(WINDOW_SIZE.height),
       title: ""
     )
 

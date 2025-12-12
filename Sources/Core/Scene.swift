@@ -11,7 +11,11 @@ public enum ImportHint: String, CaseIterable {
   case entry
   case enemy
   case floor
+  case footsteps
   case foreground
+  case ledge
+  case ledgeHigh
+  case ledgeLow
   case mapMarker
   case pickup
   case sparkle
@@ -116,6 +120,7 @@ public final class Scene {
     self.entryNodes = collectNodes(withHint: .entry, from: root)
     self.enemyNodes = collectNodes(withHint: .enemy, from: root)
     self.floorNodes = collectNodes(withHint: .floor, from: root)
+    self.footstepsNodes = collectNodes(withHint: .footsteps, from: root)
     self.foregroundNodes = collectNodes(withHint: .foreground, from: root)
     self.mapMarkerNodes = collectNodes(withHint: .mapMarker, from: root)
     self.pickupNodes = collectNodes(withHint: .pickup, from: root)
@@ -233,6 +238,7 @@ public final class Scene {
   public private(set) var entryNodes: [Node] = []
   public private(set) var enemyNodes: [Node] = []
   public private(set) var floorNodes: [Node] = []
+  public private(set) var footstepsNodes: [Node] = []
   public private(set) var foregroundNodes: [Node] = []
   public private(set) var mapMarkerNodes: [Node] = []
   public private(set) var pickupNodes: [Node] = []
@@ -290,6 +296,11 @@ public final class Scene {
     floorNodes.first { $0.baseName == baseName }
   }
 
+  /// Find a footsteps node by base name
+  public func footstepsNode(named baseName: String) -> Node? {
+    footstepsNodes.first { $0.baseName == baseName }
+  }
+
   /// Find a map marker node by base name
   public func mapMarkerNode(named baseName: String) -> Node? {
     mapMarkerNodes.first { $0.baseName == baseName }
@@ -334,6 +345,7 @@ public final class Scene {
       (.entry, entryNodes),
       (.enemy, enemyNodes),
       (.floor, floorNodes),
+      (.footsteps, footstepsNodes),
       (.foreground, foregroundNodes),
       (.mapMarker, mapMarkerNodes),
       (.pickup, pickupNodes),

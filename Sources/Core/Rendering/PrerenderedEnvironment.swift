@@ -22,6 +22,12 @@ final class PrerenderedEnvironment {
   public var near: Float = 0.1
   public var far: Float = 100.0
 
+  // Editor override for mist depth (highest priority, -1 = disabled)
+  public var debugMistDepthOverride: Float = -1.0
+
+  // Editor override for mist start (highest priority, -1 = disabled)
+  public var debugMistStartOverride: Float = -1.0
+
   // Texture filtering toggle
   @Editor public var nearestNeighborFiltering: Bool = true
 
@@ -46,10 +52,12 @@ final class PrerenderedEnvironment {
 
   // Scene configuration
   private let scenePath: String
+  private let sceneName: String
   private var availableCameras: [String] = []
   private var currentCameraIndex: Int = 0
 
   init(_ sceneName: String, cameraName: String = "1") throws {
+    self.sceneName = sceneName
     self.scenePath = "Scenes/Renders/\(sceneName)"
 
     // Load the PrerenderedEnvironment shader
@@ -111,7 +119,7 @@ final class PrerenderedEnvironment {
     let contents = try fileManager.contentsOfDirectory(atPath: sceneDirectory)
 
     // Find all unique camera names by looking at frame files
-    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", "0_hallway_1.png", etc.)
+    // Pattern: frameNumber_cameraName.png or frameNumber_cameraName.exr (e.g., "1_1.png", "2_1.exr", "0_hallway_1.png", etc.)
     // Camera names can contain underscores, so we use the first underscore to separate frame number from camera name
     var cameraNames: Set<String> = []
 
@@ -119,14 +127,19 @@ final class PrerenderedEnvironment {
       // Must not start with 'm_' (mist files)
       guard !filename.hasPrefix("m_") else { continue }
 
-      // Must end with ".png"
-      guard filename.hasSuffix(".png") else { continue }
+      // Must end with ".png" or ".exr"
+      let hasPNG = filename.hasSuffix(".png")
+      let hasEXR = filename.hasSuffix(".exr")
+      guard hasPNG || hasEXR else { continue }
 
       // Extract camera name by finding the first underscore (separates frame number from camera name)
       if let firstUnderscoreIndex = filename.firstIndex(of: "_") {
-        // Everything after the first underscore, minus ".png"
+        // Everything after the first underscore, minus the extension (".png" or ".exr")
+        let extensionLength = hasEXR ? 4 : 4  // Both ".png" and ".exr" are 4 characters
         let cameraName = String(
-          filename[filename.index(after: firstUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -4)])
+          filename[
+            filename.index(after: firstUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -extensionLength)]
+        )
         cameraNames.insert(cameraName)
       }
     }
@@ -168,29 +181,48 @@ final class PrerenderedEnvironment {
     let contents = try fileManager.contentsOfDirectory(atPath: sceneDirectory)
 
     // Filter for albedo frames (not mist frames which start with 'm_')
-    // Pattern: frameNumber_cameraName.png (e.g., "1_1.png", "2_1.png", "0_hallway_1.png", etc.)
+    // Pattern: frameNumber_cameraName.png or frameNumber_cameraName.exr (e.g., "1_1.png", "2_1.exr", "0_hallway_1.png", etc.)
     // Camera names can contain underscores, so we use the first underscore to separate frame number from camera name
-    let albedoFrames = contents.filter { filename in
-      // Must not start with 'm_' (mist files)
-      guard !filename.hasPrefix("m_") else { return false }
+    // Prefer .exr files if they exist, otherwise use .png
+    var frameMap: [String: String] = [:]  // Maps frame number to filename (preferring .exr)
 
-      // Must end with ".png"
-      guard filename.hasSuffix(".png") else { return false }
+    for filename in contents {
+      // Must not start with 'm_' (mist files)
+      guard !filename.hasPrefix("m_") else { continue }
+
+      // Must end with ".png" or ".exr"
+      let hasPNG = filename.hasSuffix(".png")
+      let hasEXR = filename.hasSuffix(".exr")
+      guard hasPNG || hasEXR else { continue }
 
       // Find the first underscore (separates frame number from camera name)
-      guard let firstUnderscoreIndex = filename.firstIndex(of: "_") else { return false }
+      guard let firstUnderscoreIndex = filename.firstIndex(of: "_") else { continue }
 
-      // Extract camera name (everything after first underscore, minus ".png")
+      // Extract camera name (everything after first underscore, minus extension)
+      let extensionLength = hasEXR ? 4 : 4  // Both ".png" and ".exr" are 4 characters
       let frameCameraName = String(
-        filename[filename.index(after: firstUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -4)])
+        filename[
+          filename.index(after: firstUnderscoreIndex)..<filename.index(filename.endIndex, offsetBy: -extensionLength)])
 
       // Check if this matches the current camera name
-      guard frameCameraName == cameraName else { return false }
+      guard frameCameraName == cameraName else { continue }
 
       // Extract the frame number part (before first underscore) and check if it's just a number
       let frameNumberPart = String(filename[..<firstUnderscoreIndex])
-      return frameNumberPart.allSatisfy { $0.isNumber }
-    }.sorted(using: .localizedStandard)
+      guard frameNumberPart.allSatisfy({ $0.isNumber }) else { continue }
+
+      // Prefer .exr over .png if both exist
+      if let existing = frameMap[frameNumberPart] {
+        // If we already have an .exr, keep it; otherwise replace with .exr if this is one
+        if hasEXR && existing.hasSuffix(".png") {
+          frameMap[frameNumberPart] = filename
+        }
+      } else {
+        frameMap[frameNumberPart] = filename
+      }
+    }
+
+    let albedoFrames = Array(frameMap.values).sorted(using: .localizedStandard)
 
     logger.trace("🎬 Found \(albedoFrames.count) frames for camera '\(cameraName)': \(albedoFrames)")
 
@@ -216,19 +248,52 @@ final class PrerenderedEnvironment {
     let filterMode = nearestNeighborFiltering ? GL_NEAREST : GL_LINEAR
 
     for frameFilename in albedoFrames {
-      // Load albedo frame
+      // Load albedo frame (prefer EXR if available, otherwise PNG)
       let albedoPath = "\(scenePath)/\(frameFilename)"
-      let albedoImage = Image(albedoPath)
+      let albedoImage: Image
+      if frameFilename.hasSuffix(".exr") {
+        albedoImage = Image(exrPath: albedoPath)
+      } else {
+        albedoImage = Image(albedoPath)
+      }
       // Apply texture filtering
       glBindTexture(GL_TEXTURE_2D, GLuint(albedoImage.textureID))
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterMode)
       albedoImages.append(albedoImage)
 
-      // Load corresponding mist frame
-      let mistFilename = "m_\(frameFilename)"
-      let mistPath = "\(scenePath)/\(mistFilename)"
-      let mistImage = Image(mistPath)
+      // Load corresponding mist frame (prefer EXR if available, otherwise PNG)
+      // Extract frame number from filename to construct mist filename
+      let frameNumber = String(frameFilename[..<frameFilename.firstIndex(of: "_")!])
+      let mistEXRFilename = "m_\(frameNumber)_\(cameraName).exr"
+      let mistPNGFilename = "m_\(frameNumber)_\(cameraName).png"
+      let mistEXRPath = "\(scenePath)/\(mistEXRFilename)"
+      let mistPNGPath = "\(scenePath)/\(mistPNGFilename)"
+
+      let fileManager = FileManager.default
+      let mistImage: Image
+      if let resourcePath = Bundle.game.resourcePath {
+        let mistEXRFullPath = "\(resourcePath)/\(mistEXRPath)"
+        let mistPNGFullPath = "\(resourcePath)/\(mistPNGPath)"
+
+        // Prefer EXR if it exists, otherwise use PNG
+        if fileManager.fileExists(atPath: mistEXRFullPath) {
+          mistImage = Image(exrPath: mistEXRPath)
+        } else if fileManager.fileExists(atPath: mistPNGFullPath) {
+          mistImage = Image(mistPNGPath)
+        } else {
+          // Fallback: try loading PNG anyway (will fail gracefully)
+          mistImage = Image(mistPNGPath)
+        }
+      } else {
+        // Fallback if we can't check file existence - try EXR first, then PNG
+        // Try EXR, and if it fails (returns fallback image), try PNG
+        let exrImage = Image(exrPath: mistEXRPath)
+        // Check if EXR loaded successfully by trying PNG as fallback
+        // (EXR loader returns a white 1x1 image on failure, so we can't easily detect failure)
+        // For now, just try PNG if EXR path doesn't work
+        mistImage = exrImage
+      }
       // Apply texture filtering
       glBindTexture(GL_TEXTURE_2D, GLuint(mistImage.textureID))
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterMode)
@@ -436,14 +501,35 @@ final class PrerenderedEnvironment {
     let uvOffsetX = shakeOffset.x / viewportSize.width
     let uvOffsetY = shakeOffset.y / viewportSize.height
 
+    // Check for editor override (if enabled, use it; otherwise use default values)
+    let effectiveNear: Float
+    let effectiveFar: Float
+    let overrideType: String
+    if debugMistStartOverride >= 0 {
+      // Editor override is enabled (not -1)
+      effectiveNear = debugMistStartOverride
+    } else {
+      effectiveNear = near
+    }
+
+    if debugMistDepthOverride >= 0 {
+      // Editor override is enabled (not -1)
+      effectiveFar = debugMistDepthOverride
+      overrideType = " (editor override)"
+    } else {
+      effectiveFar = far
+      overrideType = ""
+    }
+
     // Set uniforms
-    shader.setFloat("near", value: near)
-    shader.setFloat("far", value: far)
+    shader.setFloat("near", value: effectiveNear)
+    shader.setFloat("far", value: effectiveFar)
     shader.setMat4("view_to_clip_matrix", value: projectionMatrix)
     shader.setBool("showMist", value: showMist)
     shader.setVec2("shakeOffset", value: (uvOffsetX, uvOffsetY))
     logger.trace(
-      "📐 Set uniforms: near=\(near), far=\(far), showMist=\(showMist), shakeOffset=(\(uvOffsetX), \(uvOffsetY))")
+      "📐 Set uniforms: near=\(effectiveNear), far=\(effectiveFar)\(overrideType), showMist=\(showMist), shakeOffset=(\(uvOffsetX), \(uvOffsetY))"
+    )
 
     // Bind textures using the current frame's texture IDs
     glActiveTexture(GL_TEXTURE0)

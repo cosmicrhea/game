@@ -1,11 +1,13 @@
+# fmt: off
 import bpy
 from os import getenv
 
-# SAMPLES = 1
-# SAMPLES = 128
-SAMPLES = 1024
+
+#SAMPLES = 1
+SAMPLES = 128
+#SAMPLES = 1024
 #SAMPLES = 4096
-# SAMPLES = 8192
+#SAMPLES = 8192
 
 name = bpy.path.display_name_from_filepath(bpy.data.filepath)
 
@@ -30,8 +32,8 @@ scene.render.resolution_y = 400 * 2
 #scene.render.resolution_x = 320
 #scene.render.resolution_y = 200
 
-scene.cycles.use_adaptive_sampling = False
-#scene.cycles.use_adaptive_sampling = True
+#scene.cycles.use_adaptive_sampling = False
+scene.cycles.use_adaptive_sampling = True
 scene.cycles.use_denoising = True
 #scene.cycles.use_denoising = False
 
@@ -41,9 +43,6 @@ scene.render.image_settings.file_format = "PNG"
 scene.render.image_settings.color_mode = "RGBA"
 
 world = bpy.data.worlds["World"]
-world.mist_settings.start = 0.1  # 0.1?
-world.mist_settings.depth = 100  # 20?
-# world.mist_settings.falloff = "LINEAR"
 world.mist_settings.falloff = "LINEAR"
 
 default_frame_end = scene.frame_end
@@ -90,6 +89,12 @@ for camera in cameras:
 	# print("rendering " + camera.name)
 	scene.camera = camera
 	scene.frame_end = camera.get("frame_end", default_frame_end)
+
+	mist_start = camera.get("mist_start", 0.1)
+	mist_depth = camera.get("mist_depth", 100)
+	# print("mist_start:", mist_start, "; mist_depth:", mist_depth, flush=True)
+	world.mist_settings.start = mist_start
+	world.mist_settings.depth = mist_depth
 
 	if "Composite" in scene.node_tree.nodes:
 		# TODO: don’t clear all nodes, use the input of this as a base

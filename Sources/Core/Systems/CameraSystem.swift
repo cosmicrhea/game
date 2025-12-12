@@ -63,6 +63,52 @@ public final class CameraSystem {
 
   // MARK: - Camera Syncing
 
+  /// Extract a Float value from node metadata
+  private func extractFloatFromMetadata(_ node: Node, key: String) -> Float? {
+    guard let metadata = node.metadata?.metadata[key],
+      case .double(let value) = metadata
+    else { return nil }
+    return Float(value)
+  }
+
+  /// Print all metadata for a camera node (for debugging)
+  private func printCameraNodeMetadata(_ node: Node) {
+    guard let metadata = node.metadata else {
+      logger.trace("📋 Camera node '\(node.name)' has no metadata")
+      return
+    }
+
+    logger.trace("📋 Camera node '\(node.name)' metadata (\(metadata.numberOfProperties) properties):")
+    for i in 0..<metadata.numberOfProperties {
+      let key = metadata.keys[i]
+      let value = metadata.metadata[key]
+      let valueDescription: String
+      switch value {
+      case .bool(let v):
+        valueDescription = "bool(\(v))"
+      case .int32(let v):
+        valueDescription = "int32(\(v))"
+      case .float(let v):
+        valueDescription = "float(\(v))"
+      case .double(let v):
+        valueDescription = "double(\(v))"
+      case .string(let v):
+        valueDescription = "string(\"\(v)\")"
+      case .uint64(let v):
+        valueDescription = "uint64(\(v))"
+      case .vec3(let v):
+        valueDescription = "vec3(\(v.x), \(v.y), \(v.z))"
+      case .metadata(let v):
+        valueDescription = "metadata(\(v.numberOfProperties) properties)"
+      case .none:
+        valueDescription = "none"
+      @unknown default:
+        valueDescription = "unknown type"
+      }
+      logger.trace("  - \(key): \(valueDescription)")
+    }
+  }
+
   /// Syncs `camera`, its node/world transform and prerender near/far from the given camera name.
   func syncActiveCamera(name nodeName: String) {
     guard let scene else { return }
@@ -78,39 +124,46 @@ public final class CameraSystem {
       // Debug: Print camera transform
       let cameraPos = vec3(cameraWorldTransform[3].x, cameraWorldTransform[3].y, cameraWorldTransform[3].z)
       logger.trace("📷 Camera world transform position: \(cameraPos)")
+      // Print all metadata for debugging
+      printCameraNodeMetadata(node)
     } else {
-      // Fallback: try finding by full name
-      if let node = scene.rootNode.findNode(named: nodeName) {
-        cameraNode = node
-        cameraWorldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-        logger.trace("✅ Active camera node (by full name): \(nodeName)")
-      } else {
-        logger.warning("⚠️ Camera node not found: \(nodeName)")
-        cameraNode = nil
-        cameraWorldTransform = mat4(1)
-      }
+      logger.warning("⚠️ Camera node not found: \(nodeName)")
+      cameraNode = nil
+      cameraWorldTransform = mat4(1)
     }
 
     // Find camera struct by base name using scene.camera(named:)
     if let cam = scene.camera(named: baseName) {
       camera = cam
       // Sync projection and mist params
-      prerenderedEnvironment?.near = cam.clipPlaneNear
-      prerenderedEnvironment?.far = cam.clipPlaneFar
+
+      // Check for mist_start custom property from camera node metadata
+      let nearValue: Float
+      if let cameraNode, let mistStart = extractFloatFromMetadata(cameraNode, key: "mist_start") {
+        nearValue = mistStart
+        logger.trace("🌫️ Using mist_start from camera node metadata: \(mistStart)")
+      } else {
+        nearValue = cam.clipPlaneNear
+      }
+      prerenderedEnvironment?.near = nearValue
+
+      // Check for mist_depth custom property from camera node metadata
+      let farValue: Float
+      if let cameraNode, let mistDepth = extractFloatFromMetadata(cameraNode, key: "mist_depth") {
+        farValue = mistDepth
+        logger.trace("🌫️ Using mist_depth from camera node metadata: \(mistDepth)")
+      } else {
+        farValue = cam.clipPlaneFar
+      }
+      prerenderedEnvironment?.far = farValue
+
       // If Blender mist settings are known, keep defaults (0.1 / 25.0) or adjust here
       logger.trace(
-        "✅ Active camera params near=\(cam.clipPlaneNear) far=\(cam.clipPlaneFar) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
+        "✅ Active camera params near=\(nearValue) far=\(farValue) fov=\(cam.horizontalFOV) aspect=\(cam.aspect)"
       )
     } else {
-      // Fallback: try finding by full name
-      if let cam = scene.cameras.first(where: { $0.name == nodeName }) {
-        camera = cam
-        prerenderedEnvironment?.near = cam.clipPlaneNear
-        prerenderedEnvironment?.far = cam.clipPlaneFar
-      } else {
-        logger.warning("⚠️ Camera struct not found for name: \(nodeName) (baseName: \(baseName))")
-        camera = nil
-      }
+      logger.warning("⚠️ Camera struct not found for name: \(nodeName) (baseName: \(baseName))")
+      camera = nil
     }
   }
 

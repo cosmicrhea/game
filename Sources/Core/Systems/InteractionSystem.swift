@@ -1,7 +1,7 @@
 import Foundation
 import Jolt
 
-/// Handles action detection, trigger detection, and interaction handling
+/// Handles action detection, trigger detection, and interaction handling.
 @MainActor
 public final class InteractionSystem {
   // MARK: - State
@@ -13,11 +13,13 @@ public final class InteractionSystem {
   private(set) var currentTriggers: OrderedSet<String> = []
   // Currently active camera triggers (OrderedSet to avoid duplicates while maintaining order)
   private(set) var currentCameraTriggers: OrderedSet<String> = []
+  // Currently active footsteps triggers (OrderedSet to avoid duplicates while maintaining order)
+  private var currentFootstepsTriggers: OrderedSet<String> = []
   // Previous frame's triggers (to detect new entries)
   private var previousTriggers: Set<String> = []
 
-  // Cached trigger query results (updated every frame now)
-  private var cachedTriggerQueryResults: [CollideShapeResult] = []
+  // Cached trigger check point for debug visualization
+  private var triggerCheckPoint: vec3 = vec3(0, 0, 0)
 
   // MARK: - References
 
@@ -235,55 +237,65 @@ public final class InteractionSystem {
     // Triggers fire immediately when player enters them
     currentTriggers.removeAll()
     currentCameraTriggers.removeAll()
+    currentFootstepsTriggers.removeAll()
     var newTriggers: Set<String> = []
 
-    // Check character controller contacts for triggers (always check these, they're fast)
-    if let characterController {
-      let contacts = characterController.activeContacts()
-      for contact in contacts {
-        if contact.isSensorB, let triggerName = physicsWorld.triggerBodyNames[contact.bodyID] {
-          // Extract base name from trigger body name using Scene's extractBaseName
-          guard let scene = MainLoop.shared?.scene,
-            let triggerNode = scene.rootNode.findNode(named: triggerName)
-          else { continue }
-          let baseName = Scene.extractBaseName(from: triggerName)
+    // // Check character controller contacts for triggers (always check these, they're fast)
+    // if let characterController {
+    //   let contacts = characterController.activeContacts()
+    //   for contact in contacts {
+    //     if contact.isSensorB, let triggerName = physicsWorld.triggerBodyNames[contact.bodyID] {
+    //       // Extract base name from trigger body name using Scene's extractBaseName
+    //       guard let scene = MainLoop.shared?.scene,
+    //         let triggerNode = scene.rootNode.findNode(named: triggerName)
+    //       else { continue }
+    //       let baseName = Scene.extractBaseName(from: triggerName)
 
-          // Check if this is a camera trigger by checking for .cameraTrigger hint
-          if scene.hasHint(triggerNode, hint: .cameraTrigger) {
-            currentCameraTriggers.append(baseName)
-            // Check if we're not already on this camera - switch if needed
-            if let cameraSystem = cameraSystem {
-              let currentCamera = cameraSystem.selectedCamera
-              let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
-              let shouldHandleTrigger = currentCamera != baseName || needsInitialSync
-              if shouldHandleTrigger {
-                cameraSystem.handleCameraTrigger(
-                  cameraName: baseName,
-                  currentAreaName: currentAreaName
-                )
-              }
-            }
-          } else {
-            currentTriggers.append(baseName)
-            newTriggers.insert(baseName)
-          }
-        }
-      }
-    }
+    //       // Check if this is a camera trigger by checking for .cameraTrigger hint
+    //       if scene.hasHint(triggerNode, hint: .cameraTrigger) {
+    //         currentCameraTriggers.append(baseName)
+    //         // Check if we're not already on this camera - switch if needed
+    //         if let cameraSystem = cameraSystem {
+    //           let currentCamera = cameraSystem.selectedCamera
+    //           let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
+    //           let shouldHandleTrigger = currentCamera != baseName || needsInitialSync
+    //           if shouldHandleTrigger {
+    //             cameraSystem.handleCameraTrigger(
+    //               cameraName: baseName,
+    //               currentAreaName: currentAreaName
+    //             )
+    //           }
+    //         }
+    //       } else if scene.hasHint(triggerNode, hint: .footsteps) {
+    //         // Track footsteps trigger
+    //         currentFootstepsTriggers.append(baseName)
+    //         // Handle footsteps trigger - set footstep sound on player controller
+    //         // Base name should match a FootstepSound enum case (e.g., "Metal" -> .metal, "ConcreteEcho" -> .concreteEcho)
+    //         // Convert to camelCase: first letter lowercase, rest as-is
+    //         let camelCaseName = baseName.prefix(1).lowercased() + baseName.dropFirst()
+    //         if let footstepSound = FootstepSound(rawValue: camelCaseName) {
+    //           playerController.setFootstepSound(footstepSound)
+    //         } else if baseName.lowercased() == "default" {
+    //           playerController.setFootstepSound(.default)
+    //         }
+    //       } else {
+    //         currentTriggers.append(baseName)
+    //         newTriggers.insert(baseName)
+    //       }
+    //     }
+    //   }
+    // }
 
     // Update trigger collision query every frame
-    let triggerCheckRadius: Float = 0.5  // Radius to check around player
-    let triggerCheckShape = SphereShape(radius: triggerCheckRadius)
-    var playerBaseOffset = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
-    cachedTriggerQueryResults = physicsWorld.collideShapeAll(
-      shape: triggerCheckShape,
-      scale: Vec3(x: 1, y: 1, z: 1),
-      baseOffset: &playerBaseOffset
-    )
+    // Use a point at player position (at player height) instead of a sphere
+    // This fixes the bug where triggers at origin always trigger, and is more accurate
+    let triggerCheckPoint = RVec3(x: playerPosition.x, y: playerPosition.y, z: playerPosition.z)
+    // Cache for debug visualization
+    self.triggerCheckPoint = vec3(playerPosition.x, playerPosition.y, playerPosition.z)
+    let triggerBodyIDs = physicsWorld.collidePointAll(point: triggerCheckPoint)
 
-    // Check for trigger bodies (use cached results)
-    for result in cachedTriggerQueryResults {
-      let bodyID = result.bodyID2
+    // Check for trigger bodies (use point collision results)
+    for bodyID in triggerBodyIDs {
       if let triggerName = physicsWorld.triggerBodyNames[bodyID] {
         // Extract base name from trigger body name using Scene's extractBaseName
         guard let scene = MainLoop.shared?.scene,
@@ -306,6 +318,18 @@ public final class InteractionSystem {
               )
             }
           }
+        } else if scene.hasHint(triggerNode, hint: .footsteps) {
+          // Track footsteps trigger
+          currentFootstepsTriggers.append(baseName)
+          // Handle footsteps trigger - set footstep sound on player controller
+          // Base name should match a FootstepSound enum case (e.g., "Metal" -> .metal, "ConcreteEcho" -> .concreteEcho)
+          // Convert to camelCase: first letter lowercase, rest as-is
+          let camelCaseName = baseName.prefix(1).lowercased() + baseName.dropFirst()
+          if let footstepSound = FootstepSound(rawValue: camelCaseName) {
+            playerController.setFootstepSound(footstepSound)
+          } else if baseName.lowercased() == "default" {
+            playerController.setFootstepSound(.default)
+          }
         } else {
           currentTriggers.append(baseName)
           newTriggers.insert(baseName)
@@ -317,6 +341,11 @@ public final class InteractionSystem {
     let newlyEnteredTriggers = newTriggers.subtracting(previousTriggers)
     for triggerName in newlyEnteredTriggers {
       callTriggerMethod(triggerName: triggerName, sceneScript: sceneScript)
+    }
+
+    // Reset footstep sound to default if no footsteps triggers are active
+    if currentFootstepsTriggers.isEmpty {
+      playerController.setFootstepSound(.default)
     }
 
     // Update previous triggers for next frame
@@ -374,6 +403,44 @@ public final class InteractionSystem {
     } else {
       // Method not found
       logger.warning("⚠️ Scene script does not respond to trigger method: \(methodName)")
+    }
+  }
+
+  // MARK: - Debug Visualization
+
+  /// Draw debug visualization for trigger detection
+  public func drawDebug(
+    debugRenderer: DebugRenderer?,
+    projection: mat4,
+    view: mat4
+  ) {
+    guard let debugRenderer = debugRenderer,
+      let physicsWorld = physicsWorld
+    else { return }
+
+    // Draw a vertical line at the trigger check point (from slightly below to slightly above player height)
+    // This helps visualize where the point collision check is happening
+    let lineHeight: Float = 1.0  // Half height above and below (total 2.0 units tall)
+    let lineStart = vec3(triggerCheckPoint.x, triggerCheckPoint.y - lineHeight, triggerCheckPoint.z)
+    let lineEnd = vec3(triggerCheckPoint.x, triggerCheckPoint.y + lineHeight, triggerCheckPoint.z)
+
+    // Use the debug renderer implementation to draw the line
+    if let debugRendererImpl = physicsWorld.getDebugRendererImplementation() {
+      // Draw vertical line in bright green to show trigger check point
+      debugRendererImpl.drawLine(
+        from: RVec3(x: lineStart.x, y: lineStart.y, z: lineStart.z),
+        to: RVec3(x: lineEnd.x, y: lineEnd.y, z: lineEnd.z),
+        color: 0xFF00FFFF  // Green in ABGR format
+      )
+
+      // Draw a larger marker at the exact point
+      debugRenderer.drawMarker(
+        RVec3(x: triggerCheckPoint.x, y: triggerCheckPoint.y, z: triggerCheckPoint.z),
+        color: 0xFF00FFFF,  // Green
+        size: 0.5  // Larger size to be more visible
+      )
+    } else {
+      logger.trace("⚠️ drawDebug: debugRendererImpl is nil")
     }
   }
 }

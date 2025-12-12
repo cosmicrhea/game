@@ -22,6 +22,9 @@ public final class PlayerController {
   private let footstepDistanceWalk: Float = 1.2  // Distance between footsteps when walking
   private let footstepDistanceRun: Float = 1.5  // Distance between footsteps when running (faster rate)
 
+  // Current footstep sound type (defaults to .default)
+  private var currentFootstepSound: FootstepSound = .default
+
   // MARK: - Sensor Box Dimensions
 
   /// Width of the action detection sensor box.
@@ -339,8 +342,10 @@ public final class PlayerController {
       keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
       || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
 
-    // Only accumulate distance and play footsteps if moving and on ground
-    if isMoving && characterController.isSupported {
+    // Only accumulate distance and play footsteps if moving
+    // RE-like game: no jumping/falling, so footsteps always play when moving
+    // let isOnGround = characterController.groundState != .inAir
+    if isMoving {
       footstepAccumulatedDistance += distanceMoved
 
       // Determine footstep rate based on running vs walking
@@ -348,11 +353,11 @@ public final class PlayerController {
 
       // Play footstep when threshold is reached
       if footstepAccumulatedDistance >= footstepThreshold {
-        UISound.footstep()
+        UISound.footstep(currentFootstepSound)
         footstepAccumulatedDistance = 0.0  // Reset accumulator
       }
     } else {
-      // Not moving or not on ground - reset accumulator
+      // Not moving - reset accumulator
       footstepAccumulatedDistance = 0.0
     }
 
@@ -377,6 +382,18 @@ public final class PlayerController {
 
     characterController = nil
     capsuleSensorBodyID = nil
+  }
+
+  // MARK: - Footstep Sound
+
+  /// Get the current footstep sound type
+  public var footstepSound: FootstepSound {
+    return currentFootstepSound
+  }
+
+  /// Set the current footstep sound type
+  public func setFootstepSound(_ sound: FootstepSound) {
+    currentFootstepSound = sound
   }
 
   // MARK: - Sensor Box Query Support

@@ -3,11 +3,11 @@ import CJolt
 import Foundation
 import Jolt
 
-// private let startingScene = "tunnels"
-// private let startingEntry = "1"
+private let startingScene = "tunnels"
+private let startingEntry = "1"
 
-private let startingScene = "nexus"
-private let startingEntry = "8"
+// private let startingScene = "nexus"
+// private let startingEntry = "8"
 
 // private let startingScene = "chiefs_office"
 // private let startingEntry = "1"
@@ -68,6 +68,18 @@ private let startingEntry = "8"
   @Editor @ConfigValue var disableEnemies: Bool = false
   private var showDebugText: Bool = true
   @Editor var showEnemyDebugOverlay: Bool = false
+
+  @Editor(-1.0...100.0) var mistDepthOverride: Float = -1.0 {
+    didSet {
+      prerenderedEnvironment?.debugMistDepthOverride = mistDepthOverride
+    }
+  }
+
+  @Editor(-1.0...10.0) var mistStartOverride: Float = -1.0 {
+    didSet {
+      prerenderedEnvironment?.debugMistStartOverride = mistStartOverride
+    }
+  }
 
   @Editor func shakeScreen() { ScreenShake.shared.shake(.subtle) }
   @Editor func shakeScreenMore() { ScreenShake.shared.shake(.heavy) }
@@ -569,8 +581,10 @@ private let startingEntry = "8"
 
       case .r:
         UISound.select()
-        // Reset player to spawn
-        playerController.resetToSpawn()
+        // Reset player to first entry
+        if let currentScene = scene, let firstEntry = currentScene.entryNodes.first {
+          positionPlayerAtEntry(firstEntry.baseName, in: currentScene)
+        }
 
       case .l:
         UISound.select()
@@ -1075,6 +1089,21 @@ private let startingEntry = "8"
       // Set the scene
       self.scene = scene
 
+      // Validate footsteps nodes - check that all base names match FootstepSound enum cases
+      for footstepsNode in scene.footstepsNodes {
+        let baseName = footstepsNode.baseName
+        // Convert to camelCase: first letter lowercase, rest as-is (e.g., "Metal" -> "metal", "ConcreteEcho" -> "concreteEcho")
+        let camelCaseName = baseName.prefix(1).lowercased() + baseName.dropFirst()
+        // Check if base name matches a FootstepSound enum case
+        if camelCaseName != "default",
+          FootstepSound(rawValue: camelCaseName) == nil
+        {
+          fatalError(
+            "❌ Invalid footsteps node '\(footstepsNode.name)': base name '\(baseName)' does not match any FootstepSound enum case. Valid cases: default, concrete, concreteEcho, metal, platform"
+          )
+        }
+      }
+
       //      // Clear old physics bodies if physics system is ready
       //      guard let physicsSystem = physicsSystem else {
       //        logger.error("⚠️ Physics system not ready, cannot load physics for scene '\(sceneName)'")
@@ -1134,6 +1163,9 @@ private let startingEntry = "8"
       let cameraName = prerenderedCameraName ?? "1"
       do {
         prerenderedEnvironment = try PrerenderedEnvironment(sceneName, cameraName: cameraName)
+        // Set initial mist overrides if set
+        prerenderedEnvironment?.debugMistDepthOverride = mistDepthOverride
+        prerenderedEnvironment?.debugMistStartOverride = mistStartOverride
         // Update camera system with prerendered environment (now that it's created)
         cameraSystem.setPrerenderedEnvironment(prerenderedEnvironment)
         // Sync the selectedCamera property with the actual current camera
@@ -1555,7 +1587,10 @@ private let startingEntry = "8"
 
           if visualizePhysics {
             debugRenderer.drawMarker(RVec3(x: 0, y: 0, z: 0), color: 0xFFFF00FF, size: 2.0)
-            physicsWorld.drawBodies(debugRenderer: debugRenderer)
+            //physicsWorld.drawBodies(debugRenderer: debugRenderer)
+
+            // Draw interaction system debug visualization (trigger check point)
+            interactionSystem.drawDebug(debugRenderer: debugRenderer, projection: projection, view: view)
 
             // Draw sensor box query shape in purple
             let sensorBox = playerController.getSensorBoxTransform()
@@ -1789,6 +1824,12 @@ private let startingEntry = "8"
         return baseName
       }
       overlayLines.append("Camera Triggers: \(triggerNames.joined(separator: ", "))")
+    }
+
+    // Add footstep sound line if not default
+    let currentFootstepSound = playerController.footstepSound
+    if currentFootstepSound != .default {
+      overlayLines.append("Footsteps: \(currentFootstepSound.rawValue)")
     }
 
     let overlay = overlayLines.joined(separator: "\n")

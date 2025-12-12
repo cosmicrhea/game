@@ -219,6 +219,11 @@ public final class PhysicsWorld {
     )
   }
 
+  /// Collide point - check if a point is inside any bodies
+  public func collidePointAll(point: RVec3) -> [BodyID] {
+    return physicsSystem.collidePointAll(point: point)
+  }
+
   /// Cast shape (sweep shape from start transform along direction)
   public func castShapeAll(
     shape: Shape,
@@ -435,8 +440,8 @@ public final class PhysicsWorld {
     // Object layer 1 for trigger bodies (same as action bodies)
     let triggerLayer: ObjectLayer = 1
 
-    // Use scene.triggerNodes and scene.cameraTriggerNodes instead of manual traversal
-    let allTriggerNodes = scene.triggerNodes + scene.cameraTriggerNodes
+    // Use scene.triggerNodes, scene.cameraTriggerNodes, and scene.footstepsNodes instead of manual traversal
+    let allTriggerNodes = scene.triggerNodes + scene.cameraTriggerNodes + scene.footstepsNodes
 
     for node in allTriggerNodes {
       let name = node.name

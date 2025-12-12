@@ -312,11 +312,29 @@ extension Image {
     return layerNamesArray
   }
 
-  /// Simple tone mapping function for HDR values
+  /// Tone mapping function for HDR values with exposure and gamma correction
   /// - Parameter value: Input float value (can be > 1.0 for HDR)
   /// - Returns: Tone-mapped value in [0,1] range
   private static func performToneMapping(_ value: Float) -> Float {
-    // Simple Reinhard tone mapping: x / (1 + x)
-    return value / (1.0 + value)
+    // Apply exposure adjustment (brighten the image)
+    // Higher exposure = brighter image. For prerendered EXR that looks too dark, increase this
+    let exposure: Float = 1.0
+    let exposed = value * exposure
+
+    // Only apply tone mapping to very bright HDR values (> 2.0)
+    // This preserves normal and mid-tone values much better
+    let toneMapped: Float
+    if exposed > 2.0 {
+      // For very bright values, use gentle Reinhard: x / (1 + x * 0.3)
+      // The 0.3 factor makes it much less aggressive than standard Reinhard
+      toneMapped = exposed / (1.0 + exposed * 0.3)
+    } else {
+      // For normal values, just clamp (no tone mapping needed)
+      toneMapped = min(1.0, exposed)
+    }
+
+    // Apply gamma correction (linear to sRGB)
+    let gamma: Float = 1.0 / 2.2
+    return pow(max(0.0, toneMapped), gamma)
   }
 }

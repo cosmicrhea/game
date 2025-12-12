@@ -27,4 +27,25 @@ extension UISound {
 
   static func footstep() { play("RE/footstep", volume: 0.5) }
 
+  static func footstep(_ sound: FootstepSound) {
+    // spellchecker: disable
+    switch sound {
+    case .carpet: play(["RE/FT_CPA" /*, "RE/FT_CPB"*/])
+    case .concrete: play(["RE/FT_COEFA" /*, "RE/FT_COEFB"*/])
+    case .concreteEcho: play(["RE/FT_CONCA" /*, "RE/FT_CONCB"*/])
+    case .metal: play(["RE/FT_MTNA" /*, "RE/FT_MTNB"*/])
+    case .platform: play(["RE/FT_PLAA" /*, "RE/FT_PLAB"*/])
+    default: play(["RE/FT_RMA" /*, "RE/FT_RMB"*/])
+    }
+    // spellchecker: enable
+  }
+}
+
+public enum FootstepSound: String {
+  case `default`
+  case carpet
+  case concrete
+  case concreteEcho
+  case metal
+  case platform
 }

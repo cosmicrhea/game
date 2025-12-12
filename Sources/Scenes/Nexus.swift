@@ -58,6 +58,8 @@ class Nexus: Script {
   func door6() async {
     print(await ask("What's your favorite number?", options: ["1", "2", "3", "4"]))
 
+    await say("Nothing happened.")
+
     //  UISound.lockedB()
     //  say("It's locked.")
   }

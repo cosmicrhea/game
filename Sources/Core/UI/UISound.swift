@@ -75,4 +75,8 @@ extension UISound {
     lastPlayedSounds[key] = selectedSound
     play(selectedSound)
   }
+
+  static func play(random soundNames: [String]) {
+    play(soundNames.randomElement()!)
+  }
 }
