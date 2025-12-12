@@ -468,9 +468,10 @@
       wrapWidth: effectiveMaxWidth
     )
 
-    // Draw options on second line
+    // Draw options on second line (with half line spacing from question)
+    let optionsY = baseTextY - calculatedLineHeight / 2
     optionsText.draw(
-      at: Point(textX, baseTextY),
+      at: Point(textX, optionsY),
       style: dialogStyle,
       wrapWidth: effectiveMaxWidth,
       anchor: .bottomLeft
@@ -488,9 +489,9 @@
     }
 
     // Position caret aligned with text baseline
-    // The text is drawn with anchor .bottomLeft, so baseTextY is the baseline
+    // The text is drawn with anchor .bottomLeft, so optionsY is the baseline
     // We want the caret centered vertically on the text line
-    let caretY = baseTextY
+    let caretY = optionsY
 
     optionCaret.draw(
       at: Point(caretX, caretY),

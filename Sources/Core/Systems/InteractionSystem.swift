@@ -8,6 +8,11 @@ public final class InteractionSystem {
 
   // Currently detected action body name (updated each frame)
   private(set) var detectedActionName: String?
+  // Currently detected ledge name (updated each frame)
+  private(set) var detectedLedgeName: String?
+
+  // Delayed footstep sound to play after ledge interaction (wait for footsteps trigger to update)
+  private var pendingLedgeFootstep: Bool = false
 
   // Currently active triggers (OrderedSet to avoid duplicates while maintaining order)
   private(set) var currentTriggers: OrderedSet<String> = []
@@ -109,6 +114,7 @@ public final class InteractionSystem {
     // }
 
     // Check cast results for action bodies
+    detectedActionName = nil
     for result in castResults {
       let bodyID = result.bodyID2
       if let actionName = physicsWorld.actionBodyNames[bodyID] {
@@ -116,6 +122,18 @@ public final class InteractionSystem {
         detectedActionName = Scene.extractBaseName(from: actionName)
         logger.trace("✅ Detected action via shape cast: \(detectedActionName ?? "nil"), fraction: \(result.fraction)")
         break  // Just show first detected action
+      }
+    }
+
+    // Check cast results for ledge bodies (after action bodies)
+    detectedLedgeName = nil
+    for result in castResults {
+      let bodyID = result.bodyID2
+      if let ledgeName = physicsWorld.ledgeBodyNames[bodyID] {
+        // Extract base name from ledge body name using Scene's extractBaseName
+        detectedLedgeName = Scene.extractBaseName(from: ledgeName)
+        logger.trace("✅ Detected ledge via shape cast: \(detectedLedgeName ?? "nil"), fraction: \(result.fraction)")
+        break  // Just show first detected ledge
       }
     }
 
@@ -348,6 +366,12 @@ public final class InteractionSystem {
       playerController.setFootstepSound(.default)
     }
 
+    // Play delayed footstep sound after ledge interaction (now that footsteps trigger area has updated)
+    if pendingLedgeFootstep {
+      pendingLedgeFootstep = false
+      UISound.footstep(playerController.footstepSound)
+    }
+
     // Update previous triggers for next frame
     previousTriggers = newTriggers
   }
@@ -382,6 +406,106 @@ public final class InteractionSystem {
 
     // Clear the current action name after the interaction
     sceneScript.currentActionName = nil
+  }
+
+  /// Handle interaction with detected ledge
+  public func handleLedgeInteraction() {
+    guard let detectedLedgeName = detectedLedgeName else { return }
+    guard let physicsWorld = physicsWorld,
+      let playerController = playerController
+    else { return }
+
+    // Get current ledge state
+    guard let currentState = physicsWorld.ledgeState(for: detectedLedgeName) else {
+      logger.warning("⚠️ Cannot interact with ledge '\(detectedLedgeName)': state not found")
+      return
+    }
+
+    // Get scene to find ledge high/low nodes
+    guard let scene = MainLoop.shared?.scene else {
+      logger.warning("⚠️ Cannot interact with ledge: no scene available")
+      return
+    }
+
+    // Find ledge node and its high/low children
+    guard let ledgeNode = scene.ledgeNode(named: detectedLedgeName) else {
+      logger.warning("⚠️ Cannot interact with ledge: node '\(detectedLedgeName)' not found")
+      return
+    }
+
+    var highNode: Node? = nil
+    var lowNode: Node? = nil
+
+    func searchChildren(_ node: Node) {
+      for child in node.children {
+        if scene.hasHint(child, hint: .ledgeHigh) {
+          highNode = child
+        } else if scene.hasHint(child, hint: .ledgeLow) {
+          lowNode = child
+        }
+        searchChildren(child)
+      }
+    }
+    searchChildren(ledgeNode)
+
+    // Determine target node based on current state
+    let targetNode: Node?
+    switch currentState {
+    case .high:
+      targetNode = lowNode  // Currently high, move to low
+    case .low:
+      targetNode = highNode  // Currently low, move to high
+    }
+
+    guard let targetNode else {
+      logger.warning("⚠️ Cannot interact with ledge: target node not found for state \(currentState)")
+      return
+    }
+
+    // Get target position from target node
+    let targetWorldTransform = targetNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    let targetY = targetWorldTransform[3].y
+
+    // Preserve player's current X and Z position (stay at the same horizontal position where they interacted)
+    let currentPosition = playerController.position
+    let targetX = currentPosition.x
+    let targetZ = currentPosition.z
+
+    // Calculate forward direction from player
+    let playerRotation = playerController.rotation
+    let forwardX = GLMath.sin(playerRotation)
+    let forwardZ = GLMath.cos(playerRotation)
+    let forward = vec3(forwardX, 0, forwardZ)
+
+    // Move one player depth (capsule radius = 0.4) forward in X/Z
+    let playerDepth: Float = 0.4
+    let finalX = targetX + forward.x * playerDepth
+    let finalZ = targetZ + forward.z * playerDepth
+
+    // For Y position: use target node's Y, but adjust for capsule dimensions
+    // Capsule: radius 0.4, halfHeight 0.8
+    // Bottom of capsule is at center - (halfHeight + radius) = center - 1.2
+    // So: center = surface + 1.2 (where surface is where the player's feet should be)
+    // The target node Y represents the surface/floor level where we want the player's feet to be
+    // We need to add (halfHeight + radius) = 1.2 to get the center position
+    let capsuleHalfHeight: Float = 0.8
+    let capsuleRadius: Float = 0.4
+    let finalY = targetY + capsuleHalfHeight + capsuleRadius
+
+    let finalPosition = vec3(finalX, finalY, finalZ)
+
+    // Teleport player to final position (keep current rotation)
+    playerController.setPosition(finalPosition, rotation: playerRotation)
+
+    // Toggle ledge state
+    let newState: LedgeState = currentState == .high ? .low : .high
+    physicsWorld.setLedgeState(newState, for: detectedLedgeName)
+
+    // Schedule footstep sound to play next frame (after footsteps trigger area updates)
+    pendingLedgeFootstep = true
+
+    logger.trace(
+      "🔧 Interacted with ledge '\(detectedLedgeName)': \(currentState) -> \(newState), teleported to \(finalPosition)")
   }
 
   // MARK: - Trigger Methods

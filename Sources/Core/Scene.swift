@@ -1,6 +1,6 @@
 import Assimp
 
-/// Import hint types for scene nodes
+/// Import hint types for scene nodes.
 public enum ImportHint: String, CaseIterable {
   case action
   case area
@@ -22,7 +22,7 @@ public enum ImportHint: String, CaseIterable {
   case trigger
   case waypoint
 
-  /// Returns the PascalCase name with @ prefix (e.g., "@CameraTrigger")
+  /// Returns the PascalCase name with @ prefix (e.g., "@CameraTrigger").
   var prefix: String {
     "@\(rawValue.prefix(1).uppercased())\(rawValue.dropFirst())"
   }
@@ -122,6 +122,7 @@ public final class Scene {
     self.floorNodes = collectNodes(withHint: .floor, from: root)
     self.footstepsNodes = collectNodes(withHint: .footsteps, from: root)
     self.foregroundNodes = collectNodes(withHint: .foreground, from: root)
+    self.ledgeNodes = collectNodes(withHint: .ledge, from: root)
     self.mapMarkerNodes = collectNodes(withHint: .mapMarker, from: root)
     self.pickupNodes = collectNodes(withHint: .pickup, from: root)
     self.sparkleNodes = collectNodes(withHint: .sparkle, from: root)
@@ -135,7 +136,7 @@ public final class Scene {
     self.init(assimpScene)
   }
 
-  /// Load a scene from a file with progress callback
+  /// Load a scene from a file with progress callback.
   public convenience init(
     file filePath: String,
     flags: Assimp.PostProcessStep = [],
@@ -145,16 +146,16 @@ public final class Scene {
     self.init(assimpScene)
   }
 
-  /// Get transform matrix for a mesh (delegates to Assimp.Scene extension)
+  /// Get transform matrix for a mesh (delegates to Assimp.Scene extension).
   func getTransformMatrix(for mesh: Assimp.Mesh) -> mat4 {
     return assimpScene.getTransformMatrix(for: mesh)
   }
 
   // MARK: - Import Hint Parsing
 
-  /// Extract all hints from a node name
-  /// - Parameter nodeName: The node name to parse
-  /// - Returns: Array of ImportHint values found in the name
+  /// Extract all hints from a node name.
+  /// - Parameter nodeName: The node name to parse.
+  /// - Returns: Array of ImportHint values found in the name.
   public func parseHints(from nodeName: String) -> [ImportHint] {
     var hints: [ImportHint] = []
     for hint in ImportHint.allCases {
@@ -165,17 +166,17 @@ public final class Scene {
     return hints
   }
 
-  /// Check if a node has a specific hint
+  /// Check if a node has a specific hint.
   /// - Parameters:
-  ///   - node: The node to check
-  ///   - hint: The hint to look for
-  /// - Returns: True if the node name contains the hint prefix
+  ///   - node: The node to check.
+  ///   - hint: The hint to look for.
+  /// - Returns: True if the node name contains the hint prefix.
   public func hasHint(_ node: Node, hint: ImportHint) -> Bool {
     node.name.contains(hint.prefix)
   }
 
-  /// Traverse all nodes in the scene tree, calling the closure for each node
-  /// - Parameter closure: Closure called for each node during traversal
+  /// Traverse all nodes in the scene tree, calling the closure for each node.
+  /// - Parameter closure: Closure called for each node during traversal.
   public func traverseNodes(_ closure: (Node) -> Void) {
     func traverse(_ node: Node) {
       closure(node)
@@ -186,9 +187,9 @@ public final class Scene {
     traverse(rootNode)
   }
 
-  /// Extract the base name from a node name, removing all hint prefixes
-  /// - Parameter nodeName: The node name to extract base name from
-  /// - Returns: The base name without any hint prefixes
+  /// Extract the base name from a node name, removing all hint prefixes.
+  /// - Parameter nodeName: The node name to extract base name from.
+  /// - Returns: The base name without any hint prefixes.
   public static func extractBaseName(from nodeName: String) -> String {
     var baseName = nodeName
     // Remove all hint prefixes, starting with longest (most specific) first
@@ -201,7 +202,7 @@ public final class Scene {
     return baseName.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  /// Normalize entries/camera identifiers so area comparisons stay consistent
+  /// Normalize entries/camera identifiers so area comparisons stay consistent.
   /// - "@Entry 1" -> "1"
   /// - "@Entry hallway" -> "hallway"
   /// - "hallway_2" -> "hallway"
@@ -240,6 +241,7 @@ public final class Scene {
   public private(set) var floorNodes: [Node] = []
   public private(set) var footstepsNodes: [Node] = []
   public private(set) var foregroundNodes: [Node] = []
+  public private(set) var ledgeNodes: [Node] = []
   public private(set) var mapMarkerNodes: [Node] = []
   public private(set) var pickupNodes: [Node] = []
   public private(set) var sparkleNodes: [Node] = []
@@ -301,6 +303,11 @@ public final class Scene {
     footstepsNodes.first { $0.baseName == baseName }
   }
 
+  /// Find a ledge node by base name
+  public func ledgeNode(named baseName: String) -> Node? {
+    ledgeNodes.first { $0.baseName == baseName }
+  }
+
   /// Find a map marker node by base name
   public func mapMarkerNode(named baseName: String) -> Node? {
     mapMarkerNodes.first { $0.baseName == baseName }
@@ -347,6 +354,7 @@ public final class Scene {
       (.floor, floorNodes),
       (.footsteps, footstepsNodes),
       (.foreground, foregroundNodes),
+      (.ledge, ledgeNodes),
       (.mapMarker, mapMarkerNodes),
       (.pickup, pickupNodes),
       (.sparkle, sparkleNodes),

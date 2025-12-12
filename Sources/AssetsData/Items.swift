@@ -150,8 +150,8 @@ extension Item {
     id: "lighter_with_fuel",
     name: "Lighter",
     description: "Simple butane lighter for lighting fires.",
-    image: Image("Items/Weapons/lighter.png"),
-    modelPath: "Items/Weapons/lighter",
+    //image: Image("Items/Weapons/lighter.png"),
+    //modelPath: "Items/Weapons/lighter",
   )
 
   static let lighterFluid = Item(

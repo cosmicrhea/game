@@ -253,19 +253,26 @@ public final class WeaponSystem {
   private func dealGunDamage() {
     guard let physicsWorld = physicsWorld,
       let enemySystem = enemySystem,
-      let cameraSystem = cameraSystem
+      let playerController = playerController
     else { return }
 
-    // Get camera forward direction from camera world transform
-    let cameraWorldTransform = cameraSystem.cameraWorldTransform
-    let cameraPosition = vec3(cameraWorldTransform[3].x, cameraWorldTransform[3].y, cameraWorldTransform[3].z)
+    // Use player position and rotation (tank controls, not first-person)
+    // Same calculation as melee damage - forward direction from player rotation
+    let playerPosition = playerController.position
+    let playerRotation = playerController.rotation
 
-    // Extract forward direction from camera transform (negative Z column)
-    let forward = vec3(-cameraWorldTransform[2].x, -cameraWorldTransform[2].y, -cameraWorldTransform[2].z)
+    // Calculate forward direction from player rotation
+    let forwardX = sin(playerRotation)
+    let forwardZ = cos(playerRotation)
+    let forward = vec3(forwardX, 0, forwardZ)
     let normalizedForward = normalize(forward)
 
-    // Cast ray from camera position
-    let rayOrigin = RVec3(x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z)
+    // Cast ray from weapon height (chest level, not center of capsule)
+    // Player capsule: halfHeight 0.8, radius 0.4, so center is at position.y
+    // Weapon should be at chest height, roughly position.y + 0.3
+    let weaponHeightOffset: Float = 0.3
+    let weaponPosition = vec3(playerPosition.x, playerPosition.y + weaponHeightOffset, playerPosition.z)
+    let rayOrigin = RVec3(x: weaponPosition.x, y: weaponPosition.y, z: weaponPosition.z)
     let rayDirection = Vec3(x: normalizedForward.x, y: normalizedForward.y, z: normalizedForward.z)
     let maxRange: Float = 50.0
 
@@ -357,6 +364,19 @@ public final class WeaponSystem {
     // Project ray direction onto capsule axis
     let rayDotAxis = dot(rayDir, capsuleDir)
     let toCapsuleDotAxis = dot(toCapsule, capsuleDir)
+
+    // Handle case where ray is perpendicular to capsule axis (rayDotAxis ≈ 0)
+    guard abs(rayDotAxis) > 0.0001 else {
+      // Ray is perpendicular to capsule axis - find closest point on capsule axis to ray start
+      let distAlongAxis = dot(toCapsule, capsuleDir)
+      let clampedDist = max(0, min(capsuleLength, distAlongAxis))
+      let capsulePoint = capsuleBottom + capsuleDir * clampedDist
+      let distToAxis = length(rayStart - capsulePoint)
+      if distToAxis <= capsuleRadius {
+        return capsulePoint
+      }
+      return nil
+    }
 
     // Closest point on ray to capsule axis
     let t = toCapsuleDotAxis / rayDotAxis

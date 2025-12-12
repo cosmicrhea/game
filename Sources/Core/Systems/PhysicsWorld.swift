@@ -4,6 +4,12 @@ import Foundation
 import Jolt
 import Logging
 
+/// State of a ledge (high or low position)
+public enum LedgeState {
+  case high
+  case low
+}
+
 /// Manages the physics system, collision bodies, and physics-related operations
 @MainActor
 public final class PhysicsWorld {
@@ -32,6 +38,19 @@ public final class PhysicsWorld {
   private(set) var actionBodyNames: [BodyID: String] = [:]
   // Mapping from trigger body IDs to their node names
   private(set) var triggerBodyNames: [BodyID: String] = [:]
+  // Mapping from ledge action body IDs to their node names
+  private(set) var ledgeBodyNames: [BodyID: String] = [:]
+  // Mapping from ledge high collision body IDs to their node names
+  private var ledgeHighBodyNames: [BodyID: String] = [:]
+  // Mapping from ledge low collision body IDs to their node names
+  private var ledgeLowBodyNames: [BodyID: String] = [:]
+
+  // Ledge state tracking
+  private var ledgeStates: [String: LedgeState] = [:]
+  private var ledgeHighBodyIDsByLedge: [String: BodyID] = [:]
+  private var ledgeLowBodyIDsByLedge: [String: BodyID] = [:]
+  // Track which body is currently active for each ledge (so we know which one to remove)
+  private var ledgeActiveBodyIDsByLedge: [String: BodyID] = [:]
 
   // Flag to track if physics system is ready for updates
   private(set) var isReady: Bool = false
@@ -282,6 +301,39 @@ public final class PhysicsWorld {
       bodyInterface.removeAndDestroyBody(bodyID)
     }
     triggerBodyNames.removeAll()
+
+    // Remove all ledge bodies
+    for bodyID in ledgeBodyNames.keys {
+      bodyInterface.removeAndDestroyBody(bodyID)
+    }
+    ledgeBodyNames.removeAll()
+
+    // Remove all ledge high/low collision bodies
+    // First, remove any that are currently in the broad phase (active)
+    for activeBodyID in ledgeActiveBodyIDsByLedge.values {
+      // Only remove if it's actually in the broad phase
+      if bodyInterface.isInBroadPhase(activeBodyID) {
+        bodyInterface.removeBody(activeBodyID)
+      }
+    }
+
+    // Now destroy all ledge high/low bodies (whether they were in broad phase or not)
+    // Bodies that were in broad phase have been removed, so we can safely destroy all
+    for bodyID in ledgeHighBodyNames.keys {
+      bodyInterface.destroyBody(bodyID)
+    }
+    ledgeHighBodyNames.removeAll()
+
+    for bodyID in ledgeLowBodyNames.keys {
+      bodyInterface.destroyBody(bodyID)
+    }
+    ledgeLowBodyNames.removeAll()
+
+    // Clear ledge state tracking
+    ledgeStates.removeAll()
+    ledgeHighBodyIDsByLedge.removeAll()
+    ledgeLowBodyIDsByLedge.removeAll()
+    ledgeActiveBodyIDsByLedge.removeAll()
   }
 
   /// Load collision bodies from scene
@@ -487,6 +539,223 @@ public final class PhysicsWorld {
         }
       }
     }
+  }
+
+  /// Load ledge bodies from scene (action bodies for ledge nodes, collision bodies for ledgeHigh/ledgeLow children)
+  public func loadLedgeBodies(scene: Scene) {
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    // Object layer 0 for action bodies (same as regular action bodies)
+    let actionLayer: ObjectLayer = 0
+    // Object layer 0 for collision bodies (same as regular collision bodies)
+    let collisionLayer: ObjectLayer = 0
+
+    logger.debug("📋 Loading ledge bodies from \(scene.ledgeNodes.count) ledge nodes")
+
+    for ledgeNode in scene.ledgeNodes {
+      let ledgeName = ledgeNode.name
+      let ledgeBaseName = Scene.extractBaseName(from: ledgeName)
+
+      // Create action body for the ledge node itself
+      let ledgeWorldTransform = ledgeNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+
+      if ledgeNode.numberOfMeshes > 0 {
+        let meshIndex = ledgeNode.meshes[0]
+        if meshIndex < scene.meshes.count {
+          let mesh = scene.meshes[Int(meshIndex)]
+
+          // Transform triangles to world space
+          let triangles = extractTrianglesFromMesh(mesh: mesh, transform: ledgeWorldTransform)
+
+          guard !triangles.isEmpty else { continue }
+
+          // Calculate centroid for body position
+          var totalX: Float = 0
+          var totalY: Float = 0
+          var totalZ: Float = 0
+          var vertexCount: Int = 0
+          for triangle in triangles {
+            totalX += triangle.v1.x + triangle.v2.x + triangle.v3.x
+            totalY += triangle.v1.y + triangle.v2.y + triangle.v3.y
+            totalZ += triangle.v1.z + triangle.v2.z + triangle.v3.z
+            vertexCount += 3
+          }
+          guard vertexCount > 0 else { continue }
+          let centroid = vec3(
+            totalX / Float(vertexCount),
+            totalY / Float(vertexCount),
+            totalZ / Float(vertexCount)
+          )
+
+          // Offset triangles so body can be at centroid
+          let offsetTriangles = triangles.map { triangle in
+            Triangle(
+              v1: Vec3(x: triangle.v1.x - centroid.x, y: triangle.v1.y - centroid.y, z: triangle.v1.z - centroid.z),
+              v2: Vec3(x: triangle.v2.x - centroid.x, y: triangle.v2.y - centroid.y, z: triangle.v2.z - centroid.z),
+              v3: Vec3(x: triangle.v3.x - centroid.x, y: triangle.v3.y - centroid.y, z: triangle.v3.z - centroid.z),
+              materialIndex: triangle.materialIndex
+            )
+          }
+
+          // Create mesh shape from offset triangles
+          let meshShape = MeshShape(triangles: offsetTriangles)
+
+          // Create body settings - make it a sensor like action bodies
+          let bodySettings = BodyCreationSettings(
+            shape: meshShape,
+            position: RVec3(x: centroid.x, y: centroid.y, z: centroid.z),
+            rotation: Quat.identity,
+            motionType: .static,
+            objectLayer: actionLayer
+          )
+          bodySettings.isSensor = true
+
+          // Create and add body to physics system
+          let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .dontActivate)
+          if bodyID != 0 {
+            ledgeBodyNames[bodyID] = ledgeName
+            logger.debug("✅ Created ledge action body ID: \(bodyID) for node '\(ledgeName)'")
+          } else {
+            logger.error("❌ Failed to create ledge action body for node '\(ledgeName)'")
+          }
+        }
+      }
+
+      // Find and create collision bodies for ledgeHigh and ledgeLow children
+      let (highNode, lowNode) = findLedgeHighLowChildren(for: ledgeNode, in: scene)
+
+      if let highNode {
+        let highBodyID = createLedgeCollisionBodyWithoutAdding(
+          for: highNode, scene: scene, layer: collisionLayer, bodyInterface: bodyInterface)
+        if highBodyID != 0 {
+          ledgeHighBodyNames[highBodyID] = highNode.name
+          ledgeHighBodyIDsByLedge[ledgeBaseName] = highBodyID
+          logger.debug(
+            "✅ Created ledge high collision body ID: \(highBodyID) for node '\(highNode.name)' (not yet added to simulation)"
+          )
+        }
+      }
+
+      if let lowNode {
+        let lowBodyID = createLedgeCollisionBodyWithoutAdding(
+          for: lowNode, scene: scene, layer: collisionLayer, bodyInterface: bodyInterface)
+        if lowBodyID != 0 {
+          ledgeLowBodyNames[lowBodyID] = lowNode.name
+          ledgeLowBodyIDsByLedge[ledgeBaseName] = lowBodyID
+          logger.debug(
+            "✅ Created ledge low collision body ID: \(lowBodyID) for node '\(lowNode.name)' (initially disabled)")
+        }
+      }
+    }
+
+    logger.debug(
+      "📋 Total ledge bodies created: \(ledgeBodyNames.count) action, \(ledgeHighBodyNames.count) high, \(ledgeLowBodyNames.count) low"
+    )
+  }
+
+  /// Find ledge high and low child nodes for a given ledge node
+  private func findLedgeHighLowChildren(for ledgeNode: Node, in scene: Scene) -> (high: Node?, low: Node?) {
+    var highNode: Node? = nil
+    var lowNode: Node? = nil
+
+    func searchChildren(_ node: Node) {
+      for child in node.children {
+        if scene.hasHint(child, hint: .ledgeHigh) {
+          highNode = child
+        } else if scene.hasHint(child, hint: .ledgeLow) {
+          lowNode = child
+        }
+        // Recursively search children
+        searchChildren(child)
+      }
+    }
+
+    searchChildren(ledgeNode)
+    return (highNode, lowNode)
+  }
+
+  /// Create a collision body for a ledge high/low node without adding it to the simulation
+  private func createLedgeCollisionBodyWithoutAdding(
+    for node: Node,
+    scene: Scene,
+    layer: ObjectLayer,
+    bodyInterface: BodyInterface
+  ) -> BodyID {
+    let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+
+    guard node.numberOfMeshes > 0 else { return 0 }
+    let meshIndex = node.meshes[0]
+    guard meshIndex < scene.meshes.count else { return 0 }
+
+    let mesh = scene.meshes[Int(meshIndex)]
+    let triangles = extractTrianglesFromMesh(mesh: mesh, transform: worldTransform)
+
+    guard !triangles.isEmpty else { return 0 }
+
+    // Create mesh shape from triangles (already in world space)
+    let meshShape = MeshShape(triangles: triangles)
+
+    // Position is at origin since triangles are already in world space
+    let position = vec3(0, 0, 0)
+    let rotation = Quat.identity
+
+    // Create body settings
+    let bodySettings = BodyCreationSettings(
+      shape: meshShape,
+      position: RVec3(x: position.x, y: position.y, z: position.z),
+      rotation: rotation,
+      motionType: .static,
+      objectLayer: layer
+    )
+
+    // Create body without adding it to physics system (will be added later based on state)
+    let bodyID = bodyInterface.createBody(settings: bodySettings)
+    return bodyID
+  }
+
+  /// Set ledge state and enable/disable appropriate collision bodies
+  public func setLedgeState(_ state: LedgeState, for ledgeName: String) {
+    let bodyInterface = physicsSystem.bodyInterface()
+
+    guard let highBodyID = ledgeHighBodyIDsByLedge[ledgeName],
+      let lowBodyID = ledgeLowBodyIDsByLedge[ledgeName]
+    else {
+      logger.warning("⚠️ Cannot set ledge state: ledge '\(ledgeName)' not found")
+      return
+    }
+
+    // Determine which body should be active
+    let targetBodyID: BodyID
+    switch state {
+    case .high:
+      targetBodyID = highBodyID
+    case .low:
+      targetBodyID = lowBodyID
+    }
+
+    // Remove currently active body if it's different from the target
+    if let currentActiveBodyID = ledgeActiveBodyIDsByLedge[ledgeName],
+      currentActiveBodyID != targetBodyID
+    {
+      // Only remove if it's actually in the simulation (was added)
+      bodyInterface.removeBody(currentActiveBodyID)
+    }
+
+    // Add the target body if it's not already active
+    if ledgeActiveBodyIDsByLedge[ledgeName] != targetBodyID {
+      bodyInterface.addBody(targetBodyID, activation: .dontActivate)
+    }
+
+    // Update state tracking
+    ledgeStates[ledgeName] = state
+    ledgeActiveBodyIDsByLedge[ledgeName] = targetBodyID
+
+    logger.trace("🔧 Ledge '\(ledgeName)': set to \(state == .high ? "high" : "low")")
+  }
+
+  /// Get current ledge state
+  public func ledgeState(for ledgeName: String) -> LedgeState? {
+    return ledgeStates[ledgeName]
   }
 
   /// Create ground plane

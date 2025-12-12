@@ -39,6 +39,9 @@ extension UISound {
     }
     // spellchecker: enable
   }
+
+  static func death() { play("RE/JI_NOM") }
+
 }
 
 public enum FootstepSound: String {
