@@ -312,18 +312,17 @@
     let totalHeight = maxHeight + Float(max(0, groups.count - 1)) * rowSpacing
 
     // Determine starting position based on anchor
+    // drawGroup expects position.y to be the bottom of the allocated space
+    // For top anchors: origin.y is the top, so position.y = origin.y - maxHeight
+    // For bottom anchors: origin.y is the bottom, so position.y = origin.y
     let startY: Float = {
       switch anchor {
-      case .topLeft, .topRight:
-        return origin.y
-      case .bottomLeft, .bottomRight:
-        return origin.y - totalHeight
-      case .left, .right:
-        return origin.y - totalHeight / 2
-      case .top, .bottom:
-        return origin.y - totalHeight / 2
-      case .center:
-        return origin.y - totalHeight / 2
+      case .topLeft, .topRight, .top:
+        return origin.y - maxHeight  // origin.y is top, position.y is bottom of first group
+      case .bottomLeft, .bottomRight, .bottom:
+        return origin.y - totalHeight  // origin.y is bottom, position.y is bottom of last group
+      case .left, .right, .center:
+        return origin.y - totalHeight / 2 - maxHeight / 2  // Center the list
       case .baselineLeft:
         return origin.y
       }
@@ -346,11 +345,26 @@
       }
     }()
 
+    // Determine Y direction based on anchor
+    // In OpenGL, Y=0 is at bottom, so higher Y = higher on screen
+    // For top anchors, we start high and decrement (go down)
+    // For bottom anchors, we start low and increment (go up)
+    let yStep: Float
+    switch anchor {
+    case .topLeft, .topRight, .top:
+      yStep = -(maxHeight + rowSpacing)  // Decrement to go down
+    case .bottomLeft, .bottomRight, .bottom:
+      yStep = maxHeight + rowSpacing  // Increment to go up
+    default:
+      // For center/left/right, default to going down (top to bottom)
+      yStep = -(maxHeight + rowSpacing)
+    }
+    
     var currentY = startY
     for (gi, group) in groups.enumerated() {
       let metrics = groupMetrics[gi]
       drawGroup(group, metrics: metrics, at: (x: startX, y: currentY), maxHeight: maxHeight, opacity: opacity)
-      currentY += maxHeight + rowSpacing
+      currentY += yStep
     }
   }
 

@@ -6,6 +6,12 @@ final class ModelViewer: RenderLoop {
   private let secondaryPromptList = PromptList(.modelViewerControls, axis: .vertical)
   private let ambientBackground = GLScreenEffect("Effects/AmbientBackground")
 
+  // Button prompts for model and animation navigation
+  private let prevModelPrompt = Prompt([["keyboard_q"], ["xbox_lb"], ["playstation_trigger_l1"]])
+  private let nextModelPrompt = Prompt([["keyboard_e"], ["xbox_rb"], ["playstation_trigger_r1"]])
+  private let prevAnimationPrompt = Prompt([["keyboard_1"], ["xbox_dpad_up"], ["playstation_dpad_up"]])
+  private let nextAnimationPrompt = Prompt([["keyboard_3"], ["xbox_dpad_down"], ["playstation_dpad_down"]])
+
   // Models
   private let modelPaths: [String] = [
     "Actors/alex",
@@ -262,11 +268,46 @@ final class ModelViewer: RenderLoop {
       promptList.draw()
 
       if let prompts = PromptGroup.prompts[.modelViewerControls] {
-        let origin = Point(Float(Engine.viewportSize.width) - 400, Float(Engine.viewportSize.height) / 2)
+        let viewportHeight = Float(Engine.viewportSize.height)
+        let originX = Float(Engine.viewportSize.width) - 400
+
+        // Calculate prompt list size and header height
+        let promptListSize = secondaryPromptList.size(for: prompts, inputSource: .player1)
+        let headerStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 24, color: .white)
+        let headerHeight = "Controls".size(with: headerStyle).height
+        let headerSpacing: Float = 16
+        let dividerHeight: Float = 2
+
+        // Position from top of screen (higher Y = higher on screen in OpenGL)
+        // In OpenGL, Y=0 is at bottom, viewportHeight is at top
+        // Position near top with some margin
+        let topMargin: Float = 100
+        let headerTopY = viewportHeight - topMargin
+
+        // Draw "Controls" header first (at the top)
+        "Controls".draw(
+          at: Point(originX, headerTopY),
+          style: headerStyle,
+          anchor: .topLeft
+        )
+
+        // Draw divider below the header
+        let headerBottomY = headerTopY - headerHeight
+        let dividerGradient = Gradient(colors: [.clear, .white.withAlphaComponent(0.15)], locations: [0.0, 0.1])
+        let dividerWidth: Float = 512
+        let dividerX = Engine.viewportSize.width - dividerWidth
+        let dividerY = headerBottomY
+        let divider = Rect(x: dividerX, y: dividerY - dividerHeight / 2, width: dividerWidth, height: dividerHeight)
+        divider.fill(with: dividerGradient)
+
+        // Draw prompt list below the divider (lower Y = lower on screen)
+        let promptListTopY = headerBottomY - headerSpacing
+        let promptListOrigin = Point(originX, promptListTopY)
+        //Rect(origin: promptListOrigin, size: Size(10, 10)).frame(with: .red)
         secondaryPromptList.draw(
           prompts: prompts,
           inputSource: .player1,
-          origin: origin,
+          origin: promptListOrigin,
           anchor: .topLeft
         )
       }
@@ -393,32 +434,83 @@ final class ModelViewer: RenderLoop {
     ).titleCased
 
     let centerX = Float(Engine.viewportSize.width) / 2
+    let viewportHeight = Float(Engine.viewportSize.height)
+
+    // In OpenGL, Y=0 is at bottom, so we calculate from bottom
+    // Position model name and animation name near bottom of screen
+    let modelNameY: Float = 160  // 160 pixels from bottom
+    let animationNameY: Float = 128  // 128 pixels from bottom
+    let dividerSpacing: Float = 20  // Space between text and divider
+
+    // Gradient divider line between model name and animation name
+    // Fade from both ends: clear -> white -> clear
+    let dividerGradient = Gradient(
+      colors: [.clear, .white.withAlphaComponent(0.15), .white.withAlphaComponent(0.15), .clear],
+      locations: [0.0, 0.1, 0.9, 1.0]
+    )
+    let dividerWidth: Float = 512
+    let dividerHeight: Float = 2
+
+    // Divider positioned between model name and animation name
+    let dividerY = (modelNameY + animationNameY) / 2
+    let divider = Rect(
+      x: centerX - dividerWidth / 2, y: dividerY - dividerHeight / 2, width: dividerWidth, height: dividerHeight)
+    divider.fill(with: dividerGradient)
+
+    // Draw model name with Q/E prompts
+    // Hardcode prompt positions to 400px wide from center
+    let promptAreaWidth: Float = 400
+
+    // Align prompts vertically with text baseline
+    prevModelPrompt.iconOpacity = 0.6
+    prevModelPrompt.draw(
+      at: Point(centerX - promptAreaWidth / 2, modelNameY),
+      anchor: .right
+    )
 
     modelName.draw(
-      at: Point(centerX, 128 + 32),
+      at: Point(centerX, modelNameY),
       style: .itemName,
       anchor: .bottom
     )
 
-    // Draw current animation name below model name
+    nextModelPrompt.iconOpacity = 0.6
+    nextModelPrompt.draw(
+      at: Point(centerX + promptAreaWidth / 2, modelNameY),
+      anchor: .left
+    )
+
+    // Draw animation name and 1/3 prompts
+    // Always draw the prompts, even if no animations are loaded
+    prevAnimationPrompt.iconOpacity = 0.6
+    prevAnimationPrompt.draw(
+      at: Point(centerX - promptAreaWidth / 2, animationNameY),
+      anchor: .right
+    )
+
+    // Only draw animation name if animations are available
     if !currentAnimationNames.isEmpty {
       let currentAnimationName = currentAnimationNames[safe: currentAnimationIndex] ?? currentAnimationNames[0]
-      //      let playStatus = nodeAnimator.playing ? "▶" : "⏸"
-      //      let displayText = "\(playStatus) \(currentAnimationName)"
-      let displayText = "\(currentAnimationName)"
+      let displayText = currentAnimationName  // Removed < and >
 
       displayText.draw(
-        at: Point(centerX, 128),
+        at: Point(centerX, animationNameY),
         style: .itemDescription,
         anchor: .bottom
       )
     }
+
+    nextAnimationPrompt.iconOpacity = 0.6
+    nextAnimationPrompt.draw(
+      at: Point(centerX + promptAreaWidth / 2, animationNameY),
+      anchor: .left
+    )
   }
 }
 
 // Custom camera for ModelViewer with extended zoom range
 class ModelViewerCamera: ItemInspectionCamera {
-  private let modelViewerMaxDistance: Float = 10.0
+  private let modelViewerMaxDistance: Float = 10000.0
   private let modelViewerMinDistance: Float = 0.01
 
   override func processMouseScroll(_ yOffset: Float) {
