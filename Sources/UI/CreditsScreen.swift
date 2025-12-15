@@ -82,6 +82,29 @@ final class CreditsScreen: Screen {
     if scrollOffset < -totalContentHeight - screenHeight {
       scrollOffset = initialScrollOffset
     }
+
+    // Handle gamepad input
+    if let gamepad = Gamepad.allGamepads.first {
+      handleGamepadInput(gamepad)
+    }
+  }
+
+  // MARK: - Gamepad Support
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad input for credits screen
+  private func handleGamepadInput(_ gamepad: Gamepad) {
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.a, .b, .x, .start])
+
+    if !newlyPressed.isEmpty {
+      InputSource.updateFromGamepad(gamepad)
+      // A, B, X, or Start button = Skip credits
+      requestExit()
+    }
+
+    // Check for left trigger for turbo scroll
+    let leftTrigger = gamepad.state(of: .leftTrigger)
+    scrollTurbo = leftTrigger > 0.5
   }
 
   private func calculateTotalContentHeight() {

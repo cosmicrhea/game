@@ -45,6 +45,10 @@ final class TitleScreen: Screen {
 
   override func update(deltaTime: Float) {
     listMenu.update(deltaTime: deltaTime)
+    // Handle gamepad navigation
+    if let gamepad = Gamepad.allGamepads.first {
+      listMenu.handleGamepadInput(gamepad, deltaTime: deltaTime)
+    }
   }
 
   override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -112,6 +116,17 @@ final class TitleScreenStack: RenderLoop {
 
   func onMouseMove(window: Window, x: Double, y: Double) {
     navigationStack.onMouseMove(window: window, x: x, y: y)
+  }
+
+  /// Handle gamepad button press for back navigation
+  func handleGamepadButton(_ button: Gamepad.Button) -> Bool {
+    if button == .b || button == .back {
+      if !navigationStack.isAtRoot {
+        navigationStack.pop()
+        return true
+      }
+    }
+    return false
   }
 
   func draw() {

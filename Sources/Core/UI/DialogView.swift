@@ -90,7 +90,7 @@
     // Update speed multiplier based on held action keys or left mouse button
     updateSpeedMultiplier()
 
-    // Handle ask mode - just update typewriter effect, input is handled via key events
+    // Handle ask mode - update typewriter effect and handle input (keyboard and gamepad)
     if let askText = askText {
       // Ensure layout is done for ask mode
       if needsLayout {
@@ -121,9 +121,17 @@
         let isActionKeyPressed =
           keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
           || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
-        waitingForActionKeyRelease = isActionKeyPressed
-        hasSeenActionKeyRelease = !isActionKeyPressed
+        // Also check gamepad A button
+        let isGamepadActionPressed = Gamepad.allGamepads.first?.state(of: .a) == .pressed
+        waitingForActionKeyRelease = isActionKeyPressed || isGamepadActionPressed
+        hasSeenActionKeyRelease = !(isActionKeyPressed || isGamepadActionPressed)
       }
+
+      // Handle gamepad input for ask mode navigation
+      handleAskModeGamepadInput()
+
+      // Handle keyboard input for ask mode
+      handleAskModeInput()
 
       return
     }
@@ -164,8 +172,11 @@
 
     let isLeftMouseHeld = mouse.state(of: .left) == .pressed
 
+    // Check for gamepad A button (action button)
+    let isGamepadActionHeld = Gamepad.allGamepads.first?.state(of: .a) == .pressed
+
     // Set speed multiplier to 4.0x if any action input is held
-    speedMultiplier = (isActionKeyHeld || isLeftMouseHeld) ? 4.0 : 1.0
+    speedMultiplier = (isActionKeyHeld || isLeftMouseHeld || isGamepadActionHeld) ? 4.0 : 1.0
   }
 
   private func handleAskModeInput() {
@@ -196,15 +207,17 @@
       let isActionKeyPressed =
         keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
         || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+      // Also check gamepad A button
+      let isGamepadActionPressed = Gamepad.allGamepads.first?.state(of: .a) == .pressed
 
-      if !isActionKeyPressed {
+      if !isActionKeyPressed && !isGamepadActionPressed {
         // Action key has been released, mark that we've seen the release
         hasSeenActionKeyRelease = true
         waitingForActionKeyRelease = false
         wasActionKeyPressedLastFrame = false
       } else {
         // Still pressed (key repeat), keep waiting and skip input
-        wasActionKeyPressedLastFrame = isActionKeyPressed
+        wasActionKeyPressedLastFrame = isActionKeyPressed || isGamepadActionPressed
         return
       }
     }
@@ -215,45 +228,29 @@
       let isActionKeyPressed =
         keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
         || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
-      if !isActionKeyPressed {
+      // Also check gamepad A button
+      let isGamepadActionPressed = Gamepad.allGamepads.first?.state(of: .a) == .pressed
+      if !isActionKeyPressed && !isGamepadActionPressed {
         hasSeenActionKeyRelease = true
       } else {
         // Still pressed, update flag but don't allow selection yet
-        wasActionKeyPressedLastFrame = isActionKeyPressed
+        wasActionKeyPressedLastFrame = isActionKeyPressed || isGamepadActionPressed
         // Continue to navigation handling but skip selection
       }
     }
 
-    // Handle left/right navigation (a/d keys)
+    // Keyboard navigation is handled by handleAskModeNavigation() via MainLoop.onKeyPressed()
+    // We only need to track state here for other logic
     let isLeftPressed = keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed
     let isRightPressed = keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed
-
-    // Only change selection on key press (not while held)
-    if isLeftPressed && !wasLeftKeyPressedLastFrame {
-      let newIndex = max(0, selectedOptionIndex - 1)
-      if newIndex != selectedOptionIndex {
-        selectedOptionIndex = newIndex
-        optionCaret.resetAnimation()  // Reset animation when selection changes
-        UISound.navigate()
-      }
-    }
-    if isRightPressed && !wasRightKeyPressedLastFrame {
-      let newIndex = min(askOptions.count - 1, selectedOptionIndex + 1)
-      if newIndex != selectedOptionIndex {
-        selectedOptionIndex = newIndex
-        optionCaret.resetAnimation()  // Reset animation when selection changes
-        UISound.navigate()
-      }
-    }
+    wasLeftKeyPressedLastFrame = isLeftPressed
+    wasRightKeyPressedLastFrame = isRightPressed
 
     // Reset animation if selection changed (for any reason)
     if selectedOptionIndex != previousSelectedOptionIndex {
       optionCaret.resetAnimation()
       previousSelectedOptionIndex = selectedOptionIndex
     }
-
-    wasLeftKeyPressedLastFrame = isLeftPressed
-    wasRightKeyPressedLastFrame = isRightPressed
 
     // Handle selection (action keys)
     // Only allow selection if we've seen the key released at least once
@@ -266,12 +263,29 @@
       return
     }
 
+    // Wait until question text has finished typewriting before allowing selection
+    guard askText != nil else { return }
+    // Calculate total characters in wrapped lines (same as in update())
+    let totalCharacters = wrappedLines.reduce(0) { $0 + $1.count }
+    let isQuestionComplete = displayedCharacterCount >= Float(totalCharacters)
+    guard isQuestionComplete else {
+      // Update flag but don't allow selection while typewriting
+      let isActionKeyPressed =
+        keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+        || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+      wasActionKeyPressedLastFrame = isActionKeyPressed
+      return
+    }
+
     let isActionKeyPressed =
       keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
       || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+    // Also check gamepad A button
+    let isGamepadActionPressed = (Gamepad.allGamepads.first?.state(of: .a) == .pressed) ?? false
+    let isAnyActionPressed = isActionKeyPressed || isGamepadActionPressed
 
     // Only trigger selection on key press (not while held)
-    let actionKeyJustPressed = isActionKeyPressed && !wasActionKeyPressedLastFrame
+    let actionKeyJustPressed = isAnyActionPressed && !wasActionKeyPressedLastFrame
 
     if actionKeyJustPressed {
       // User selected an option
@@ -289,7 +303,7 @@
       }
     }
 
-    wasActionKeyPressedLastFrame = isActionKeyPressed
+    wasActionKeyPressedLastFrame = isAnyActionPressed
   }
 
   func draw() {
@@ -496,9 +510,9 @@
     optionCaret.draw(
       at: Point(caretX, caretY),
       tint: dialogStyle.color,
-      scale: 0.5,  // Make caret bigger
+      scale: 0.5,
       deltaTime: deltaTime,
-      strokeWidth: dialogStyle.strokeWidth / 2,
+      strokeWidth: dialogStyle.strokeWidth,  // / 2,
       strokeColor: dialogStyle.strokeColor
     )
   }
@@ -540,6 +554,131 @@
     }
   }
 
+  // MARK: - Gamepad Support
+  private var previousGamepadDpadState: (left: Bool, right: Bool) = (false, false)
+  private var previousGamepadActionState: Bool = false
+
+  /// Handle continuous gamepad input for ask mode navigation (called from update loop)
+  private func handleAskModeGamepadInput() {
+    guard let gamepad = Gamepad.allGamepads.first else { return }
+    guard askText != nil else { return }
+
+    // Wait for action key to be released if it was pressed when entering ask mode
+    if waitingForActionKeyRelease {
+      let isActionKeyPressed = gamepad.state(of: .a) == .pressed
+      if !isActionKeyPressed {
+        // Action key has been released, mark that we've seen the release
+        hasSeenActionKeyRelease = true
+        waitingForActionKeyRelease = false
+        previousGamepadActionState = false
+      } else {
+        // Still pressed, keep waiting and skip input
+        previousGamepadActionState = isActionKeyPressed
+        return
+      }
+    }
+
+    // If we haven't seen the action key released yet, don't allow selection
+    if !hasSeenActionKeyRelease {
+      let isActionKeyPressed = gamepad.state(of: .a) == .pressed
+      if !isActionKeyPressed {
+        hasSeenActionKeyRelease = true
+      } else {
+        previousGamepadActionState = isActionKeyPressed
+        // Continue to navigation handling but skip selection
+      }
+    }
+
+    // Handle D-pad left/right navigation
+    let dpadLeft = gamepad.state(of: .dpadLeft) == .pressed
+    let dpadRight = gamepad.state(of: .dpadRight) == .pressed
+
+    // Only change selection on button press (not while held)
+    if dpadLeft && !previousGamepadDpadState.left {
+      let newIndex = max(0, selectedOptionIndex - 1)
+      if newIndex != selectedOptionIndex {
+        selectedOptionIndex = newIndex
+        optionCaret.resetAnimation()
+        UISound.navigate()
+      }
+    }
+    if dpadRight && !previousGamepadDpadState.right {
+      let newIndex = min(askOptions.count - 1, selectedOptionIndex + 1)
+      if newIndex != selectedOptionIndex {
+        selectedOptionIndex = newIndex
+        optionCaret.resetAnimation()
+        UISound.navigate()
+      }
+    }
+
+    // Update previous D-pad state
+    previousGamepadDpadState = (left: dpadLeft, right: dpadRight)
+
+    // Handle selection (A button)
+    // Only allow selection if we've seen the key released at least once
+    guard hasSeenActionKeyRelease else {
+      let isActionKeyPressed = gamepad.state(of: .a) == .pressed
+      previousGamepadActionState = isActionKeyPressed
+      return
+    }
+
+    // Wait until question text has finished typewriting before allowing selection
+    guard askText != nil else { return }
+    // Calculate total characters in wrapped lines (same as in update())
+    let totalCharacters = wrappedLines.reduce(0) { $0 + $1.count }
+    let isQuestionComplete = displayedCharacterCount >= Float(totalCharacters)
+    guard isQuestionComplete else {
+      // Update flag but don't allow selection while typewriting
+      let isActionKeyPressed = gamepad.state(of: .a) == .pressed
+      previousGamepadActionState = isActionKeyPressed
+      return
+    }
+
+    let isActionKeyPressed = gamepad.state(of: .a) == .pressed
+
+    // Only trigger selection on button press (not while held)
+    let actionKeyJustPressed = isActionKeyPressed && !previousGamepadActionState
+
+    if actionKeyJustPressed {
+      // User selected an option
+      let selectedIndex = selectedOptionIndex
+
+      // Clear ask mode state
+      askText = nil
+      askOptions = []
+      text = ""
+
+      // Resume continuation with selected index
+      if let continuation = askContinuation {
+        askContinuation = nil
+        continuation.resume(returning: selectedIndex)
+      }
+    }
+
+    previousGamepadActionState = isActionKeyPressed
+  }
+
+  /// Handle gamepad button press for dialog advancement and navigation
+  func handleGamepadButton(_ button: Gamepad.Button, gamepad: Gamepad) {
+    InputSource.updateFromGamepad(gamepad)
+
+    switch button {
+    case .a:
+      // A button = Advance/Dismiss (F/Space/Enter equivalent)
+      // Only advance if not in ask mode (ask mode is handled in update loop)
+      if askText == nil {
+        if tryAdvance() {
+          // Advanced successfully
+        } else if isFinished {
+          // Dialog finished, dismiss it
+          dismiss()
+        }
+      }
+    default:
+      break
+    }
+  }
+
   /// Handle navigation in ask mode (left/right)
   /// Returns true if navigation occurred
   @discardableResult
@@ -558,11 +697,6 @@
       return false
     }
 
-    // // Ignore repeat events for navigation too (only allow actual key presses)
-    // guard !Engine.isKeyRepeat else {
-    //   return false
-    // }
-
     switch key {
     case .a, .left:
       let newIndex = max(0, selectedOptionIndex - 1)
@@ -570,6 +704,8 @@
         selectedOptionIndex = newIndex
         optionCaret.resetAnimation()
         UISound.navigate()
+        // Mark that we handled this key press to prevent handleAskModeInput from processing it
+        wasLeftKeyPressedLastFrame = true
         return true
       }
     case .d, .right:
@@ -578,6 +714,8 @@
         selectedOptionIndex = newIndex
         optionCaret.resetAnimation()
         UISound.navigate()
+        // Mark that we handled this key press to prevent handleAskModeInput from processing it
+        wasRightKeyPressedLastFrame = true
         return true
       }
     default:
@@ -812,7 +950,21 @@
     previousSelectedOptionIndex = -1  // Reset to trigger animation reset on first frame
     wasLeftKeyPressedLastFrame = false
     wasRightKeyPressedLastFrame = false
-    wasActionKeyPressedLastFrame = false
+
+    // Check if action key is currently pressed - if so, set wasActionKeyPressedLastFrame = true
+    // to prevent the same key press that triggered ask() from immediately selecting an option
+    // This prevents double-submit when F is pressed to start interaction and ask() is called
+    if let window = Engine.shared.window {
+      let keyboard = window.keyboard
+      let isActionKeyCurrentlyPressed =
+        keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
+        || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
+      let isGamepadActionCurrentlyPressed = Gamepad.allGamepads.first.map { $0.state(of: .a) == .pressed } ?? false
+      wasActionKeyPressedLastFrame = isActionKeyCurrentlyPressed || isGamepadActionCurrentlyPressed
+    } else {
+      wasActionKeyPressedLastFrame = false
+    }
+
     skipInputThisFrame = true  // Skip input on first frame to avoid immediate selection
     waitingForActionKeyRelease = false  // Will be set on first frame if action key is pressed
     hasSeenActionKeyRelease = false  // Will be set when we detect key release
@@ -971,7 +1123,7 @@
       // tint: .gray400,
       // scale: 0.75,
       deltaTime: deltaTime,
-      strokeWidth: TextStyle.dialog.strokeWidth / 2,
+      strokeWidth: TextStyle.dialog.strokeWidth,  // / 2,
       strokeColor: TextStyle.dialog.strokeColor
     )
   }

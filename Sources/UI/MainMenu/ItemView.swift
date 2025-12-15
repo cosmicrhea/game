@@ -79,6 +79,11 @@ import Assimp
   func update(window: Window, deltaTime: Float) {
     camera.update(deltaTime: deltaTime)
     camera.processKeyboardState(window.keyboard, deltaTime)
+
+    // Handle gamepad input for camera rotation and zoom
+    if let gamepad = Gamepad.allGamepads.first {
+      camera.processGamepadState(gamepad, deltaTime)
+    }
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -113,6 +118,24 @@ import Assimp
     case .period:
       UISound.select()
       useDiffuseOnly.toggle()
+    default:
+      break
+    }
+  }
+
+  /// Handle gamepad button press
+  func handleGamepadButton(_ button: Gamepad.Button, gamepad: Gamepad) {
+    InputSource.updateFromGamepad(gamepad)
+
+    switch button {
+    case .b:
+      // B button = Close (right-click/Escape equivalent)
+      UISound.cancel()
+      onItemFinished?()
+    case .x:
+      // X button = Reset camera (R key equivalent)
+      camera.resetToInitialPosition()
+      UISound.select()
     default:
       break
     }

@@ -29,6 +29,10 @@ public final class WeaponSystem {
   /// Time since last attack (for rate of fire limiting)
   private var timeSinceLastAttack: Float = 0.0
 
+  // MARK: - Projectiles
+  /// Active projectiles (grenades, etc.)
+  private var activeProjectiles: [Projectile] = []
+
   // MARK: - References
   private weak var inventory: Inventory?
   private weak var slotGrid: ItemSlotGrid?
@@ -116,6 +120,9 @@ public final class WeaponSystem {
   /// Update weapon system (call each frame with deltaTime)
   public func update(deltaTime: Float) {
     timeSinceLastAttack += deltaTime
+
+    // Update projectiles
+    updateProjectiles(deltaTime: deltaTime)
   }
 
   /// Fire the equipped weapon
@@ -233,8 +240,7 @@ public final class WeaponSystem {
     case .handgun, .shotgun, .automatic:
       dealGunDamage()
     case .launcher:
-      // TODO: Launch projectile for launchers
-      dealGunDamage()  // Temporary: use raycast for now
+      launchProjectile()
     case .melee:
       break  // Already handled above
     case .none:
@@ -286,6 +292,9 @@ public final class WeaponSystem {
     var closestEnemy: Enemy?
     var closestDistance: Float = Float.greatestFiniteMagnitude
 
+    let rayStart = vec3(rayOrigin.x, rayOrigin.y, rayOrigin.z)
+    let rayEnd = rayStart + normalizedForward * maxRange
+
     for enemy in enemySystem.aliveEnemies {
       guard let characterController = enemy.characterController else { continue }
 
@@ -303,24 +312,17 @@ public final class WeaponSystem {
         capsuleRadius = 0.4
       }
 
-      // Check ray-capsule intersection manually
-      let rayStart = vec3(rayOrigin.x, rayOrigin.y, rayOrigin.z)
-      //let rayEnd = rayStart + normalizedForward * maxRange
-
       // Capsule is centered at enemy position, extends from -halfHeight to +halfHeight in Y
-      let capsuleBottom = vec3(enemyPosition.x, enemyPosition.y - capsuleHalfHeight, enemyPosition.z)
-      let capsuleTop = vec3(enemyPosition.x, enemyPosition.y + capsuleHalfHeight, enemyPosition.z)
-
-      // Simple ray-capsule intersection test
+      // Check ray-capsule intersection using a more robust algorithm
       if let intersection = rayCapsuleIntersection(
         rayStart: rayStart,
-        rayDir: normalizedForward,
-        capsuleBottom: capsuleBottom,
-        capsuleTop: capsuleTop,
+        rayEnd: rayEnd,
+        capsuleCenter: enemyPosition,
+        capsuleHalfHeight: capsuleHalfHeight,
         capsuleRadius: capsuleRadius
       ) {
         let distance = length(intersection - rayStart)
-        if distance < closestDistance {
+        if distance < closestDistance && distance <= maxRange {
           closestDistance = distance
           closestEnemy = enemy
         }
@@ -334,67 +336,142 @@ public final class WeaponSystem {
       logger.debug(
         "🔫 Hit enemy \(enemy.id.uuidString.prefix(4)) for \(damage) damage (HP: \(enemy.health)/\(enemy.maxHealth))")
     } else {
+      // Debug: log ray info and enemy positions
+      logger.debug("🔫 No enemy hit. Ray from \(rayStart) direction \(normalizedForward)")
+      logger.debug("🔫 Checking \(enemySystem.aliveEnemies.count) enemies")
+      for enemy in enemySystem.aliveEnemies.prefix(3) {
+        if let charController = enemy.characterController {
+          let enemyPos = vec3(charController.position.x, charController.position.y, charController.position.z)
+          let distToEnemy = length(enemyPos - rayStart)
+          logger.debug("🔫 Enemy at \(enemyPos), distance: \(distToEnemy)")
+        }
+      }
+
       // Also check raycast for other objects (walls, etc.) for debug
       if let hit = physicsWorld.getPhysicsSystem().castRaySingle(origin: rayOrigin, direction: rayDirection) {
-        logger.trace("🔫 Raycast hit body ID: \(hit.bodyID), fraction: \(hit.fraction)")
+        logger.debug("🔫 Raycast hit body ID: \(hit.bodyID), fraction: \(hit.fraction)")
       } else {
-        logger.trace("🔫 Raycast hit nothing")
+        logger.debug("🔫 Raycast hit nothing")
       }
     }
   }
 
   // Helper function for ray-capsule intersection
+  // Uses a more robust algorithm that handles the cylinder and both sphere caps
   private func rayCapsuleIntersection(
     rayStart: vec3,
-    rayDir: vec3,
-    capsuleBottom: vec3,
-    capsuleTop: vec3,
+    rayEnd: vec3,
+    capsuleCenter: vec3,
+    capsuleHalfHeight: Float,
     capsuleRadius: Float
   ) -> vec3? {
-    // Vector from bottom to top of capsule
-    let capsuleAxis = capsuleTop - capsuleBottom
-    let capsuleLength = length(capsuleAxis)
-    guard capsuleLength > 0.0001 else { return nil }
+    let rayDir = normalize(rayEnd - rayStart)
+    let rayLength = length(rayEnd - rayStart)
 
+    // Capsule axis is vertical (Y axis)
+    let capsuleBottom = vec3(capsuleCenter.x, capsuleCenter.y - capsuleHalfHeight, capsuleCenter.z)
+    let capsuleTop = vec3(capsuleCenter.x, capsuleCenter.y + capsuleHalfHeight, capsuleCenter.z)
+    let capsuleAxis = capsuleTop - capsuleBottom
     let capsuleDir = normalize(capsuleAxis)
 
-    // Vector from ray start to capsule bottom
-    let toCapsule = capsuleBottom - rayStart
+    // Calculate closest points between ray and capsule axis
+    // Using the standard line-line distance formula
+    let w = rayStart - capsuleBottom
+    let a = dot(rayDir, rayDir)  // Should be 1.0 since rayDir is normalized
+    let b = dot(rayDir, capsuleDir)
+    let c = dot(capsuleDir, capsuleDir)  // Should be 1.0
+    let d = dot(w, rayDir)
+    let e = dot(w, capsuleDir)
 
-    // Project ray direction onto capsule axis
-    let rayDotAxis = dot(rayDir, capsuleDir)
-    let toCapsuleDotAxis = dot(toCapsule, capsuleDir)
-
-    // Handle case where ray is perpendicular to capsule axis (rayDotAxis ≈ 0)
-    guard abs(rayDotAxis) > 0.0001 else {
-      // Ray is perpendicular to capsule axis - find closest point on capsule axis to ray start
-      let distAlongAxis = dot(toCapsule, capsuleDir)
-      let clampedDist = max(0, min(capsuleLength, distAlongAxis))
-      let capsulePoint = capsuleBottom + capsuleDir * clampedDist
-      let distToAxis = length(rayStart - capsulePoint)
+    let denom = a * c - b * b
+    guard abs(denom) > 0.0001 else {
+      // Ray is parallel to capsule axis - check distance to axis
+      let distToAxis = length(w - capsuleDir * dot(w, capsuleDir))
       if distToAxis <= capsuleRadius {
-        return capsulePoint
+        // Check if within capsule height bounds
+        let yDist = dot(w, capsuleDir)
+        if yDist >= -capsuleHalfHeight && yDist <= capsuleHalfHeight {
+          return rayStart  // Intersection at ray start
+        }
       }
       return nil
     }
 
-    // Closest point on ray to capsule axis
-    let t = toCapsuleDotAxis / rayDotAxis
-    guard t > 0 else { return nil }  // Ray is behind us
+    // Calculate parameters for closest points
+    let t = (b * e - c * d) / denom
+    let s = (a * e - b * d) / denom
 
-    let closestPointOnRay = rayStart + rayDir * t
+    // Clamp s to capsule bounds
+    let sClamped = max(-capsuleHalfHeight, min(capsuleHalfHeight, s))
 
-    // Closest point on capsule axis to the ray point
-    let distAlongAxis = dot(closestPointOnRay - capsuleBottom, capsuleDir)
-    let clampedDist = max(0, min(capsuleLength, distAlongAxis))
-    let capsulePoint = capsuleBottom + capsuleDir * clampedDist
+    // Closest point on capsule axis
+    let capsulePoint = capsuleBottom + capsuleDir * (sClamped + capsuleHalfHeight)
 
-    // Distance from ray to capsule axis
-    let distToAxis = length(closestPointOnRay - capsulePoint)
+    // Closest point on ray
+    let rayPoint = rayStart + rayDir * t
 
-    if distToAxis <= capsuleRadius {
-      // Ray intersects capsule
-      return closestPointOnRay
+    // Distance between closest points
+    let dist = length(rayPoint - capsulePoint)
+
+    // Check if ray intersects capsule
+    if dist <= capsuleRadius && t >= 0 && t <= rayLength {
+      // Return the intersection point on the ray
+      return rayPoint
+    }
+
+    // Also check sphere caps (top and bottom)
+    // Check bottom sphere
+    let bottomSphereCenter = capsuleBottom
+    if let bottomHit = raySphereIntersection(
+      rayStart: rayStart,
+      rayDir: rayDir,
+      rayLength: rayLength,
+      sphereCenter: bottomSphereCenter,
+      sphereRadius: capsuleRadius
+    ) {
+      return bottomHit
+    }
+
+    // Check top sphere
+    let topSphereCenter = capsuleTop
+    if let topHit = raySphereIntersection(
+      rayStart: rayStart,
+      rayDir: rayDir,
+      rayLength: rayLength,
+      sphereCenter: topSphereCenter,
+      sphereRadius: capsuleRadius
+    ) {
+      return topHit
+    }
+
+    return nil
+  }
+
+  // Helper for ray-sphere intersection (for capsule end caps)
+  private func raySphereIntersection(
+    rayStart: vec3,
+    rayDir: vec3,
+    rayLength: Float,
+    sphereCenter: vec3,
+    sphereRadius: Float
+  ) -> vec3? {
+    let toSphere = sphereCenter - rayStart
+    let projectionLength = dot(toSphere, rayDir)
+
+    // Ray doesn't point toward sphere
+    guard projectionLength >= 0 && projectionLength <= rayLength else { return nil }
+
+    let closestPoint = rayStart + rayDir * projectionLength
+    let distToCenter = length(closestPoint - sphereCenter)
+
+    if distToCenter <= sphereRadius {
+      // Calculate actual intersection point (closest point on ray to sphere surface)
+      // Use the point where the ray enters the sphere
+      let halfChord = sqrt(sphereRadius * sphereRadius - distToCenter * distToCenter)
+      let t = max(0, projectionLength - halfChord)
+      if t <= rayLength {
+        return rayStart + rayDir * t
+      }
     }
 
     return nil
@@ -578,5 +655,224 @@ public final class WeaponSystem {
   /// Get the currently loaded ammo type for a weapon slot
   public func getLoadedAmmoType(for slotIndex: Int) -> Item? {
     return loadedAmmoTypes[slotIndex]
+  }
+
+  // MARK: - Projectiles
+
+  /// Projectile class for grenades and other launched projectiles
+  private class Projectile {
+    let bodyID: BodyID
+    var lifetime: Float
+    let explosionRadius: Float
+    let explosionDamage: Float
+    weak var physicsWorld: PhysicsWorld?
+    weak var enemySystem: EnemySystem?
+
+    init(
+      bodyID: BodyID,
+      lifetime: Float,
+      explosionRadius: Float,
+      explosionDamage: Float,
+      physicsWorld: PhysicsWorld?,
+      enemySystem: EnemySystem?
+    ) {
+      self.bodyID = bodyID
+      self.lifetime = lifetime
+      self.explosionRadius = explosionRadius
+      self.explosionDamage = explosionDamage
+      self.physicsWorld = physicsWorld
+      self.enemySystem = enemySystem
+    }
+
+    func update(deltaTime: Float) -> Bool {
+      // Decrease lifetime
+      lifetime -= deltaTime
+      return lifetime > 0
+    }
+
+    @MainActor
+    func explode() {
+      guard let physicsWorld = physicsWorld,
+        let enemySystem = enemySystem
+      else { return }
+
+      // Get explosion position from physics body
+      let bodyInterface = physicsWorld.bodyInterface()
+      let position = bodyInterface.getCenterOfMassPosition(bodyID)
+      let explosionPos = vec3(position.x, position.y, position.z)
+
+      // Play explosion sound
+      UISound.grenadeHit()
+
+      // Deal damage to enemies in radius
+      for enemy in enemySystem.aliveEnemies {
+        guard let characterController = enemy.characterController else { continue }
+
+        let enemyPos = characterController.position
+        let enemyPosition = vec3(enemyPos.x, enemyPos.y, enemyPos.z)
+
+        let distance = length(enemyPosition - explosionPos)
+        if distance <= explosionRadius {
+          // Deal damage (could scale by distance if desired)
+          enemy.takeDamage(explosionDamage)
+          let enemyHealth = enemy.health
+          let enemyMaxHealth = enemy.maxHealth
+          logger.debug(
+            "💥 Explosion hit enemy \(enemy.id.uuidString.prefix(4)) for \(explosionDamage) damage (distance: \(distance), HP: \(enemyHealth)/\(enemyMaxHealth))"
+          )
+        }
+      }
+
+      // Remove physics body
+      bodyInterface.removeAndDestroyBody(bodyID)
+    }
+  }
+
+  /// Launch a projectile (grenade) from the weapon
+  private func launchProjectile() {
+    guard let physicsWorld = physicsWorld,
+      let playerController = playerController
+    else { return }
+
+    // Get weapon position and direction (same as hitscan)
+    let playerPosition = playerController.position
+    let playerRotation = playerController.rotation
+
+    // Calculate forward direction from player rotation
+    let forwardX = sin(playerRotation)
+    let forwardZ = cos(playerRotation)
+    let forward = vec3(forwardX, 0, forwardZ)
+    let normalizedForward = normalize(forward)
+
+    // Weapon height offset (chest level)
+    let weaponHeightOffset: Float = 0.3
+    let weaponPosition = vec3(playerPosition.x, playerPosition.y + weaponHeightOffset, playerPosition.z)
+
+    // Create projectile physics body
+    let projectileRadius: Float = 0.05  // Small grenade
+    let sphereShape = SphereShape(radius: projectileRadius)
+
+    // Initial velocity: forward + slight upward arc
+    let launchSpeed: Float = 15.0  // m/s
+    let upwardBias: Float = 0.15  // Slight arc
+    let initialVelocityVec3 = normalizedForward * launchSpeed + vec3(0, upwardBias * launchSpeed, 0)
+    let initialVelocity = Vec3(x: initialVelocityVec3.x, y: initialVelocityVec3.y, z: initialVelocityVec3.z)
+
+    // Create body settings
+    let bodySettings = BodyCreationSettings(
+      shape: sphereShape,
+      position: RVec3(x: weaponPosition.x, y: weaponPosition.y, z: weaponPosition.z),
+      rotation: Quat.identity,
+      motionType: .dynamic,
+      objectLayer: 0  // Use collision layer
+    )
+
+    // Set initial velocity (need to set after creation)
+    let bodyInterface = physicsWorld.bodyInterface()
+    let bodyID = bodyInterface.createAndAddBody(settings: bodySettings, activation: .activate)
+    if bodyID != 0 {
+      bodyInterface.setLinearVelocity(bodyID, initialVelocity)
+
+      // Create projectile instance
+      let projectile = Projectile(
+        bodyID: bodyID,
+        lifetime: 5.0,  // 5 second max lifetime
+        explosionRadius: 3.0,  // 3 meter explosion radius
+        explosionDamage: 100.0,  // High damage for grenades
+        physicsWorld: physicsWorld,
+        enemySystem: enemySystem
+      )
+      activeProjectiles.append(projectile)
+
+      logger.debug("🚀 Launched projectile at \(weaponPosition) with velocity \(initialVelocity)")
+    }
+  }
+
+  /// Update all active projectiles
+  private func updateProjectiles(deltaTime: Float) {
+    guard let physicsWorld = physicsWorld else { return }
+
+    let bodyInterface = physicsWorld.bodyInterface()
+    let physicsSystem = physicsWorld.getPhysicsSystem()
+    var projectilesToRemove: [Int] = []
+
+    for (index, projectile) in activeProjectiles.enumerated() {
+      // Check if projectile should be removed (lifetime expired)
+      guard projectile.update(deltaTime: deltaTime) else {
+        // Lifetime expired - explode
+        projectile.explode()
+        projectilesToRemove.append(index)
+        continue
+      }
+
+      // Check if body is no longer in broad phase (removed somehow)
+      guard bodyInterface.isInBroadPhase(projectile.bodyID) else {
+        projectilesToRemove.append(index)
+        continue
+      }
+
+      // Check if projectile hit something using collision detection
+      let position = bodyInterface.getCenterOfMassPosition(projectile.bodyID)
+
+      // Use a small sphere to check for collisions with static geometry
+      let checkRadius: Float = 0.1
+      let checkShape = SphereShape(radius: checkRadius)
+      var baseOffset = RVec3(x: 0, y: 0, z: 0)
+      let checkTransform = RMat44(
+        1, 0, 0, position.x,
+        0, 1, 0, position.y,
+        0, 0, 1, position.z,
+        0, 0, 0, 1
+      )
+
+      // Check for collisions with static bodies (layer 0)
+      let collisions = physicsSystem.collideShapeAll(
+        shape: checkShape,
+        scale: Vec3(x: 1, y: 1, z: 1),
+        centerOfMassTransform: checkTransform.cValue,
+        baseOffset: &baseOffset
+      )
+
+      // If we hit something (and it's not ourselves), explode
+      var hitSomething = false
+      for collision in collisions {
+        // Check if the collision is with a static body (not the projectile itself)
+        // The projectile is dynamic, so if we collide with something else, we hit it
+        if collision.bodyID2 != projectile.bodyID {
+          hitSomething = true
+          break
+        }
+      }
+
+      // Also check if velocity dropped significantly (hit something and stopped)
+      let velocity = bodyInterface.getLinearVelocity(projectile.bodyID)
+      // Calculate speed manually for Jolt's Vec3
+      let speed = sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z)
+      if speed < 0.5 {
+        hitSomething = true
+      }
+
+      if hitSomething {
+        projectile.explode()
+        projectilesToRemove.append(index)
+        continue
+      }
+    }
+
+    // Remove exploded/expired projectiles (in reverse order to maintain indices)
+    for index in projectilesToRemove.reversed() {
+      activeProjectiles.remove(at: index)
+    }
+  }
+
+  /// Get active projectiles for rendering (returns positions)
+  public func getActiveProjectilePositions() -> [vec3] {
+    guard let physicsWorld = physicsWorld else { return [] }
+
+    let bodyInterface = physicsWorld.bodyInterface()
+    return activeProjectiles.map { projectile in
+      let position = bodyInterface.getCenterOfMassPosition(projectile.bodyID)
+      return vec3(position.x, position.y, position.z)
+    }
   }
 }

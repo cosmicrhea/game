@@ -31,4 +31,20 @@ extension InputSource {
     if name.hasPrefix("xbox") { return .xbox }
     return nil
   }
+
+  /// Updates InputSource.player1 based on gamepad name.
+  /// Detects Xbox or PlayStation controllers, defaults to PlayStation for unknown gamepads.
+  /// - Parameter gamepad: The gamepad to detect the type from.
+  @MainActor
+  public static func updateFromGamepad(_ gamepad: Gamepad) {
+    if let name = gamepad.gamepadName?.lowercased() {
+      if name.contains("xbox") || name.contains("xinput") {
+        InputSource.player1 = .xbox
+      } else {
+        InputSource.player1 = .playstation
+      }
+    } else {
+      InputSource.player1 = .playstation
+    }
+  }
 }

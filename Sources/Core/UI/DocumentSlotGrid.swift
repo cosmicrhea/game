@@ -250,6 +250,86 @@ public final class DocumentSlotGrid {
     return false
   }
 
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
+  private var navigationState = GamepadNavigationState()
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad input for grid navigation
+  public func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) -> Bool {
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for navigation changes (using 0.2 deadzone and no Y inversion to match original behavior)
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.2, trackButtons: false, invertY: false)
+
+    // Handle navigation with cooldown
+    if cooldownReady {
+      // D-pad navigation (digital input)
+      if navChanges.up {
+        InputSource.updateFromGamepad(gamepad)
+        _ = moveSelection(direction: .down)  // D-pad up moves down (same as W/Up key)
+        navigationCooldown.reset()
+      } else if navChanges.down {
+        InputSource.updateFromGamepad(gamepad)
+        _ = moveSelection(direction: .up)  // D-pad down moves up (same as S/Down key)
+        navigationCooldown.reset()
+      } else if navChanges.left {
+        InputSource.updateFromGamepad(gamepad)
+        _ = moveSelection(direction: .left)
+        navigationCooldown.reset()
+      } else if navChanges.right {
+        InputSource.updateFromGamepad(gamepad)
+        _ = moveSelection(direction: .right)
+        navigationCooldown.reset()
+      }
+      // Left stick navigation (analog input) - custom logic for primary direction
+      else {
+        let leftStickX = gamepad.state(of: .leftX)
+        let leftStickY = gamepad.state(of: .leftY)
+        let deadzone: Float = 0.2
+
+        if abs(leftStickX) > deadzone || abs(leftStickY) > deadzone {
+          InputSource.updateFromGamepad(gamepad)
+          // Determine primary direction (whichever axis has more input)
+          if abs(leftStickX) > abs(leftStickY) {
+            if leftStickX > deadzone {
+              _ = moveSelection(direction: .right)
+            } else if leftStickX < -deadzone {
+              _ = moveSelection(direction: .left)
+            }
+          } else {
+            if leftStickY > deadzone {
+              _ = moveSelection(direction: .up)  // Positive Y is up (moves up in grid)
+            } else if leftStickY < -deadzone {
+              _ = moveSelection(direction: .down)  // Negative Y is down (moves down in grid)
+            }
+          }
+          navigationCooldown.reset()
+        }
+      }
+    }
+
+    // Handle button presses (not holds)
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.a])
+    if newlyPressed.contains(.a) {
+      // Update input source when gamepad is used
+      InputSource.updateFromGamepad(gamepad)
+
+      // A button = Select document (F/Space/Enter equivalent)
+      let document = slotData.indices.contains(selectedIndex) ? slotData[selectedIndex]?.document : nil
+      onDocumentSelected?(document)
+      return true
+    }
+
+    // Return true if any input was detected
+    let leftStickX = gamepad.state(of: .leftX)
+    let leftStickY = gamepad.state(of: .leftY)
+    let deadzone: Float = 0.2
+    return navChanges.hasAnyDirection || abs(leftStickX) > deadzone || abs(leftStickY) > deadzone
+      || !newlyPressed.isEmpty
+  }
+
   // MARK: - Rendering
 
   /// Draw the slot grid

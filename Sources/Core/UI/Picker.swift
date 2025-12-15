@@ -51,7 +51,9 @@ public final class Picker: OptionsControl {
   }
 
   /// Initialize with a simple array of options
-  public init(frame: Rect = .zero, options: [LocalizedStringResource], selectedIndex: Int = 0, selectedOption: String? = nil) {
+  public init(
+    frame: Rect = .zero, options: [LocalizedStringResource], selectedIndex: Int = 0, selectedOption: String? = nil
+  ) {
     self.frame = frame
     self.options = options.map { $0.key }
     self.valueBinding = nil
@@ -211,6 +213,26 @@ public final class Picker: OptionsControl {
 
   public func handleMouseMove(at position: Point) {}
   public func handleMouseUp() {}
+
+  /// Handle gamepad input for picker navigation
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) {
+    guard isFocused else { return }
+
+    var navigationState = GamepadNavigationState()
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: false, invertY: false)
+
+    if navChanges.left {
+      if selectedIndex > 0 {
+        selectedIndex -= 1
+        UISound.navigate()
+      }
+    } else if navChanges.right {
+      if selectedIndex < max(0, options.count - 1) {
+        selectedIndex += 1
+        UISound.navigate()
+      }
+    }
+  }
 
   private func clampIndex(_ i: Int) -> Int { max(0, min(i, max(0, options.count - 1))) }
 }

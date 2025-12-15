@@ -80,6 +80,27 @@ final class OptionsScreen: Screen {
 
   override func update(deltaTime: Float) {
     listMenu.update(deltaTime: deltaTime)
+    // Handle gamepad navigation
+    if let gamepad = Gamepad.allGamepads.first {
+      if let activePanel {
+        // Forward gamepad input to active panel
+        activePanel.handleGamepadInput(gamepad, deltaTime: deltaTime)
+        // Also handle button presses for closing panels
+        handleGamepadButtonPresses(gamepad)
+      } else {
+        // Forward to list menu when no panel is active
+        listMenu.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      }
+    }
+  }
+
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  private func handleGamepadButtonPresses(_ gamepad: Gamepad) {
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.b, .back])
+    if !newlyPressed.isEmpty {
+      handleGamepadButton(newlyPressed.first!, gamepad: gamepad)
+    }
   }
 
   override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -99,6 +120,18 @@ final class OptionsScreen: Screen {
 
     default:
       listMenu.handleKeyPressed(key)
+    }
+  }
+
+  /// Handle gamepad button presses for OptionsScreen
+  func handleGamepadButton(_ button: Gamepad.Button, gamepad: Gamepad) {
+    if activePanel != nil {
+      // B button = Close panel (Escape equivalent)
+      if button == .b || button == .back {
+        InputSource.updateFromGamepad(gamepad)
+        UISound.select()
+        currentPanel = nil
+      }
     }
   }
 

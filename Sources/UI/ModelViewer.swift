@@ -130,6 +130,40 @@ final class ModelViewer: RenderLoop {
     }
   }
 
+  // MARK: - Gamepad Button Handling
+  /// Handle gamepad button presses for ModelViewer
+  func handleGamepadButton(_ button: Gamepad.Button, gamepad: Gamepad) {
+    InputSource.updateFromGamepad(gamepad)
+
+    switch button {
+    case .b:
+      // B button = Close (right-click equivalent)
+      // Note: ModelViewer doesn't have a close callback, this might be handled by parent
+      break
+    case .x:
+      // X button = Reset camera (R key equivalent)
+      camera.resetToInitialPosition()
+      UISound.select()
+    case .dpadUp:
+      // D-pad up = Previous animation (Up key equivalent)
+      previousAnimation()
+    case .dpadDown:
+      // D-pad down = Next animation (Down key equivalent)
+      nextAnimation()
+    case .y:
+      // Y button = Toggle animation (Space key equivalent)
+      toggleAnimation()
+    case .leftBumper:
+      // Left bumper = Previous model (Q key equivalent)
+      previousModel()
+    case .rightBumper:
+      // Right bumper = Next model (E key equivalent)
+      nextModel()
+    default:
+      break
+    }
+  }
+
   private func nextModel() {
     currentModelIndex = (currentModelIndex + 1) % modelPaths.count
     UISound.select()
@@ -186,6 +220,12 @@ final class ModelViewer: RenderLoop {
   func update(window: Window, deltaTime: Float) {
     camera.update(deltaTime: deltaTime)
     camera.processKeyboardState(window.keyboard, deltaTime)
+
+    // Handle gamepad input for camera rotation and zoom
+    if let gamepad = Gamepad.allGamepads.first {
+      camera.processGamepadState(gamepad, deltaTime)
+    }
+
     nodeAnimator.update(deltaTime: deltaTime)
 
     // Debug: Print animation status every 2 seconds

@@ -73,14 +73,46 @@ final class InventoryView: RenderLoop {
     if isShowingItem {
       // Forward update to ItemView
       currentItemView?.update(window: window, deltaTime: deltaTime)
+
+      // Handle gamepad input for ItemView
+      if let gamepad = Gamepad.allGamepads.first {
+        handleGamepadButtonPresses(gamepad)
+      }
     } else {
       recenterGrid()
 
       // Update slot grid (includes menu animations)
       slotGrid.update(deltaTime: deltaTime)
 
+      // Handle gamepad input for slot grid
+      if let gamepad = Gamepad.allGamepads.first {
+        slotGrid.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      }
+
       // Update item description based on current selection
       updateItemDescription()
+    }
+  }
+
+  // MARK: - Gamepad Button Handling
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad button presses for InventoryView
+  private func handleGamepadButtonPresses(_ gamepad: Gamepad) {
+    guard isShowingItem else { return }
+
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.b, .x])
+
+    if newlyPressed.contains(.b) {
+      // B button = Close ItemView
+      InputSource.updateFromGamepad(gamepad)
+      UISound.cancel()
+      hideItem()
+    }
+
+    // Forward X button to ItemView
+    if newlyPressed.contains(.x) {
+      currentItemView?.handleGamepadButton(.x, gamepad: gamepad)
     }
   }
 

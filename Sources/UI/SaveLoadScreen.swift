@@ -56,6 +56,11 @@ class SaveListScreen: Screen {
 
   override func update(deltaTime: Float) {
     saveList.update(deltaTime: deltaTime)
+
+    // Handle gamepad input for save list
+    if let gamepad = Gamepad.allGamepads.first {
+      _ = saveList.handleGamepadInput(gamepad, deltaTime: deltaTime)
+    }
   }
 
   override func draw() {

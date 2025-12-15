@@ -112,6 +112,40 @@ public class ListMenu {
     }
   }
 
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
+  private var navigationState = GamepadNavigationState()
+
+  /// Handle gamepad input for navigation
+  @discardableResult
+  public func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) -> Bool {
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for navigation changes
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: true)
+
+    // Handle navigation (only if cooldown expired)
+    if cooldownReady {
+      if navChanges.up {
+        cycleSelection(direction: -1)
+        navigationCooldown.reset()
+      } else if navChanges.down {
+        cycleSelection(direction: +1)
+        navigationCooldown.reset()
+      }
+    }
+
+    // Handle selection (A button press, not hold)
+    if navChanges.buttonA {
+      // Update input source when gamepad is used
+      InputSource.updateFromGamepad(gamepad)
+      handleMenuSelection()
+    }
+
+    return navChanges.hasAnyDirection || navChanges.buttonA
+  }
+
   /// Handle mouse click
   @discardableResult
   public func handleMouseClick(at mousePosition: Point) -> Bool {

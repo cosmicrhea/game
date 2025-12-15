@@ -64,7 +64,11 @@ class Nexus: Script {
     //  say("It's locked.")
   }
 
-  func door7() { UISound.lockedA(); say("It's locked.") }
+  func door7() async {
+    if await confirm("Go to the pharma lobby?", "Go through", "Stay here") {
+      await goTo(scene: .receptionArea)
+    }
+  }
 
   func door8() { goTo(scene: "chiefs_office") }
 

@@ -10,7 +10,8 @@ let DESIGN_RESOLUTION = Size(1280, 800)
 //let DESIGN_RESOLUTION = Size(1920, 1200)
 //let DESIGN_RESOLUTION = Size(1800, 1126)
 
-let WINDOW_SIZE = Size(1920, 1200)
+let WINDOW_SIZE = DESIGN_RESOLUTION
+//let WINDOW_SIZE = Size(1920, 1200)
 
 let VIEWPORT_SCALING = false
 
@@ -331,6 +332,12 @@ public final class Engine {
       if config.editorEnabled && self.editorWindow.isFocused {
         return
       }
+
+      // Update input source to keyboard when keyboard is used
+      if state == .pressed || state == .repeated {
+        InputSource.player1 = .keyboardMouse
+      }
+
       self.activeLoop.onKey(window: window, key: key, scancode: Int32(scancode), state: state, mods: mods)
       // Call onKeyPressed for both pressed and repeated events (menus need repeats for fast navigation)
       // Set isKeyRepeat flag so handlers can choose to ignore repeats if needed
@@ -357,6 +364,10 @@ public final class Engine {
     window.cursorPositionHandler = { [weak self] window, x, y in
       guard let self else { return }
       guard window.isFocused else { return }
+
+      // Update input source to keyboard/mouse when mouse is moved
+      InputSource.player1 = .keyboardMouse
+
       GLScreenEffect.mousePosition = (Float(x), Float(y))
       self.activeLoop.onMouseMove(window: window, x: x, y: y)
     }
@@ -368,6 +379,12 @@ public final class Engine {
 
     window.mouseButtonHandler = { [weak self] window, button, state, mods in
       guard let self else { return }
+
+      // Update input source to keyboard/mouse when mouse button is pressed
+      if state == .pressed {
+        InputSource.player1 = .keyboardMouse
+      }
+
       self.activeLoop.onMouseButton(window: window, button: button, state: state, mods: mods)
       if state == .pressed {
         self.activeLoop.onMouseButtonPressed(window: window, button: button, mods: mods)
@@ -614,6 +631,26 @@ public final class Engine {
     let currentFrame = Float(GLFWSession.currentTime)
     deltaTime = currentFrame - lastFrame
     lastFrame = currentFrame
+
+    // Check for gamepad input activity and update InputSource accordingly
+    // This runs every frame to detect gamepad usage (gamepad is polled, not event-based)
+    if let gamepad = Gamepad.allGamepads.first {
+      let deadzone: Float = 0.1
+      let hasGamepadInput =
+        gamepad.state(of: .dpadUp) == .pressed || gamepad.state(of: .dpadDown) == .pressed
+        || gamepad.state(of: .dpadLeft) == .pressed || gamepad.state(of: .dpadRight) == .pressed
+        || abs(gamepad.state(of: .leftX)) > deadzone || abs(gamepad.state(of: .leftY)) > deadzone
+        || abs(gamepad.state(of: .rightX)) > deadzone || abs(gamepad.state(of: .rightY)) > deadzone
+        || gamepad.state(of: .a) == .pressed || gamepad.state(of: .b) == .pressed
+        || gamepad.state(of: .x) == .pressed || gamepad.state(of: .y) == .pressed
+        || gamepad.state(of: .leftTrigger) > 0.1 || gamepad.state(of: .rightTrigger) > 0.1
+        || gamepad.state(of: .leftBumper) == .pressed || gamepad.state(of: .rightBumper) == .pressed
+        || gamepad.state(of: .start) == .pressed || gamepad.state(of: .back) == .pressed
+
+      if hasGamepadInput {
+        InputSource.updateFromGamepad(gamepad)
+      }
+    }
 
     activeLoop.update(window: window, deltaTime: deltaTime)
 

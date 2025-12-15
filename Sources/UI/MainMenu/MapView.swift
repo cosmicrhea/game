@@ -144,6 +144,7 @@ class MapView: RenderLoop {
     //"radar_office",
     "chiefs_office",
     "tunnels",
+    "reception_area",
   ]
 
   private var currentMapIndex: Int = 1  // Start with shooting_range
@@ -153,6 +154,7 @@ class MapView: RenderLoop {
     "test_map": "Map Test",
     "shooting_range": "Training Facility",
     "chiefs_office": "Chief's Office",
+    "reception_area": "Pharma Building",
   ]
 
   // Override area display names for specific scenes
@@ -929,11 +931,12 @@ class MapView: RenderLoop {
   func update(deltaTime: Float) {
     // Update animation time for pulsation
     animationTime += deltaTime
-    // Process keyboard input for pan/zoom
+    // Process keyboard and gamepad input for pan/zoom
     guard let window = Engine.shared.window else { return }
     let keyboard = window.keyboard
+    let gamepad = Gamepad.allGamepads.first
 
-    // Check for speed modifiers
+    // Check for speed modifiers (keyboard)
     let isShiftPressed = keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed
     let isAltPressed = keyboard.state(of: .leftAlt) == .pressed || keyboard.state(of: .rightAlt) == .pressed
 
@@ -947,18 +950,45 @@ class MapView: RenderLoop {
 
     let panSpeed: Float = 5.0 * deltaTime / cameraZoom * speedMultiplier  // Pan faster when zoomed in
 
+    // Check which input is active for panning
+    var panX: Float = 0.0
+    var panY: Float = 0.0
+    var inputActive = false
+
+    // Keyboard panning
     if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
-      cameraPan.y -= panSpeed  // Flipped: up moves down
+      panY -= panSpeed  // Flipped: up moves down
+      inputActive = true
     }
     if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
-      cameraPan.y += panSpeed  // Flipped: down moves up
+      panY += panSpeed  // Flipped: down moves up
+      inputActive = true
     }
     if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
-      cameraPan.x -= panSpeed  // Flipped: left moves right
+      panX -= panSpeed  // Flipped: left moves right
+      inputActive = true
     }
     if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
-      cameraPan.x += panSpeed  // Flipped: right moves left
+      panX += panSpeed  // Flipped: right moves left
+      inputActive = true
     }
+
+    // Gamepad panning (left stick) - only if keyboard didn't provide input
+    if !inputActive, let gamepad {
+      let deadzone: Float = 0.2
+      let leftStickX = gamepad.state(of: .leftX)
+      let leftStickY = -gamepad.state(of: .leftY)  // Invert Y axis
+
+      if abs(leftStickX) > deadzone || abs(leftStickY) > deadzone {
+        panX += leftStickX * panSpeed
+        panY += leftStickY * panSpeed
+        inputActive = true
+        InputSource.updateFromGamepad(gamepad)
+      }
+    }
+
+    cameraPan.x += panX
+    cameraPan.y += panY
 
     // Handle reset animation
     if isResetting {
@@ -980,25 +1010,35 @@ class MapView: RenderLoop {
     }
 
     let zoomSpeed: Float = 1.5 * deltaTime * speedMultiplier
-    if keyboard.state(of: .num1) == .pressed {
-      cameraZoom *= (1.0 + zoomSpeed)
-      cameraZoom = min(cameraZoom, 10.0)  // Max zoom
+    var zoomInput: Float = 0.0
+
+    // Keyboard zoom
+    if keyboard.state(of: .num1) == .pressed || keyboard.state(of: .equal) == .pressed {
+      zoomInput = zoomSpeed
+    } else if keyboard.state(of: .num3) == .pressed || keyboard.state(of: .minus) == .pressed {
+      zoomInput = -zoomSpeed
     }
-    if keyboard.state(of: .num3) == .pressed {
-      cameraZoom *= (1.0 - zoomSpeed)
-      cameraZoom = max(cameraZoom, 0.1)  // Min zoom
+
+    // Gamepad zoom (right stick vertical) - only if keyboard didn't provide input
+    if zoomInput == 0.0, let gamepad {
+      let deadzone: Float = 0.2
+      let rightStickY = -gamepad.state(of: .rightY)  // Invert Y axis
+      if abs(rightStickY) > deadzone {
+        zoomInput = rightStickY * zoomSpeed * 2.0  // Scale up for gamepad
+        InputSource.updateFromGamepad(gamepad)
+      }
     }
-    if keyboard.state(of: .equal) == .pressed {
-      cameraZoom *= (1.0 + zoomSpeed)
-      cameraZoom = min(cameraZoom, 10.0)  // Max zoom
-    }
-    if keyboard.state(of: .minus) == .pressed {
-      cameraZoom *= (1.0 - zoomSpeed)
-      cameraZoom = max(cameraZoom, 0.1)  // Min zoom
+
+    if zoomInput != 0.0 {
+      cameraZoom *= (1.0 + zoomInput)
+      cameraZoom = max(0.1, min(cameraZoom, 10.0))  // Clamp zoom
     }
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
+    // Update input source to keyboard when keyboard is used
+    InputSource.player1 = .keyboardMouse
+
     switch key {
     case .r:
       // Start reset animation
@@ -1022,6 +1062,71 @@ class MapView: RenderLoop {
     default:
       break
     }
+  }
+
+  // Track previous gamepad button states for MapView
+  private var previousMapGamepadButtonStates: Set<Gamepad.Button> = []
+  private var previousMapGamepadDpadState: (left: Bool, right: Bool) = (false, false)
+  private var mapGamepadNavigationCooldown: Float = 0.0
+  private let mapGamepadNavigationCooldownDuration: Float = 0.2  // 200ms cooldown between navigation inputs
+
+  /// Handle gamepad input for map view (called from MainMenu.update)
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) {
+    // Update cooldown
+    mapGamepadNavigationCooldown = max(0, mapGamepadNavigationCooldown - deltaTime)
+
+    // Check for D-pad left/right for map cycling
+    let dpadLeft = gamepad.state(of: .dpadLeft) == .pressed
+    let dpadRight = gamepad.state(of: .dpadRight) == .pressed
+
+    // Handle map cycling with D-pad (only if cooldown expired)
+    if mapGamepadNavigationCooldown <= 0 {
+      if dpadLeft && !previousMapGamepadDpadState.left {
+        InputSource.updateFromGamepad(gamepad)
+        cycleMap(-1)
+        mapGamepadNavigationCooldown = mapGamepadNavigationCooldownDuration
+      } else if dpadRight && !previousMapGamepadDpadState.right {
+        InputSource.updateFromGamepad(gamepad)
+        cycleMap(1)
+        mapGamepadNavigationCooldown = mapGamepadNavigationCooldownDuration
+      }
+    }
+
+    // Update previous D-pad state
+    previousMapGamepadDpadState = (left: dpadLeft, right: dpadRight)
+
+    // Check for button presses
+    let buttonsToCheck: [Gamepad.Button] = [.x, .b]
+    var currentPressedButtons: Set<Gamepad.Button> = []
+
+    for button in buttonsToCheck {
+      let state = gamepad.state(of: button)
+      if state == .pressed {
+        currentPressedButtons.insert(button)
+        // Only trigger if this button wasn't pressed last frame (new press)
+        if !previousMapGamepadButtonStates.contains(button) {
+          // Update input source when gamepad button is pressed
+          InputSource.updateFromGamepad(gamepad)
+
+          switch button {
+          case .x:
+            // X button = Reset (R key equivalent)
+            guard !isResetting else { break }
+            resetStartPan = cameraPan
+            resetStartZoom = cameraZoom
+            resetStartTime = 0.0
+            isResetting = true
+          case .b:
+            // B button = Close (handled by MainMenu)
+            break
+          default:
+            break
+          }
+        }
+      }
+    }
+
+    previousMapGamepadButtonStates = currentPressedButtons
   }
 
   private func cycleAreaVisibility(forward: Bool) {

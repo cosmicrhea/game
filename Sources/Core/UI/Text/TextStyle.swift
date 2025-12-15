@@ -27,7 +27,7 @@ extension TextStyle {
 
   static let inputPrompt = TextStyle(
     fontName: "CreatoDisplay-Bold",
-    fontSize: 28,
+    fontSize: 27,
     color: .white.withAlphaComponent(0.95)
   )
 

@@ -138,6 +138,15 @@ private let startingEntry = "1"
   // Scene script instance
   private var sceneScript: Script?
 
+  // Gamepad support
+  private var activeGamepad: Gamepad? {
+    Gamepad.allGamepads.first
+  }
+  // Track previous gamepad button states to detect presses (not holds)
+  private var buttonPressDetector = GamepadButtonPressDetector()
+  // Track which input source was used last (for prompt switching)
+  private var lastInputSource: InputSource = .keyboardMouse
+
   // Room boundaries
   private let roomSize: Float = 10.0
   private var restrictMovementToRoom: Bool = false
@@ -390,6 +399,144 @@ private let startingEntry = "1"
   }
 
   // MARK: Input
+
+  /// Handle gamepad button presses (called each frame in update)
+  private func handleGamepadButtonPresses(window: Window) {
+    guard let gamepad = activeGamepad else { return }
+    guard Input.player1.isEnabled else { return }
+
+    // Check all gamepad buttons for press events
+    let buttonsToCheck: [Gamepad.Button] = [
+      .a, .b, .x, .y, .start, .back, .dpadUp, .dpadDown, .dpadLeft, .dpadRight,
+    ]
+
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: buttonsToCheck)
+
+    for button in newlyPressed {
+      // Update input source when gamepad button is pressed
+      InputSource.updateFromGamepad(gamepad)
+      handleGamepadButtonPress(button: button, window: window)
+    }
+  }
+
+  /// Handle a single gamepad button press
+  private func handleGamepadButtonPress(button: Gamepad.Button, window: Window) {
+    // Handle different UI states
+    if showingTitleScreen {
+      // Handle B button for back navigation in title screen
+      if button == .b || button == .back {
+        if titleScreenStack.handleGamepadButton(button) {
+          InputSource.updateFromGamepad(activeGamepad!)
+          UISound.cancel()
+        }
+      }
+      return
+    }
+
+    if showingPickupView {
+      // Forward gamepad input to pickup view
+      if let pickupView = pickupView, let gamepad = activeGamepad {
+        pickupView.handleGamepadButton(button, gamepad: gamepad)
+      }
+      return
+    }
+
+    if showingPauseScreen {
+      if pauseScreenStack.isFadingOut {
+        return
+      }
+      // Handle pause screen back navigation
+      if button == .b || button == .back {
+        if pauseScreenStack.isAtRoot {
+          UISound.cancel()
+          hidePauseScreen()
+        } else {
+          // Navigate back in pause screen stack (handled by NavigationStack via escape key)
+          // The NavigationStack will handle it when escape is pressed
+        }
+      }
+      return
+    }
+
+    if showingDeathScreen {
+      if deathScreenStack.isFadingOut {
+        return
+      }
+      // Handle B button for back navigation in death screen
+      if button == .b || button == .back {
+        if deathScreenStack.handleGamepadButton(button) {
+          InputSource.updateFromGamepad(activeGamepad!)
+          UISound.cancel()
+        }
+      }
+      return
+    }
+
+    if showingMainMenu {
+      // Handle main menu back navigation
+      if button == .b || button == .back {
+        if mainMenu.hasNestedViewOpen {
+          // Nested views (ItemView, DocumentView) handle their own B button presses
+          // MainMenu's handleGamepadButtonPresses will handle closing them
+          // We don't need to do anything here
+        } else {
+          // No nested view open, close the main menu
+          InputSource.updateFromGamepad(activeGamepad!)
+          UISound.cancel()
+          hideMainMenu()
+        }
+      }
+      return
+    }
+
+    // Gameplay actions
+    // Forward gamepad input to DialogView if dialog is active
+    if dialogView.isActive {
+      if let gamepad = activeGamepad {
+        dialogView.handleGamepadButton(button, gamepad: gamepad)
+      }
+      return
+    }
+
+    guard !cameraSystem.isInCloseup else { return }
+
+    // Map gamepad buttons to gameplay actions
+    switch button {
+    case .a:
+      // A button = Interact (F key equivalent)
+      if interactionSystem.detectedActionName != nil {
+        interactionSystem.handleInteraction(sceneScript: sceneScript)
+      } else if interactionSystem.detectedLedgeName != nil {
+        interactionSystem.handleLedgeInteraction()
+      }
+
+    case .x:
+      // X button = Toggle aim (Space key equivalent, for toggle mode)
+      if weaponSystem.usesToggledAiming {
+        weaponSystem.toggleAim()
+      }
+
+    case .start:
+      // Start button = Pause (Escape key equivalent)
+      UISound.select()
+      showPauseScreen()
+
+    case .y:
+      // Y button = Inventory (Tab/I key equivalent)
+      guard !cameraSystem.isInCloseup else { return }
+      UISound.select()
+      showMainMenu(tab: .inventory)
+
+    case .b:
+      // B button = Map (M key equivalent)
+      guard !cameraSystem.isInCloseup else { return }
+      UISound.select()
+      showMainMenu(tab: .map)
+
+    default:
+      break
+    }
+  }
 
   func onKey(window: Window, key: Keyboard.Key, scancode: Int32, state: ButtonState, mods: Keyboard.Modifier) {
     // Track key releases for DialogView ask mode
@@ -1346,12 +1493,50 @@ private let startingEntry = "1"
     } else if showingMainMenu {
       // Update main menu
       mainMenu.update(window: window, deltaTime: deltaTime)
-    } else {
+    }
+
+    // Handle gamepad button presses (always, regardless of UI state)
+    handleGamepadButtonPresses(window: window)
+
+    if !showingTitleScreen && !showingPickupView && !showingPauseScreen && !showingDeathScreen && !showingMainMenu {
       // Only handle movement if dialog is not active, not in closeup, and input is enabled
       if !dialogView.isActive && !cameraSystem.isInCloseup && Input.player1.isEnabled {
-        // Handle WASD movement
+        // Check which input is being used (check both simultaneously)
+        let keyboard = window.keyboard
+        let gamepad = activeGamepad
+
+        // Check for keyboard input activity
+        let keyboardActive =
+          keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
+          || keyboard.state(of: .a) == .pressed || keyboard.state(of: .d) == .pressed
+          || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
+          || keyboard.state(of: .left) == .pressed || keyboard.state(of: .right) == .pressed
+
+        // Check for gamepad input activity
+        var gamepadActive = false
+        if let gamepad {
+          let deadzone: Float = 0.2
+          let leftStickX = abs(gamepad.state(of: .leftX))
+          let leftStickY = abs(gamepad.state(of: .leftY))
+          gamepadActive =
+            gamepad.state(of: .dpadUp) == .pressed || gamepad.state(of: .dpadDown) == .pressed
+            || gamepad.state(of: .dpadLeft) == .pressed || gamepad.state(of: .dpadRight) == .pressed
+            || leftStickX > deadzone || leftStickY > deadzone
+        }
+
+        // Update input source based on which was used last
+        if keyboardActive {
+          lastInputSource = .keyboardMouse
+          InputSource.player1 = .keyboardMouse
+        } else if gamepadActive, let gamepad {
+          InputSource.updateFromGamepad(gamepad)
+          lastInputSource = InputSource.player1
+        }
+
+        // Pass both inputs to PlayerController (it will use whichever has input)
         playerController.update(
-          keyboard: window.keyboard,
+          keyboard: keyboard,
+          gamepad: gamepad,
           deltaTime: deltaTime,
           physicsWorld: physicsWorld,
           isAiming: weaponSystem.isAiming
@@ -1372,25 +1557,54 @@ private let startingEntry = "1"
           enemySystem.update(deltaTime: deltaTime)
         }
 
-        // Handle hold mode for Space
+        // Handle hold mode for Space (keyboard) or Left Trigger (gamepad)
+        // Check both, prefer keyboard if active
         if !weaponSystem.usesToggledAiming {
-          if window.keyboard.state(of: .space) == .pressed {
-            // Space is held - enter ready aim, then aim
+          let keyboardAiming = window.keyboard.state(of: .space) == .pressed
+          let gamepadAiming = activeGamepad?.state(of: .leftTrigger) ?? 0.0 > 0.5
+          let isAimingHeld = keyboardAiming || gamepadAiming
+
+          // Update input source based on which is being used
+          if keyboardAiming {
+            lastInputSource = .keyboardMouse
+            InputSource.player1 = .keyboardMouse
+          } else if gamepadAiming, let gamepad = activeGamepad {
+            InputSource.updateFromGamepad(gamepad)
+            lastInputSource = InputSource.player1
+          }
+
+          if isAimingHeld {
+            // Aim button held - enter ready aim, then aim
             if weaponSystem.currentAimState == .idle {
               weaponSystem.enterReadyAim()
             } else if weaponSystem.currentAimState == .readyAim {
               weaponSystem.enterAim()
             }
           } else {
-            // Space released - exit aim
+            // Aim button released - exit aim
             if weaponSystem.currentAimState != .idle {
               weaponSystem.exitAim()
             }
           }
         }
 
-        // Handle firing with Ctrl (hold to fire)
-        if window.keyboard.state(of: .leftControl) == .pressed || window.keyboard.state(of: .rightControl) == .pressed {
+        // Handle firing with Ctrl (keyboard) or Right Trigger (gamepad)
+        // Check both, prefer keyboard if active
+        let keyboardFiring =
+          window.keyboard.state(of: .leftControl) == .pressed || window.keyboard.state(of: .rightControl) == .pressed
+        let gamepadFiring = activeGamepad?.state(of: .rightTrigger) ?? 0.0 > 0.5
+        let isFiring = keyboardFiring || gamepadFiring
+
+        // Update input source based on which is being used
+        if keyboardFiring {
+          lastInputSource = .keyboardMouse
+          InputSource.player1 = .keyboardMouse
+        } else if gamepadFiring, let gamepad = activeGamepad {
+          InputSource.updateFromGamepad(gamepad)
+          lastInputSource = InputSource.player1
+        }
+
+        if isFiring {
           if weaponSystem.isAiming {
             _ = weaponSystem.fire()
           }
@@ -1729,6 +1943,71 @@ private let startingEntry = "1"
               }
             }
 
+            // Draw ledge sensor box query shape in orange
+            let ledgeSensorBox = playerController.getLedgeSensorBoxTransform()
+            let ledgeHalfExtents = ledgeSensorBox.halfExtents
+            let ledgePos = ledgeSensorBox.position
+            let ledgeRot = ledgeSensorBox.rotation
+
+            // Convert quaternion to rotation matrix
+            let ledgeQ = ledgeRot
+            let ledgeX2 = ledgeQ.x + ledgeQ.x
+            let ledgeY2 = ledgeQ.y + ledgeQ.y
+            let ledgeZ2 = ledgeQ.z + ledgeQ.z
+            let ledgeXX = ledgeQ.x * ledgeX2
+            let ledgeXY = ledgeQ.x * ledgeY2
+            let ledgeXZ = ledgeQ.x * ledgeZ2
+            let ledgeYY = ledgeQ.y * ledgeY2
+            let ledgeYZ = ledgeQ.y * ledgeZ2
+            let ledgeZZ = ledgeQ.z * ledgeZ2
+            let ledgeWX = ledgeQ.w * ledgeX2
+            let ledgeWY = ledgeQ.w * ledgeY2
+            let ledgeWZ = ledgeQ.w * ledgeZ2
+
+            let ledgeRotMat = mat4(
+              1 - (ledgeYY + ledgeZZ), ledgeXY + ledgeWZ, ledgeXZ - ledgeWY, 0,
+              ledgeXY - ledgeWZ, 1 - (ledgeXX + ledgeZZ), ledgeYZ + ledgeWX, 0,
+              ledgeXZ + ledgeWY, ledgeYZ - ledgeWX, 1 - (ledgeXX + ledgeYY), 0,
+              0, 0, 0, 1
+            )
+
+            // Box corners in local space
+            let ledgeCorners: [vec3] = [
+              vec3(-ledgeHalfExtents.x, -ledgeHalfExtents.y, -ledgeHalfExtents.z),
+              vec3(ledgeHalfExtents.x, -ledgeHalfExtents.y, -ledgeHalfExtents.z),
+              vec3(ledgeHalfExtents.x, ledgeHalfExtents.y, -ledgeHalfExtents.z),
+              vec3(-ledgeHalfExtents.x, ledgeHalfExtents.y, -ledgeHalfExtents.z),
+              vec3(-ledgeHalfExtents.x, -ledgeHalfExtents.y, ledgeHalfExtents.z),
+              vec3(ledgeHalfExtents.x, -ledgeHalfExtents.y, ledgeHalfExtents.z),
+              vec3(ledgeHalfExtents.x, ledgeHalfExtents.y, ledgeHalfExtents.z),
+              vec3(-ledgeHalfExtents.x, ledgeHalfExtents.y, ledgeHalfExtents.z),
+            ]
+
+            // Transform corners to world space
+            let ledgeWorldCorners = ledgeCorners.map { corner in
+              let rotated = ledgeRotMat * vec4(corner.x, corner.y, corner.z, 1.0)
+              return vec3(rotated.x, rotated.y, rotated.z) + ledgePos
+            }
+
+            // Draw box edges in orange (0xFF00A5FF = orange in ABGR)
+            let ledgeEdges: [(Int, Int)] = [
+              (0, 1), (1, 2), (2, 3), (3, 0),  // Front face
+              (4, 5), (5, 6), (6, 7), (7, 4),  // Back face
+              (0, 4), (1, 5), (2, 6), (3, 7),  // Connecting edges
+            ]
+
+            if let debugRendererImpl = physicsWorld.getDebugRendererImplementation() {
+              for (i, j) in ledgeEdges {
+                let from = ledgeWorldCorners[i]
+                let to = ledgeWorldCorners[j]
+                debugRendererImpl.drawLine(
+                  from: RVec3(x: from.x, y: from.y, z: from.z),
+                  to: RVec3(x: to.x, y: to.y, z: to.z),
+                  color: 0xFF00A5FF  // Orange in ABGR format
+                )
+              }
+            }
+
             // // Draw character controllers (player and enemies)
             // // Player character controller
             // if let characterController = playerController.getCharacterController() {
@@ -1804,6 +2083,16 @@ private let startingEntry = "1"
                 to: RVec3(x: rayEnd.x, y: rayEnd.y, z: rayEnd.z),
                 color: 0xFF00FFFF,  // Cyan for projectile aim line
                 size: 0.5  // Arrow head size
+              )
+            }
+
+            // Draw active projectiles
+            let projectilePositions = weaponSystem.getActiveProjectilePositions()
+            for position in projectilePositions {
+              debugRenderer.drawMarker(
+                RVec3(x: position.x, y: position.y, z: position.z),
+                color: 0xFFFF0000,  // Red for grenades
+                size: 0.1  // Small marker size
               )
             }
           }

@@ -26,6 +26,10 @@ final class PauseScreen: Screen {
 
   override func update(deltaTime: Float) {
     listMenu.update(deltaTime: deltaTime)
+    // Handle gamepad navigation
+    if let gamepad = Gamepad.allGamepads.first {
+      listMenu.handleGamepadInput(gamepad, deltaTime: deltaTime)
+    }
   }
 
   override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {

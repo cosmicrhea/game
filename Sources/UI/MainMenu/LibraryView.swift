@@ -79,9 +79,17 @@ final class LibraryView: RenderLoop {
     slotGrid.setPosition(gridPosition)
   }
 
-  func update(deltaTime: Float) {
+  func update(window: Window, deltaTime: Float) {
     if isShowingDocument {
       currentDocumentView?.update(deltaTime: deltaTime)
+
+      // Handle gamepad input for document view
+      if let gamepad = Gamepad.allGamepads.first {
+        currentDocumentView?.handleGamepadInput(gamepad, deltaTime: deltaTime)
+
+        // Also handle B button for closing document
+        handleGamepadButtonPresses(gamepad)
+      }
     } else {
       recenterGrid()
       // Update document label based on current selection
@@ -89,6 +97,11 @@ final class LibraryView: RenderLoop {
       // Keep the shared description view in sync
       itemDescriptionView.title = currentDocumentName
       itemDescriptionView.descriptionText = ""
+
+      // Handle gamepad input for document slot grid
+      if let gamepad = Gamepad.allGamepads.first {
+        _ = slotGrid.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      }
     }
   }
 
@@ -263,4 +276,23 @@ final class LibraryView: RenderLoop {
   }
 
   // No separate drawDocumentLabel: handled by ItemDescriptionView
+
+  // MARK: - Gamepad Button Handling
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad button presses for LibraryView
+  private func handleGamepadButtonPresses(_ gamepad: Gamepad) {
+    guard isShowingDocument else { return }
+
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.b])
+
+    if newlyPressed.contains(.b) {
+      // B button = Close DocumentView
+      InputSource.updateFromGamepad(gamepad)
+      UISound.cancel()
+      Task { @MainActor in
+        await hideDocument()
+      }
+    }
+  }
 }

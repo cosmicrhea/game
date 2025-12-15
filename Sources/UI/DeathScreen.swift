@@ -47,6 +47,10 @@ final class DeathScreen: Screen {
     listMenu.update(deltaTime: deltaTime)
     // Clear skip flag after first update
     skipInputThisFrame = false
+    // Handle gamepad navigation
+    if let gamepad = Gamepad.allGamepads.first {
+      listMenu.handleGamepadInput(gamepad, deltaTime: deltaTime)
+    }
   }
 
   override func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -160,6 +164,17 @@ final class DeathScreenStack: RenderLoop {
 
   func onMouseMove(window: Window, x: Double, y: Double) {
     navigationStack.onMouseMove(window: window, x: x, y: y)
+  }
+
+  /// Handle gamepad button press for back navigation
+  func handleGamepadButton(_ button: Gamepad.Button) -> Bool {
+    if button == .b || button == .back {
+      if !navigationStack.isAtRoot {
+        navigationStack.pop()
+        return true
+      }
+    }
+    return false
   }
 
   func draw() {

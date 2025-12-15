@@ -22,7 +22,7 @@ extension UISound {
 
   // static func navigate() { play("SFX_BlackBoardSinglev9", volume: 0.5) }
   static func combine() { play("Minimalist13", volume: 0.9) }
-  static func navigate() { play("Minimalist10", volume: 0.8) }
+  static func navigate() { play("Minimalist10", volume: 0.6) }
   static func scroll() { play("UR/scroll", volume: 0.5) }
   // static func navigate() { play("UR/scroll") }
 

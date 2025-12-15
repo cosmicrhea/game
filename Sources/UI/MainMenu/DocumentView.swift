@@ -103,6 +103,49 @@ final class DocumentView: RenderLoop {
     }
   }
 
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.3)  // 300ms cooldown between page turns
+  private var navigationState = GamepadNavigationState()
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad input for document view
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) {
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for navigation changes
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: false)
+
+    // Handle page navigation with D-pad (only if cooldown expired and not animating)
+    if cooldownReady && !isAnimating {
+      if navChanges.left {
+        InputSource.updateFromGamepad(gamepad)
+        previousPage()
+        navigationCooldown.reset()
+      } else if navChanges.right {
+        InputSource.updateFromGamepad(gamepad)
+        nextPage()
+        navigationCooldown.reset()
+      }
+    }
+
+    // Check for button presses
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.a, .b])
+
+    if newlyPressed.contains(.a) {
+      InputSource.updateFromGamepad(gamepad)
+      // A button = Continue/Next page (F/Space/Enter/Left click equivalent)
+      `continue`()
+    }
+
+    if newlyPressed.contains(.b) {
+      InputSource.updateFromGamepad(gamepad)
+      // B button = Close (Escape/Right click equivalent)
+      UISound.cancel()
+      onDocumentFinished?()
+    }
+  }
+
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
     switch key {
     case .left, .a: previousPage()

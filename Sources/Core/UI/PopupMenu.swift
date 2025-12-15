@@ -6,7 +6,9 @@ public struct MenuItem {
   public let isEnabled: Bool
   public let action: () -> Void
 
-  public init(id: String, label: LocalizedStringResource, icon: Image? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+  public init(
+    id: String, label: LocalizedStringResource, icon: Image? = nil, isEnabled: Bool = true, action: @escaping () -> Void
+  ) {
     self.id = id
     self.label = label
     self.icon = icon
@@ -238,6 +240,65 @@ public class PopupMenu {
     default:
       return false
     }
+  }
+
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
+  private var navigationState = GamepadNavigationState()
+
+  /// Handle gamepad input for navigation
+  @discardableResult
+  public func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) -> Bool {
+    guard isVisible else { return false }
+
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for navigation changes
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: true)
+
+    // Handle navigation (only if cooldown expired)
+    if cooldownReady {
+      if navChanges.up {
+        if selectedIndex > 0 {
+          selectedIndex -= 1
+        } else {
+          selectedIndex = menuItems.count - 1  // Wrap to last item
+        }
+        UISound.navigate()
+        navigationCooldown.reset()
+      } else if navChanges.down {
+        if selectedIndex < menuItems.count - 1 {
+          selectedIndex += 1
+        } else {
+          selectedIndex = 0  // Wrap to first item
+        }
+        UISound.navigate()
+        navigationCooldown.reset()
+      }
+    }
+
+    // Handle selection (A button press, not hold)
+    if navChanges.buttonA {
+      // Update input source when gamepad is used
+      InputSource.updateFromGamepad(gamepad)
+
+      if selectedIndex < menuItems.count {
+        if let item = menuItems[safe: selectedIndex], item.isEnabled {
+          item.action()
+          UISound.select()
+          hide()
+        }
+      }
+    }
+
+    // Handle cancel (B button press, not hold)
+    if navChanges.buttonB {
+      UISound.cancel()
+      hide()
+    }
+
+    return navChanges.hasAnyDirection || navChanges.buttonA || navChanges.buttonB
   }
 
   // MARK: - Rendering

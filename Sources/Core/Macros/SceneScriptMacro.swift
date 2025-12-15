@@ -28,7 +28,7 @@ public struct SceneScriptMacro: MemberMacro {
 
     // Find all public instance methods (excluding inherited ones from Script base class)
     let methods = findSceneScriptMethods(in: classDecl)
-    
+
     // Find all @Ref properties for validation
     let refProperties = findRefProperties(in: classDecl)
 
@@ -46,7 +46,7 @@ public struct SceneScriptMacro: MemberMacro {
 
     // Generate static property initializer for automatic registration
     let autoRegister = generateAutoRegister(className: className)
-    
+
     // Generate validateRefs() method that eagerly accesses all @Ref properties
     let validateRefs = generateValidateRefs(refProperties: refProperties)
 
@@ -99,6 +99,14 @@ public struct SceneScriptMacro: MemberMacro {
 
   // Generate method registry dictionary
   private static func generateMethodRegistry(className: String, methods: [MethodInfo]) -> VariableDeclSyntax {
+    if methods.isEmpty {
+      return try! VariableDeclSyntax(
+        """
+        private static let methodRegistry: [String: (\(raw: className)) -> Any] = [:]
+        """
+      )
+    }
+
     let registryEntries = methods.map { method in
       if method.isAsync {
         return "\"\(method.name)\": { instance in Task { await instance.\(method.name)() } }"

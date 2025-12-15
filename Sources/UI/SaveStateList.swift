@@ -55,6 +55,44 @@ final class SaveStateList {
     scrollView.update(deltaTime: deltaTime)
   }
 
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
+  private var navigationState = GamepadNavigationState()
+
+  /// Handle gamepad input for save state list navigation
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) -> Bool {
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for navigation changes (using 0.2 deadzone and no Y inversion to match original behavior)
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.2, trackButtons: true, invertY: false)
+
+    // Handle navigation with cooldown
+    if cooldownReady {
+      if navChanges.up {
+        InputSource.updateFromGamepad(gamepad)
+        setSelectedIndex(selectedIndex > 0 ? selectedIndex - 1 : saveStates.count - 1)
+        navigationCooldown.reset()
+      } else if navChanges.down {
+        InputSource.updateFromGamepad(gamepad)
+        setSelectedIndex(selectedIndex < saveStates.count - 1 ? selectedIndex + 1 : 0)
+        navigationCooldown.reset()
+      }
+    }
+
+    // Handle button presses (not holds)
+    if navChanges.buttonA {
+      // Update input source when gamepad is used
+      InputSource.updateFromGamepad(gamepad)
+
+      // A button = Activate selected save (Enter/Space/F equivalent)
+      activateSelected()
+      return true
+    }
+
+    return navChanges.hasAnyDirection || navChanges.buttonA
+  }
+
   func draw() {
     pendingFocusRect = nil
     scrollView.draw()

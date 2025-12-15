@@ -126,8 +126,39 @@ public final class InteractionSystem {
     }
 
     // Check cast results for ledge bodies (after action bodies)
+    // Use separate ledge sensor box for ledge detection
     detectedLedgeName = nil
-    for result in castResults {
+    let ledgeSensorBox = playerController.getLedgeSensorBoxTransform()
+    let ledgeSensorShape = BoxShape(halfExtent: ledgeSensorBox.halfExtents)
+
+    // Cast from back edge of ledge sensor box forward through the full sensor box depth
+    // Reuse playerRotation, forwardX, forwardZ, and forward from above
+
+    // Start from the back edge of the ledge sensor box (center - half depth in forward direction)
+    let ledgeBackEdgeOffset = forward * ledgeSensorBox.halfExtents.z
+    let ledgeCastStartPosition = ledgeSensorBox.position - ledgeBackEdgeOffset
+
+    // Cast forward by the full depth of the ledge sensor box
+    let ledgeCastDirection = Vec3(
+      x: forwardX * ledgeSensorBox.halfExtents.z * 2, y: 0, z: forwardZ * ledgeSensorBox.halfExtents.z * 2)
+
+    // Start transform at back edge of ledge sensor box
+    let ledgeStartTransform = RMat44.rotationTranslation(
+      rotation: ledgeSensorBox.rotation,
+      translation: RVec3(x: ledgeCastStartPosition.x, y: ledgeCastStartPosition.y, z: ledgeCastStartPosition.z))
+    var ledgeCastBaseOffset = RVec3(
+      x: ledgeCastStartPosition.x, y: ledgeCastStartPosition.y, z: ledgeCastStartPosition.z)
+
+    // Cast shape forward through ledge sensor box volume
+    let ledgeCastResults = physicsWorld.castShapeAll(
+      shape: ledgeSensorShape,
+      worldTransform: ledgeStartTransform,
+      direction: ledgeCastDirection,
+      baseOffset: &ledgeCastBaseOffset
+    )
+
+    // Check ledge cast results for ledge bodies
+    for result in ledgeCastResults {
       let bodyID = result.bodyID2
       if let ledgeName = physicsWorld.ledgeBodyNames[bodyID] {
         // Extract base name from ledge body name using Scene's extractBaseName
@@ -477,8 +508,8 @@ public final class InteractionSystem {
     let forwardZ = GLMath.cos(playerRotation)
     let forward = vec3(forwardX, 0, forwardZ)
 
-    // Move one player depth (capsule radius = 0.4) forward in X/Z
-    let playerDepth: Float = 0.4
+    // Move one and a half player depth (capsule radius = 0.4) forward in X/Z
+    let playerDepth: Float = 0.6
     let finalX = targetX + forward.x * playerDepth
     let finalZ = targetZ + forward.z * playerDepth
 

@@ -170,6 +170,11 @@ final class StorageView: RenderLoop {
   func update(window: Window, deltaTime: Float) {
     if isShowingItem {
       currentItemView?.update(window: window, deltaTime: deltaTime)
+
+      // Handle gamepad input for ItemView
+      if let gamepad = Gamepad.allGamepads.first {
+        handleGamepadButtonPresses(gamepad)
+      }
     } else {
       recenterGrids()
       // Focus colors
@@ -179,13 +184,46 @@ final class StorageView: RenderLoop {
       case .grid:
         storageGrid?.isFocused = (focusedGrid == .storage)
         storageGrid?.update(deltaTime: deltaTime)
+
+        // Handle gamepad input for storage grid
+        if let gamepad = Gamepad.allGamepads.first {
+          storageGrid?.handleGamepadInput(gamepad, deltaTime: deltaTime)
+        }
       case .list:
         storageListView?.setFocused(focusedGrid == .storage)
         storageListView?.update(deltaTime: deltaTime)
       }
 
       playerGrid.update(deltaTime: deltaTime)
+
+      // Handle gamepad input for player grid
+      if let gamepad = Gamepad.allGamepads.first {
+        playerGrid.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      }
+
       updateItemDescription()
+    }
+  }
+
+  // MARK: - Gamepad Button Handling
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad button presses for StorageView
+  private func handleGamepadButtonPresses(_ gamepad: Gamepad) {
+    guard isShowingItem else { return }
+
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.b, .x])
+
+    if newlyPressed.contains(.b) {
+      // B button = Close ItemView
+      InputSource.updateFromGamepad(gamepad)
+      UISound.cancel()
+      hideItem()
+    }
+
+    // Forward X button to ItemView
+    if newlyPressed.contains(.x) {
+      currentItemView?.handleGamepadButton(.x, gamepad: gamepad)
     }
   }
 
@@ -225,26 +263,26 @@ final class StorageView: RenderLoop {
           let targetSlot = playerGrid.selectedIndex
 
           // Retrieve mode: place item from list to selected grid slot
-        if let sourceDisplayIndex = retrieveModeSourceIndex {
-          if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex) {
-            let sourceSlotData = Inventory.storage.slots[inventoryIndex]
-            // Check if target slot is empty
-            if let targetSlotData = playerGrid.getSlotData(at: targetSlot), targetSlotData.isEmpty {
-              // Move item from storage to player grid
-              playerGrid.setSlotData(sourceSlotData, at: targetSlot)
-              Inventory.storage.slots[inventoryIndex] = ItemSlotData(item: nil, quantity: nil)
-              storageListView?.rebuildDisplayList()
-              // Clear retrieve mode
-              retrieveModeSourceIndex = nil
-              playerGrid.highlightedSlotIndex = nil
-              UISound.select()
-              return
-            } else {
-              UISound.error()  // Slot not empty
-              return
+          if let sourceDisplayIndex = retrieveModeSourceIndex {
+            if let inventoryIndex = storageListView?.getInventoryIndex(at: sourceDisplayIndex) {
+              let sourceSlotData = Inventory.storage.slots[inventoryIndex]
+              // Check if target slot is empty
+              if let targetSlotData = playerGrid.getSlotData(at: targetSlot), targetSlotData.isEmpty {
+                // Move item from storage to player grid
+                playerGrid.setSlotData(sourceSlotData, at: targetSlot)
+                Inventory.storage.slots[inventoryIndex] = ItemSlotData(item: nil, quantity: nil)
+                storageListView?.rebuildDisplayList()
+                // Clear retrieve mode
+                retrieveModeSourceIndex = nil
+                playerGrid.highlightedSlotIndex = nil
+                UISound.select()
+                return
+              } else {
+                UISound.error()  // Slot not empty
+                return
+              }
             }
           }
-        }
           // Take out mode: place item from selected grid slot to storage
           else if takeOutModeDestinationSlot != nil {
             if let sourceSlotData = playerGrid.getSlotData(at: targetSlot), sourceSlotData.item != nil {

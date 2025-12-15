@@ -585,6 +585,126 @@ public final class ItemSlotGrid {
     return false
   }
 
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
+  private var navigationState = GamepadNavigationState()
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad input for grid navigation and menu
+  @discardableResult
+  public func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) -> Bool {
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for navigation changes
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: false, invertY: true)
+
+    // Handle menu navigation if menu is visible
+    if slotMenu.isVisible {
+      if slotMenu.handleGamepadInput(gamepad, deltaTime: deltaTime) {
+        return true
+      }
+    }
+
+    // Handle navigation (only if cooldown expired)
+    if cooldownReady {
+      if navChanges.up {
+        _ = moveSelection(direction: .down)  // Up moves down (grid is flipped)
+        navigationCooldown.reset()
+      } else if navChanges.down {
+        _ = moveSelection(direction: .up)  // Down moves up (grid is flipped)
+        navigationCooldown.reset()
+      } else if navChanges.left {
+        _ = moveSelection(direction: .left)
+        navigationCooldown.reset()
+      } else if navChanges.right {
+        _ = moveSelection(direction: .right)
+        navigationCooldown.reset()
+      }
+    }
+
+    // Handle button presses (not holds)
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.a, .b, .x])
+
+    if newlyPressed.contains(.a) {
+      // Update input source when gamepad is used
+      InputSource.updateFromGamepad(gamepad)
+
+      // A button = Select/Confirm
+      if isPlacementModeActive {
+        if let slotData = getSlotData(at: selectedIndex), slotData.isEmpty {
+          if let item = placementItem {
+            UISound.select()
+            onPlacementConfirmed?(selectedIndex, item, placementQuantity)
+          }
+          return true
+        } else {
+          UISound.error()
+          return true
+        }
+      } else if isCombineModeActive {
+        if let sourceIndex = _combineSourceIndex {
+          if performCombine(from: sourceIndex, to: selectedIndex) {
+            setCombineModeActive(false)
+            return true
+          } else {
+            UISound.error()
+            return true
+          }
+        }
+      } else if isMovingModeActive {
+        if let sourceIndex = movingSourceIndex {
+          performMove(from: sourceIndex, to: selectedIndex)
+          cancelPendingMove()
+          setMovingModeActive(false)
+          UISound.select()
+          return true
+        }
+      } else {
+        // Normal selection
+        if showMenuOnSelection {
+          showMenuForSelectedSlot()
+        } else {
+          onSlotSelected?(selectedIndex)
+        }
+        return true
+      }
+    }
+
+    if newlyPressed.contains(.x) {
+      // X button = Move mode (Alt key equivalent)
+      if allowsMoving {
+        UISound.select()
+        setMovingModeActive(!isMovingModeActive)
+        return true
+      }
+    }
+
+    if newlyPressed.contains(.b) {
+      // B button = Cancel/Close
+      if slotMenu.isVisible {
+        slotMenu.hide()
+        return true
+      } else if isPlacementModeActive {
+        UISound.cancel()
+        onPlacementCancelled?()
+        return true
+      } else if isCombineModeActive {
+        cancelPendingCombine()
+        setCombineModeActive(false)
+        UISound.cancel()
+        return true
+      } else if isMovingModeActive {
+        cancelPendingMove()
+        setMovingModeActive(false)
+        return true
+      }
+    }
+
+    // Return true if any input was detected
+    return navChanges.hasAnyDirection || !newlyPressed.isEmpty
+  }
+
   /// Handle mouse movement for hover effects and menu
   public func handleMouseMove(at position: Point) {
     if slotMenu.isVisible {

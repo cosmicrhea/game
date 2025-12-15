@@ -353,6 +353,61 @@ class ItemInspectionCamera {
     }
   }
 
+  /// Process gamepad state for camera control (polling-based)
+  @MainActor func processGamepadState(_ gamepad: Gamepad, _ deltaTime: Float) {
+    // Don't process gamepad input during reset animation
+    guard !isResetting else { return }
+
+    // Gamepad sensitivity (similar to keyboard)
+    let gamepadSensitivity: Float = 100.0
+    let gamepadZoomSpeed: Float = 2.0
+
+    // Speed modifiers (use triggers for speed boost)
+    var speed: Float = 1
+    let leftTrigger = gamepad.state(of: .leftTrigger)
+    if leftTrigger > 0.5 { speed = 3 }
+
+    // Right stick for model rotation (X = yaw, Y = pitch)
+    let rightStickX = gamepad.state(of: .rightX)
+    let rightStickY = gamepad.state(of: .rightY)
+    let deadzone: Float = 0.1
+
+    let rotationSpeed = gamepadSensitivity * deltaTime * speed
+
+    // Yaw (horizontal rotation) - right stick X
+    if abs(rightStickX) > deadzone {
+      let input = rightStickX * rotationSpeed
+      modelYaw += input
+    }
+
+    // Pitch (vertical rotation) - right stick Y (inverted)
+    if abs(rightStickY) > deadzone {
+      let input = -rightStickY * rotationSpeed  // Invert Y axis
+      modelPitch += input
+      if modelPitch > 89.0 { modelPitch = 89.0 }
+      if modelPitch < -89.0 { modelPitch = -89.0 }
+      updateCameraPosition()  // Update camera when pitch changes
+    }
+
+    // Right trigger for zoom in, left trigger for zoom out (when not used for speed)
+    let rightTrigger = gamepad.state(of: .rightTrigger)
+    let zoomSpeed = gamepadZoomSpeed * deltaTime * speed
+    if rightTrigger > 0.5 {
+      zoomVelocity += zoomSpeed
+    }
+    if leftTrigger > 0.1 && leftTrigger <= 0.5 {  // Only zoom if not using for speed boost
+      zoomVelocity -= zoomSpeed
+    }
+
+    // D-pad up/down for zoom (alternative)
+    if gamepad.state(of: .dpadUp) == .pressed {
+      zoomVelocity += zoomSpeed
+    }
+    if gamepad.state(of: .dpadDown) == .pressed {
+      zoomVelocity -= zoomSpeed
+    }
+  }
+
   /// Reset camera to initial position with animation
   func resetToInitialPosition() {
     // Don't start a new reset if already resetting

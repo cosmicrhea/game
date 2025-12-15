@@ -40,6 +40,21 @@ public final class PlayerController {
   /// Distance from player position to the front edge of the sensor box.
   private let sensorDistance: Float = 0
 
+  // MARK: - Ledge Sensor Box Dimensions
+
+  /// Width of the ledge detection sensor box.
+  private let ledgeSensorWidth: Float = 0.4
+
+  /// Height of the ledge detection sensor box.
+  private let ledgeSensorHeight: Float = 1.0
+
+  /// Depth of the ledge detection sensor box.
+  /// This is how far forward the sensor extends from the player.
+  private let ledgeSensorDepth: Float = 0.3
+
+  /// Distance from player position to the front edge of the ledge sensor box.
+  private let ledgeSensorDistance: Float = 0
+
   // MARK: - Character Controller
 
   private var characterController: CharacterVirtual?
@@ -223,9 +238,10 @@ public final class PlayerController {
 
   // MARK: - Movement
 
-  /// Update movement based on keyboard input
+  /// Update movement based on keyboard or gamepad input
   public func update(
-    keyboard: Keyboard,
+    keyboard: Keyboard? = nil,
+    gamepad: Gamepad? = nil,
     deltaTime: Float,
     physicsWorld: PhysicsWorld,
     isAiming: Bool
@@ -233,15 +249,46 @@ public final class PlayerController {
     guard let characterController = characterController else { return }
     guard physicsWorld.isReady else { return }
 
-    // Tank controls: A/D rotate, W/S move forward/backward
+    // Tank controls: A/D rotate, W/S move forward/backward (keyboard)
+    // Left stick X for rotation, Y for forward/back (gamepad)
     let rotationDelta = rotationSpeed * deltaTime
 
-    // Always allow rotation, even while aiming
-    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
-      rotation += rotationDelta
+    // Rotation input (check both keyboard and gamepad, prefer keyboard if both active)
+    var rotationInput: Float = 0.0
+
+    if let keyboard {
+      if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
+        rotationInput = 1.0
+      } else if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
+        rotationInput = -1.0
+      }
     }
-    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
-      rotation -= rotationDelta
+
+    // Only use gamepad if keyboard didn't provide input
+    if rotationInput == 0.0, let gamepad {
+      // Use left stick X or D-pad left/right for rotation (with deadzone)
+      let deadzone: Float = 0.2
+
+      // Check D-pad first (digital input)
+      let dpadLeft = gamepad.state(of: .dpadLeft) == .pressed
+      let dpadRight = gamepad.state(of: .dpadRight) == .pressed
+
+      if dpadLeft {
+        rotationInput = 1.0
+      } else if dpadRight {
+        rotationInput = -1.0
+      } else {
+        // Use left stick X for rotation (invert X axis - negative for right, positive for left)
+        let leftStickX = -gamepad.state(of: .leftX)  // Invert X axis
+        if abs(leftStickX) > deadzone {
+          rotationInput = leftStickX
+        }
+      }
+    }
+
+    // Apply rotation
+    if rotationInput != 0.0 {
+      rotation += rotationInput * rotationDelta
     }
 
     // Don't allow forward/backward movement while aiming
@@ -252,22 +299,60 @@ public final class PlayerController {
     let forwardZ = GLMath.cos(rotation)
     let forward = vec3(forwardX, 0, forwardZ)
 
-    // Check for speed boost (Shift key)
+    // Check for speed boost (Shift key, left trigger, or X button on gamepad, prefer keyboard)
     let speedMultiplier: Float
-    if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
+    if let keyboard, keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed {
       speedMultiplier = 2.5  // 2.5x speed when holding Shift
+    } else if let gamepad {
+      // Use left trigger or X button (PS square) for speed boost
+      let leftTrigger = gamepad.state(of: .leftTrigger)
+      let xButton = gamepad.state(of: .x) == .pressed
+      if leftTrigger > 0.5 || xButton {
+        speedMultiplier = 2.5
+      } else {
+        speedMultiplier = 1.0
+      }
     } else {
       speedMultiplier = 1.0
     }
     let currentMoveSpeed = moveSpeed * speedMultiplier
 
-    // Calculate desired horizontal velocity from input
+    // Calculate desired horizontal velocity from input (check both, prefer keyboard)
     var desiredVelocity = Vec3(x: 0, y: 0, z: 0)
 
-    if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
-      desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
-    } else if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
-      desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
+    if let keyboard {
+      if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
+        desiredVelocity = Vec3(x: forward.x * currentMoveSpeed, y: 0, z: forward.z * currentMoveSpeed)
+      } else if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
+        desiredVelocity = Vec3(x: -forward.x * currentMoveSpeed, y: 0, z: -forward.z * currentMoveSpeed)
+      }
+    }
+
+    // Only use gamepad if keyboard didn't provide input
+    if desiredVelocity.x == 0.0 && desiredVelocity.z == 0.0, let gamepad {
+      // Use left stick Y or D-pad up/down for forward/back movement (with deadzone)
+      let deadzone: Float = 0.2
+
+      // Check D-pad first (digital input)
+      let dpadUp = gamepad.state(of: .dpadUp) == .pressed
+      let dpadDown = gamepad.state(of: .dpadDown) == .pressed
+
+      var moveAmount: Float = 0.0
+      if dpadUp {
+        moveAmount = currentMoveSpeed
+      } else if dpadDown {
+        moveAmount = -currentMoveSpeed
+      } else {
+        // Use left stick Y for forward/back movement (inverted, with deadzone)
+        let leftStickY = -gamepad.state(of: .leftY)  // Invert Y axis
+        if abs(leftStickY) > deadzone {
+          moveAmount = leftStickY * currentMoveSpeed
+        }
+      }
+
+      if moveAmount != 0.0 {
+        desiredVelocity = Vec3(x: forward.x * moveAmount, y: 0, z: forward.z * moveAmount)
+      }
     }
 
     // Get current velocity and preserve Y component (gravity)
@@ -337,15 +422,34 @@ public final class PlayerController {
     )
     let distanceMoved = length(horizontalDelta)
 
-    // Check if player is moving (has input)
-    let isMoving =
-      keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
-      || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
+    // Check if player is moving (has input from either source)
+    let isMoving: Bool
+    if let keyboard {
+      isMoving =
+        keyboard.state(of: .w) == .pressed || keyboard.state(of: .s) == .pressed
+        || keyboard.state(of: .up) == .pressed || keyboard.state(of: .down) == .pressed
+    } else {
+      isMoving = false
+    }
+
+    // Also check gamepad if keyboard isn't moving
+    var gamepadMoving = false
+    if !isMoving, let gamepad {
+      let dpadUp = gamepad.state(of: .dpadUp) == .pressed
+      let dpadDown = gamepad.state(of: .dpadDown) == .pressed
+      let leftStickY = abs(gamepad.state(of: .leftY))
+      let deadzone: Float = 0.2
+      if dpadUp || dpadDown || leftStickY > deadzone {
+        gamepadMoving = true
+      }
+    }
+
+    let finalIsMoving = isMoving || gamepadMoving
 
     // Only accumulate distance and play footsteps if moving
     // RE-like game: no jumping/falling, so footsteps always play when moving
     // let isOnGround = characterController.groundState != .inAir
-    if isMoving {
+    if finalIsMoving {
       footstepAccumulatedDistance += distanceMoved
 
       // Determine footstep rate based on running vs walking
@@ -424,6 +528,37 @@ public final class PlayerController {
 
     // Box half extents
     let halfExtents = Vec3(x: sensorWidth * 0.5, y: sensorHeight * 0.5, z: sensorDepth * 0.5)
+
+    return (position: sensorPosition, rotation: sensorRotationQuat, halfExtents: halfExtents)
+  }
+
+  /// Get ledge sensor box transform for collision queries
+  public func getLedgeSensorBoxTransform() -> (position: vec3, rotation: Quat, halfExtents: Vec3) {
+    // Get current character controller position
+    let currentCharPos = characterController?.position ?? RVec3(x: position.x, y: position.y, z: position.z)
+    let currentPos = vec3(currentCharPos.x, currentCharPos.y, currentCharPos.z)
+
+    // Calculate position in front of capsule based on current rotation
+    let forwardX = GLMath.sin(rotation)
+    let forwardZ = GLMath.cos(rotation)
+    // Center the box at ledgeSensorDistance + depth/2 in front of player
+    // Align sensor box bottom with capsule bottom
+    // Capsule: radius 0.4, halfHeight 0.8, so bottom is at position.y - 1.2
+    // Sensor box: height 1.0, halfHeight 0.5
+    // To align bottoms: offset Y by -(1.2) + 0.5 = -0.7
+    let capsuleRadius: Float = 0.4
+    let capsuleHalfHeight: Float = 0.8
+    let verticalOffset = -(capsuleHalfHeight + capsuleRadius) + (ledgeSensorHeight * 0.5)
+    let sensorOffset = vec3(
+      forwardX * (ledgeSensorDistance + ledgeSensorDepth * 0.5), verticalOffset,
+      forwardZ * (ledgeSensorDistance + ledgeSensorDepth * 0.5))
+    let sensorPosition = currentPos + sensorOffset
+
+    // Create rotation quaternion for the box (aligned with player rotation)
+    let sensorRotationQuat = Quat(x: 0, y: sin(rotation / 2), z: 0, w: cos(rotation / 2))
+
+    // Box half extents
+    let halfExtents = Vec3(x: ledgeSensorWidth * 0.5, y: ledgeSensorHeight * 0.5, z: ledgeSensorDepth * 0.5)
 
     return (position: sensorPosition, rotation: sensorRotationQuat, halfExtents: halfExtents)
   }

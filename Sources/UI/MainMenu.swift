@@ -76,6 +76,21 @@
     tabs.marginX = marginX
     tabs.update(deltaTime: deltaTime)
     activeView.update(window: window, deltaTime: deltaTime)
+
+    // Handle gamepad input for tabs and views
+    if let gamepad = Gamepad.allGamepads.first {
+      // Handle tab switching with L1/R1 (left/right bumpers)
+      tabs.handleGamepadInput(gamepad, deltaTime: deltaTime)
+
+      // Handle gamepad input for map view
+      if tabs.activeTab == .map, let mapView = activeView as? MapView {
+        mapView.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      }
+
+      // Handle B button for closing nested views
+      handleGamepadButtonPresses(gamepad)
+    }
+
     objectiveCallout.update(deltaTime: deltaTime)
   }
 
@@ -109,6 +124,15 @@
 
     // Forward input to active view
     activeView.onKeyPressed(window: window, key: key, scancode: scancode, mods: mods)
+  }
+
+  // MARK: - Gamepad Button Handling
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad button presses for MainMenu
+  private func handleGamepadButtonPresses(_ gamepad: Gamepad) {
+    // Don't handle B button here - let MainLoop handle it
+    // MainLoop will close nested views or the main menu as appropriate
   }
 
   func onMouseMove(window: Window, x: Double, y: Double) {
@@ -285,6 +309,32 @@ final class MainMenuTabs {
       return false
     default:
       return false
+    }
+  }
+
+  // MARK: - Gamepad Navigation State
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
+  private var buttonPressDetector = GamepadButtonPressDetector()
+
+  /// Handle gamepad input for tab switching
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) {
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Check for newly pressed bumpers
+    let newlyPressed = buttonPressDetector.update(from: gamepad, buttons: [.leftBumper, .rightBumper])
+
+    // Only switch if cooldown expired and button was just pressed
+    if cooldownReady {
+      if newlyPressed.contains(.leftBumper) && canSwitchTabs() {
+        InputSource.updateFromGamepad(gamepad)
+        cycleTab(-1)
+        navigationCooldown.reset()
+      } else if newlyPressed.contains(.rightBumper) && canSwitchTabs() {
+        InputSource.updateFromGamepad(gamepad)
+        cycleTab(1)
+        navigationCooldown.reset()
+      }
     }
   }
 

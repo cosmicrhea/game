@@ -133,6 +133,8 @@ public class OptionsPanel: Screen {
   private var focusedIndex: Int? { didSet { updateFocus() } }
   private var focusViaKeyboard: Bool = false
   private let focusRing = FocusRing(isInterior: false)
+  private var navigationState = GamepadNavigationState()
+  private var navigationCooldown = GamepadNavigationCooldown(duration: 0.2)
 
   // MARK: - Configuration
   func setRows(_ rows: [Row]) {
@@ -177,6 +179,53 @@ public class OptionsPanel: Screen {
       return rows[i].control.handleKey(key)
     }
     return false
+  }
+
+  /// Handle gamepad input for panel navigation
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) {
+    InputSource.updateFromGamepad(gamepad)
+    focusViaKeyboard = true
+
+    // Update cooldown
+    let cooldownReady = navigationCooldown.update(deltaTime: deltaTime)
+
+    // Use navigation state helper for D-pad/stick navigation
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: true, invertY: true)
+
+    // Handle navigation (only if cooldown expired)
+    if cooldownReady {
+      if navChanges.up {
+        moveFocus(-1)
+        navigationCooldown.reset()
+      } else if navChanges.down {
+        moveFocus(+1)
+        navigationCooldown.reset()
+      }
+    }
+
+    // Handle activation (A button)
+    if navChanges.buttonA, let i = focusedIndex, rows.indices.contains(i) {
+      // Trigger action for button rows or handle key for other controls
+      if let buttonRow = rows[i].control as? ButtonRow {
+        buttonRow.action()
+        UISound.select()
+      } else {
+        // For other controls, simulate F key press
+        _ = rows[i].control.handleKey(.f)
+      }
+    }
+
+    // Handle gamepad input for focused controls (Picker, Slider)
+    if let i = focusedIndex, rows.indices.contains(i) {
+      let control = rows[i].control
+      if let picker = control as? Picker {
+        picker.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      } else if let slider = control as? Slider {
+        slider.handleGamepadInput(gamepad, deltaTime: deltaTime)
+      }
+    }
+
+    // Handle back (B button) - OptionsScreen will handle this
   }
 
   override func onMouseButtonPressed(window: Window, button: Mouse.Button, mods: Keyboard.Modifier) {

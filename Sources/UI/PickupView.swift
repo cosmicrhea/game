@@ -229,9 +229,10 @@ final class PickupView: RenderLoop {
   }
 
   func update(window: Window, deltaTime: Float) {
-    // Update camera (for smooth rotation)
+    // Update camera (for smooth rotation) - but no input, just static view
     if viewState == .showingItem {
       camera.update(deltaTime: deltaTime)
+      // No input handling - static view only
     }
 
     // Handle slide-in animation (item slides up from bottom after fade)
@@ -315,6 +316,22 @@ final class PickupView: RenderLoop {
       } else {
         // Update slot grid (this now handles placement blink animation)
         slotGrid.update(deltaTime: deltaTime)
+
+        // Handle gamepad input for slot grid (only if there's actual input)
+        if let gamepad = Gamepad.allGamepads.first {
+          // Only call if there's actual input to avoid unnecessary processing
+          let hasInput =
+            gamepad.state(of: .dpadUp) == .pressed
+            || gamepad.state(of: .dpadDown) == .pressed
+            || gamepad.state(of: .dpadLeft) == .pressed
+            || gamepad.state(of: .dpadRight) == .pressed
+            || abs(gamepad.state(of: .leftX)) > 0.2
+            || abs(gamepad.state(of: .leftY)) > 0.2
+            || gamepad.state(of: .a) == .pressed
+          if hasInput {
+            slotGrid.handleGamepadInput(gamepad, deltaTime: deltaTime)
+          }
+        }
       }
     }
   }
@@ -354,6 +371,42 @@ final class PickupView: RenderLoop {
     if slotGrid.handleKey(key) {
       return
     }
+  }
+
+  /// Handle gamepad button press
+  func handleGamepadButton(_ button: Gamepad.Button, gamepad: Gamepad) {
+    // Disable input while dismissing
+    if isDismissing {
+      return
+    }
+
+    // Disable input while sliding in or out
+    if isSlidingIn || isSlidingOut {
+      return
+    }
+
+    // Handle item view state
+    if viewState == .showingItem {
+      InputSource.updateFromGamepad(gamepad)
+
+      switch button {
+      case .a:
+        // A button = Continue to grid view (F/Space/Enter equivalent)
+        transitionToGrid()
+      case .b, .back:
+        // B button = Cancel pickup
+        cleanupFramebuffer()
+        UISound.cancel()
+        onCancel?()
+      default:
+        break
+      }
+      return
+    }
+
+    // Handle grid view state - gamepad input is handled in update() loop
+    // This method is called from MainLoop for button presses, but slot grid
+    // navigation is handled continuously in update()
   }
 
   func onMouseMove(window: Window, x: Double, y: Double) {
@@ -429,7 +482,11 @@ final class PickupView: RenderLoop {
   }
 
   func onScroll(window: Window, xOffset: Double, yOffset: Double) {
-    // No-op
+    // Disable input while dismissing or in item view (static view only)
+    if isDismissing || viewState == .showingItem {
+      return
+    }
+    // No scroll input for grid view either
   }
 
   func draw() {

@@ -87,6 +87,7 @@ public final class Slider: OptionsControl, AltClickable {
   private var draggedBeyondClickThreshold: Bool = false
   private var inlineEditor: TextField? = nil
   private var dragStartValue: Float = 0
+  private var gamepadLastUpdate: Double = 0
 
   // Animation state for thumb movement on track click
   private var isAnimating: Bool = false
@@ -507,6 +508,32 @@ public final class Slider: OptionsControl, AltClickable {
   public func insertText(_ string: String) -> Bool {
     guard let editor = inlineEditor else { return false }
     return editor.insertText(string)
+  }
+
+  /// Handle gamepad input for slider adjustment
+  func handleGamepadInput(_ gamepad: Gamepad, deltaTime: Float) {
+    guard isFocused else { return }
+    guard inlineEditor == nil else { return }  // Don't handle gamepad when editing inline
+
+    var navigationState = GamepadNavigationState()
+    let navChanges = navigationState.update(from: gamepad, deadzone: 0.3, trackButtons: false, invertY: false)
+
+    // Use a cooldown to prevent too-fast changes
+    let minInterval: Double = 0.05  // 50ms between updates
+    let currentTime = GLFWSession.currentTime
+    let timeSinceLastUpdate = currentTime - gamepadLastUpdate
+
+    if timeSinceLastUpdate >= minInterval {
+      if navChanges.left {
+        stepValue(by: -keyboardStep())
+        UISound.navigate()
+        gamepadLastUpdate = currentTime
+      } else if navChanges.right {
+        stepValue(by: keyboardStep())
+        UISound.navigate()
+        gamepadLastUpdate = currentTime
+      }
+    }
   }
 
 }
