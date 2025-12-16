@@ -18,7 +18,7 @@ public class DebugVisualization {
     public init() {}
   }
 
-  public struct SceneData {
+  public struct Scene {
     public var cameraPosition: vec3
     public var cameraTarget: vec3
     public var cameraRotation: Float
@@ -94,7 +94,7 @@ public class DebugVisualization {
     isVisible = false
   }
 
-  public func draw(sceneData: SceneData, at position: Point) {
+  public func draw(sceneData: Scene, at position: Point) {
     guard isVisible else { return }
 
     let viewportSize = config.viewportSize
@@ -116,7 +116,7 @@ public class DebugVisualization {
 
   // MARK: - View Drawing
 
-  private func drawTopView(at position: Point, size: Float, sceneData: SceneData) {
+  private func drawTopView(at position: Point, size: Float, sceneData: Scene) {
     // Top-down view (XZ plane)
     let scale = config.scale
 
@@ -159,7 +159,7 @@ public class DebugVisualization {
     }
   }
 
-  private func drawSideView(at position: Point, size: Float, sceneData: SceneData) {
+  private func drawSideView(at position: Point, size: Float, sceneData: Scene) {
     // Side view (YZ plane)
     let scale = config.scale
 
@@ -204,7 +204,7 @@ public class DebugVisualization {
     }
   }
 
-  private func drawFrontView(at position: Point, size: Float, sceneData: SceneData) {
+  private func drawFrontView(at position: Point, size: Float, sceneData: Scene) {
     // Front view (XY plane)
     let scale = config.scale
 

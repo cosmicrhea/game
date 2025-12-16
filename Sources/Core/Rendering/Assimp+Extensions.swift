@@ -5,13 +5,24 @@ import GLMath
 
 extension Assimp.Matrix4x4 {
   /// Convert Assimp matrix to GLMath mat4
-  /// Assimp stores matrices in row-major order (a1-a4 is first row)
+  /// Assimp's aiMatrix4x4 is row-major:
+  ///   a1, a2, a3, a4 = first row
+  ///   b1, b2, b3, b4 = second row
+  ///   c1, c2, c3, c4 = third row
+  ///   d1, d2, d3, d4 = fourth row
+  /// GLMath mat4 is column-major (OpenGL convention)
+  /// When constructing mat4(vec4, vec4, vec4, vec4), the vec4s are COLUMNS
+  /// So we transpose: take Assimp rows and make them GLMath columns
   var mat4Representation: mat4 {
-    let row1 = vec4(Float(a1), Float(b1), Float(c1), Float(d1))
-    let row2 = vec4(Float(a2), Float(b2), Float(c2), Float(d2))
-    let row3 = vec4(Float(a3), Float(b3), Float(c3), Float(d3))
-    let row4 = vec4(Float(a4), Float(b4), Float(c4), Float(d4))
-    return mat4(row1, row2, row3, row4)
+    // Transpose: column 1 = first element of each row
+    let col1 = vec4(Float(a1), Float(b1), Float(c1), Float(d1))
+    // Column 2 = second element of each row
+    let col2 = vec4(Float(a2), Float(b2), Float(c2), Float(d2))
+    // Column 3 = third element of each row
+    let col3 = vec4(Float(a3), Float(b3), Float(c3), Float(d3))
+    // Column 4 = fourth element of each row
+    let col4 = vec4(Float(a4), Float(b4), Float(c4), Float(d4))
+    return mat4(col1, col2, col3, col4)
   }
 }
 
@@ -113,5 +124,3 @@ extension Assimp.Mesh {
     return (min: vec3(minX, minY, minZ), max: vec3(maxX, maxY, maxZ))
   }
 }
-
-

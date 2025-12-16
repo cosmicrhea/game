@@ -1,4 +1,5 @@
 import Assimp
+import GLTF
 
 /// Import hint types for scene nodes.
 public enum ImportHint: String, CaseIterable {
@@ -28,46 +29,80 @@ public enum ImportHint: String, CaseIterable {
   }
 }
 
-/// Wrapper around Assimp.Scene that provides our own Node tree
+/// Our own Scene type - independent of Assimp or GLTF
+/// This represents the loaded scene data with all game logic
 public final class Scene {
-  internal let assimpScene: Assimp.Scene
-
-  // Our own Node tree (built upfront)
+  public let filePath: String
+  public let meshes: [Mesh]
+  public let materials: [Material]
+  public let animations: [Animation]
   public let rootNode: Node
 
-  // Delegate to Assimp.Scene
-  public var meshes: [Assimp.Mesh] { assimpScene.meshes }
-  public var materials: [Assimp.Material] { assimpScene.materials }
-  public var cameras: [Assimp.Camera] { assimpScene.cameras }
-  public var lights: [Assimp.Light] { assimpScene.lights }
-  public var textures: [Assimp.Texture] { assimpScene.textures }
-  public var animations: [Assimp.Animation] { assimpScene.animations }
-  public var filePath: String { assimpScene.filePath }
-  public var numberOfMeshes: Int { assimpScene.numberOfMeshes }
-  public var numberOfMaterials: Int { assimpScene.numberOfMaterials }
-  public var numberOfCameras: Int { assimpScene.numberOfCameras }
-  public var numberOfLights: Int { assimpScene.numberOfLights }
-  public var numberOfTextures: Int { assimpScene.numberOfTextures }
-  public var numberOfAnimations: Int { assimpScene.numberOfAnimations }
-  public var hasMeshes: Bool { assimpScene.hasMeshes }
-  public var hasMaterials: Bool { assimpScene.hasMaterials }
-  public var hasCameras: Bool { assimpScene.hasCameras }
-  public var hasLights: Bool { assimpScene.hasLights }
-  public var hasTextures: Bool { assimpScene.hasTextures }
-  public var hasAnimations: Bool { assimpScene.hasAnimations }
-  public var flags: Assimp.Scene.Flags { assimpScene.flags }
+  // Embedded textures (for GLB files)
+  public let embeddedTextures: [EmbeddedTexture]
 
-  init(_ assimpScene: Assimp.Scene) {
-    self.assimpScene = assimpScene
+  // Optional: Store Assimp scene for backward compatibility (only if created from Assimp)
+  internal var _assimpScene: Assimp.Scene?
 
-    // Build our own Node tree upfront
-    let root = Node(assimpScene.rootNode)
-    self.rootNode = root
+  // Optional: Store GLTF document to keep buffer data alive during initialization
+  // This prevents buffer data from being freed by cgltf_free() while we're still reading it
+  internal var _gltfDocument: GLTFDocument?
 
-    // Eagerly load all hint collections
-    // logger.measure("Collected nodes") {
-    collectAllHintNodes(from: root)
-    // }
+  // Mapping from camera node base name to Camera object (for GLTF scenes)
+  // In GLTF, camera objects can have different names than their nodes, so we need this mapping
+  internal var _cameraNodeToCamera: [String: Camera] = [:]
+
+  // Backward compatibility: Access Assimp scene if available
+  public var assimpScene: Assimp.Scene? {
+    return _assimpScene
+  }
+
+  // Our own cameras (from GLTF or Assimp)
+  public let cameras: [Camera]
+
+  // Backward compatibility: Access Assimp lights if available
+  public var lights: [Assimp.Light] {
+    return _assimpScene?.lights ?? []
+  }
+
+  // Game-specific: Hint-based node collections
+  public private(set) var actionNodes: [Node] = []
+  public private(set) var areaNodes: [Node] = []
+  public private(set) var cameraNodes: [Node] = []
+  public private(set) var cameraTriggerNodes: [Node] = []
+  public private(set) var collisionNodes: [Node] = []
+  public private(set) var doorNodes: [Node] = []
+  public private(set) var entryNodes: [Node] = []
+  public private(set) var enemyNodes: [Node] = []
+  public private(set) var floorNodes: [Node] = []
+  public private(set) var footstepsNodes: [Node] = []
+  public private(set) var foregroundNodes: [Node] = []
+  public private(set) var ledgeNodes: [Node] = []
+  public private(set) var mapMarkerNodes: [Node] = []
+  public private(set) var pickupNodes: [Node] = []
+  public private(set) var sparkleNodes: [Node] = []
+  public private(set) var triggerNodes: [Node] = []
+  public private(set) var waypointNodes: [Node] = []
+
+  public init(
+    filePath: String,
+    rootNode: Node,
+    meshes: [Mesh],
+    materials: [Material],
+    cameras: [Camera] = [],
+    animations: [Animation] = [],
+    embeddedTextures: [EmbeddedTexture] = []
+  ) {
+    self.filePath = filePath
+    self.rootNode = rootNode
+    self.meshes = meshes
+    self.materials = materials
+    self.cameras = cameras
+    self.animations = animations
+    self.embeddedTextures = embeddedTextures
+
+    // Collect all hint nodes
+    collectAllHintNodes(from: rootNode)
   }
 
   private func collectAllHintNodes(from root: Node) {
@@ -75,8 +110,6 @@ public final class Scene {
       var nodes: [Node] = []
       func traverse(_ node: Node) {
         // Check if name contains hint prefix as a complete word
-        // This allows nodes like "@Area @Collision Foo" to match both hints
-        // and prevents "@CameraTrigger" from matching "@Camera"
         let prefix = hint.prefix
         let name = node.name
 
@@ -111,51 +144,28 @@ public final class Scene {
       return nodes
     }
 
-    self.actionNodes = collectNodes(withHint: .action, from: root)
-    self.areaNodes = collectNodes(withHint: .area, from: root)
-    self.cameraNodes = collectNodes(withHint: .camera, from: root)
-    self.cameraTriggerNodes = collectNodes(withHint: .cameraTrigger, from: root)
-    self.collisionNodes = collectNodes(withHint: .collision, from: root)
-    self.doorNodes = collectNodes(withHint: .door, from: root)
-    self.entryNodes = collectNodes(withHint: .entry, from: root)
-    self.enemyNodes = collectNodes(withHint: .enemy, from: root)
-    self.floorNodes = collectNodes(withHint: .floor, from: root)
-    self.footstepsNodes = collectNodes(withHint: .footsteps, from: root)
-    self.foregroundNodes = collectNodes(withHint: .foreground, from: root)
-    self.ledgeNodes = collectNodes(withHint: .ledge, from: root)
-    self.mapMarkerNodes = collectNodes(withHint: .mapMarker, from: root)
-    self.pickupNodes = collectNodes(withHint: .pickup, from: root)
-    self.sparkleNodes = collectNodes(withHint: .sparkle, from: root)
-    self.triggerNodes = collectNodes(withHint: .trigger, from: root)
-    self.waypointNodes = collectNodes(withHint: .waypoint, from: root)
-  }
-
-  /// Load a scene from a file
-  public convenience init(file filePath: String, flags: Assimp.PostProcessStep = []) throws {
-    let assimpScene = try Assimp.Scene(file: filePath, flags: flags)
-    self.init(assimpScene)
-  }
-
-  /// Load a scene from a file with progress callback.
-  public convenience init(
-    file filePath: String,
-    flags: Assimp.PostProcessStep = [],
-    progress: @escaping (Float) -> Bool
-  ) throws {
-    let assimpScene = try Assimp.Scene(file: filePath, flags: flags, progress: progress)
-    self.init(assimpScene)
-  }
-
-  /// Get transform matrix for a mesh (delegates to Assimp.Scene extension).
-  func getTransformMatrix(for mesh: Assimp.Mesh) -> mat4 {
-    return assimpScene.getTransformMatrix(for: mesh)
+    self.actionNodes = collectNodes(withHint: ImportHint.action, from: root)
+    self.areaNodes = collectNodes(withHint: ImportHint.area, from: root)
+    self.cameraNodes = collectNodes(withHint: ImportHint.camera, from: root)
+    self.cameraTriggerNodes = collectNodes(withHint: ImportHint.cameraTrigger, from: root)
+    self.collisionNodes = collectNodes(withHint: ImportHint.collision, from: root)
+    self.doorNodes = collectNodes(withHint: ImportHint.door, from: root)
+    self.entryNodes = collectNodes(withHint: ImportHint.entry, from: root)
+    self.enemyNodes = collectNodes(withHint: ImportHint.enemy, from: root)
+    self.floorNodes = collectNodes(withHint: ImportHint.floor, from: root)
+    self.footstepsNodes = collectNodes(withHint: ImportHint.footsteps, from: root)
+    self.foregroundNodes = collectNodes(withHint: ImportHint.foreground, from: root)
+    self.ledgeNodes = collectNodes(withHint: ImportHint.ledge, from: root)
+    self.mapMarkerNodes = collectNodes(withHint: ImportHint.mapMarker, from: root)
+    self.pickupNodes = collectNodes(withHint: ImportHint.pickup, from: root)
+    self.sparkleNodes = collectNodes(withHint: ImportHint.sparkle, from: root)
+    self.triggerNodes = collectNodes(withHint: ImportHint.trigger, from: root)
+    self.waypointNodes = collectNodes(withHint: ImportHint.waypoint, from: root)
   }
 
   // MARK: - Import Hint Parsing
 
   /// Extract all hints from a node name.
-  /// - Parameter nodeName: The node name to parse.
-  /// - Returns: Array of ImportHint values found in the name.
   public func parseHints(from nodeName: String) -> [ImportHint] {
     var hints: [ImportHint] = []
     for hint in ImportHint.allCases {
@@ -167,16 +177,11 @@ public final class Scene {
   }
 
   /// Check if a node has a specific hint.
-  /// - Parameters:
-  ///   - node: The node to check.
-  ///   - hint: The hint to look for.
-  /// - Returns: True if the node name contains the hint prefix.
   public func hasHint(_ node: Node, hint: ImportHint) -> Bool {
     node.name.contains(hint.prefix)
   }
 
   /// Traverse all nodes in the scene tree, calling the closure for each node.
-  /// - Parameter closure: Closure called for each node during traversal.
   public func traverseNodes(_ closure: (Node) -> Void) {
     func traverse(_ node: Node) {
       closure(node)
@@ -188,12 +193,9 @@ public final class Scene {
   }
 
   /// Extract the base name from a node name, removing all hint prefixes.
-  /// - Parameter nodeName: The node name to extract base name from.
-  /// - Returns: The base name without any hint prefixes.
   public static func extractBaseName(from nodeName: String) -> String {
     var baseName = nodeName
     // Remove all hint prefixes, starting with longest (most specific) first
-    // This ensures "@CameraTrigger" is removed before "@Camera"
     let sortedHints = ImportHint.allCases.sorted { $0.prefix.count > $1.prefix.count }
     for hint in sortedHints {
       baseName = baseName.replacingOccurrences(of: hint.prefix, with: "")
@@ -203,11 +205,6 @@ public final class Scene {
   }
 
   /// Normalize entries/camera identifiers so area comparisons stay consistent.
-  /// - "@Entry 1" -> "1"
-  /// - "@Entry hallway" -> "hallway"
-  /// - "hallway_2" -> "hallway"
-  /// - "hallway" -> "hallway"
-  /// - "1" -> "1"
   public static func normalizedAreaIdentifier(_ name: String) -> String {
     guard !name.isEmpty else { return name }
 
@@ -228,35 +225,7 @@ public final class Scene {
     return identifier
   }
 
-  // MARK: - Hint-Based Node Collections
-
-  public private(set) var actionNodes: [Node] = []
-  public private(set) var areaNodes: [Node] = []
-  public private(set) var cameraNodes: [Node] = []
-  public private(set) var cameraTriggerNodes: [Node] = []
-  public private(set) var collisionNodes: [Node] = []
-  public private(set) var doorNodes: [Node] = []
-  public private(set) var entryNodes: [Node] = []
-  public private(set) var enemyNodes: [Node] = []
-  public private(set) var floorNodes: [Node] = []
-  public private(set) var footstepsNodes: [Node] = []
-  public private(set) var foregroundNodes: [Node] = []
-  public private(set) var ledgeNodes: [Node] = []
-  public private(set) var mapMarkerNodes: [Node] = []
-  public private(set) var pickupNodes: [Node] = []
-  public private(set) var sparkleNodes: [Node] = []
-  public private(set) var triggerNodes: [Node] = []
-  public private(set) var waypointNodes: [Node] = []
-
   // MARK: - Convenience Methods
-
-  /// Find a camera by base name (e.g., "0" finds "@Camera 0")
-  public func camera(named baseName: String) -> Assimp.Camera? {
-    guard let cameraNode = cameraNode(named: baseName) else {
-      return nil
-    }
-    return cameras.first(where: { $0.name == cameraNode.name })
-  }
 
   /// Find an action node by base name
   public func actionNode(named baseName: String) -> Node? {
@@ -333,6 +302,25 @@ public final class Scene {
     waypointNodes.first { $0.baseName == baseName }
   }
 
+  /// Find a camera by base name (e.g., "0" finds "@Camera 0")
+  /// Returns the Camera if available
+  /// For GLTF scenes, uses the mapping from camera node to Camera object
+  /// For Assimp scenes, matches by name
+  public func camera(named baseName: String) -> Camera? {
+    guard let cameraNode = cameraNode(named: baseName) else {
+      return nil
+    }
+
+    // For GLTF scenes, use the mapping (camera objects can have different names than nodes)
+    if let camera = _cameraNodeToCamera[baseName] {
+      return camera
+    }
+
+    // Fallback for Assimp: try to match by camera node name first, then by base name
+    return cameras.first(where: { $0.name == cameraNode.name })
+      ?? cameras.first(where: { $0.name == baseName })
+  }
+
   // MARK: - Debug Description
 
   /// Generate a human-readable debug description of all game-related nodes
@@ -376,9 +364,9 @@ public final class Scene {
       lines.append("")
     }
 
-    // Also list all cameras from Assimp
+    // Also list all cameras from the scene
     if !cameras.isEmpty {
-      lines.append("Assimp Cameras (\(cameras.count)):")
+      lines.append("Camera Objects (\(cameras.count)):")
       for camera in cameras.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
         lines.append("  - \(camera.name ?? "<unnamed>")")
       }
@@ -386,5 +374,22 @@ public final class Scene {
     }
 
     return lines.joined(separator: "\n")
+  }
+}
+
+/// Embedded texture data (for GLB files)
+public struct EmbeddedTexture {
+  public let index: Int  // Index in the embedded texture array (e.g., "*0" -> index 0)
+  public let data: Data
+  public let width: Int
+  public let height: Int
+  public let formatHint: String?  // e.g., "png", "jpg", "webp"
+
+  public init(index: Int, data: Data, width: Int, height: Int, formatHint: String? = nil) {
+    self.index = index
+    self.data = data
+    self.width = width
+    self.height = height
+    self.formatHint = formatHint
   }
 }

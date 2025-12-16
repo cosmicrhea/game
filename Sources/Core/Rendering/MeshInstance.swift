@@ -1,5 +1,6 @@
-import Assimp
 import ImageFormats
+import CGLTF
+import GLTF
 
 // Flag to disable HDRI loading for now
 private let enableHDRI = false
@@ -44,20 +45,20 @@ final class TextureCache: @unchecked Sendable {
 }
 
 struct MeshVertex {
-  var position: (AssimpReal, AssimpReal, AssimpReal)
-  var normal: (AssimpReal, AssimpReal, AssimpReal)
-  var uv: (AssimpReal, AssimpReal)
-  var tangent: (AssimpReal, AssimpReal, AssimpReal)
-  var bitangent: (AssimpReal, AssimpReal, AssimpReal)
+  var position: (Float, Float, Float)
+  var normal: (Float, Float, Float)
+  var uv: (Float, Float)
+  var tangent: (Float, Float, Float)
+  var bitangent: (Float, Float, Float)
 
   // Skeletal animation data
   var boneIndices: (UInt8, UInt8, UInt8, UInt8)  // Up to 4 bone indices per vertex
-  var boneWeights: (AssimpReal, AssimpReal, AssimpReal, AssimpReal)  // Corresponding weights
+  var boneWeights: (Float, Float, Float, Float)  // Corresponding weights
 }
 
 class MeshInstance: @unchecked Sendable {
 
-  let scene: Assimp.Scene
+  let sceneData: Scene
   let mesh: Mesh
   let transformMatrix: mat4
   private let sceneIdentifier: String
@@ -101,9 +102,8 @@ class MeshInstance: @unchecked Sendable {
   // Node reference for checking visibility (optional)
   weak var node: Node?
 
-  init(scene: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1), sceneIdentifier: String) {
-    // Extract underlying Assimp.Scene for internal storage
-    self.scene = scene.assimpScene
+  init(sceneData: Scene, mesh: Mesh, transformMatrix: mat4 = mat4(1), sceneIdentifier: String) {
+    self.sceneData = sceneData
     self.mesh = mesh
     self.transformMatrix = transformMatrix
     self.sceneIdentifier = sceneIdentifier
@@ -199,6 +199,12 @@ class MeshInstance: @unchecked Sendable {
     boneTransforms = Array(repeating: mat4(1), count: mesh.numberOfBones)
     boneNames = mesh.bones.map { $0.name ?? "Unknown" }
   }
+  
+  /// Get material for this mesh
+  private var material: Material? {
+    guard mesh.materialIndex < sceneData.materials.count else { return nil }
+    return sceneData.materials[mesh.materialIndex]
+  }
 
   /// Update bone transforms for skeletal animation
   func updateBoneTransforms(_ transforms: [String: mat4]) {
@@ -260,50 +266,93 @@ class MeshInstance: @unchecked Sendable {
     return !node.isHidden
   }
 
-  /// Async initializer that loads scene and textures with progress callbacks
+  /// Async initializer that loads scene and textures with progress callbacks (GLTF version)
   static func loadAsync(
     path: String,
     onSceneProgress: @escaping @Sendable (Float) -> Void,
     onTextureProgress: @escaping @Sendable (Int, Int, Float) -> Void
   ) async throws -> [MeshInstance] {
 
-    // Load scene with progress
-    let assimpScene = try await withCheckedThrowingContinuation { continuation in
-      Task {
-        do {
-          let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
-          let scene = try Assimp.Scene(
-            file: scenePath, flags: [.triangulate, /*.validateDataStructure, */ .flipUVs, .calcTangentSpace]
-          ) {
-            progress in
-            Task { @MainActor in
-              onSceneProgress(progress)
-            }
-            return true
-          }
-          continuation.resume(returning: scene)
-        } catch {
-          continuation.resume(throwing: error)
-        }
+    // Load GLTF document with progress
+    let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
+    let url = URL(fileURLWithPath: scenePath)
+    
+    let gltfDocument = try await GLTFDocument(contentsOf: url) { progress in
+      Task { @MainActor in
+        onSceneProgress(Float(progress))
       }
     }
-
-    // Wrap in our Scene wrapper
-    let scene = Scene(assimpScene)
-
-    //print(scene.rootNode)
-
-    // Add a small delay to make scene loading progress visible
-    // try? await Task.sleep(nanoseconds: 200_000_000)  // 0.2 seconds
+    
+    // Convert to our Scene
+    let sceneData = Scene(gltfDocument, filePath: scenePath)
 
     // Create mesh instances on main thread (OpenGL operations must be on main thread)
     let meshInstances = await MainActor.run {
-      scene.meshes
-        .filter { $0.numberOfVertices > 0 }
-        .map { mesh in
-          let transformMatrix = scene.getTransformMatrix(for: mesh)
-          return MeshInstance(
-            scene: scene, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: scene.filePath)
+      // Build a map from mesh index to node for proper transform lookup
+      var meshToNodeMap: [Int: Node] = [:]
+      func buildMeshToNodeMap(node: Node) {
+        for meshIndex in node.meshes {
+          // If multiple nodes reference the same mesh, use the first one found
+          if meshToNodeMap[meshIndex] == nil {
+            meshToNodeMap[meshIndex] = node
+          }
+        }
+        for child in node.children {
+          buildMeshToNodeMap(node: child)
+        }
+      }
+      buildMeshToNodeMap(node: sceneData.rootNode)
+      
+      // Debug: Print root node structure
+      logger.debug("Root node: '\(sceneData.rootNode.name)', children: \(sceneData.rootNode.children.count), meshes: \(sceneData.rootNode.meshes.count)")
+      logger.debug("Root node transform translation: (\(sceneData.rootNode.transformation[3].x), \(sceneData.rootNode.transformation[3].y), \(sceneData.rootNode.transformation[3].z))")
+      
+      // Debug: Print mesh-to-node mapping
+      logger.debug("Mesh-to-node mapping:")
+      for (meshIndex, node) in meshToNodeMap.sorted(by: { $0.key < $1.key }) {
+        logger.debug("  Mesh \(meshIndex) -> Node '\(node.name)' (has \(node.meshes.count) meshes)")
+      }
+      logger.debug("Total meshes: \(sceneData.meshes.count), Mapped: \(meshToNodeMap.count)")
+      
+      return sceneData.meshes
+        .enumerated()
+        .filter { $0.element.numberOfVertices > 0 }
+        .map { (index, mesh) in
+          // Get transform from the node that owns this mesh
+          let node = meshToNodeMap[index]
+          let transformMatrix = node?.calculateWorldTransform() ?? mat4(1)
+          
+          if node == nil {
+            logger.warning("Mesh at index \(index) has no associated node, using identity transform")
+          } else {
+            // Debug: Print transform for first few meshes
+            if index < 3 {
+              let m = transformMatrix
+              let translation = vec3(m[3].x, m[3].y, m[3].z)
+              let localTranslation = vec3(node!.transformation[3].x, node!.transformation[3].y, node!.transformation[3].z)
+              logger.debug("Mesh \(index) ('\(mesh.name ?? "unnamed")') transform from node '\(node!.name)':")
+              logger.debug("  World translation: (\(translation.x), \(translation.y), \(translation.z))")
+              logger.debug("  Local translation: (\(localTranslation.x), \(localTranslation.y), \(localTranslation.z))")
+              if let parent = node!.parent {
+                let parentTranslation = vec3(parent.transformation[3].x, parent.transformation[3].y, parent.transformation[3].z)
+                // Calculate scale from parent transform (length of first 3 columns)
+                let parentScaleX = length(vec3(parent.transformation[0].x, parent.transformation[0].y, parent.transformation[0].z))
+                let parentScaleY = length(vec3(parent.transformation[1].x, parent.transformation[1].y, parent.transformation[1].z))
+                let parentScaleZ = length(vec3(parent.transformation[2].x, parent.transformation[2].y, parent.transformation[2].z))
+                logger.debug("  Parent '\(parent.name)' translation: (\(parentTranslation.x), \(parentTranslation.y), \(parentTranslation.z))")
+                logger.debug("  Parent scale: (\(parentScaleX), \(parentScaleY), \(parentScaleZ))")
+                logger.debug("  Parent has parent: \(parent.parent != nil)")
+              } else {
+                logger.debug("  Has parent: false")
+              }
+            }
+          }
+          
+          let instance = MeshInstance(
+            sceneData: sceneData, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: sceneData.filePath)
+          // Store node reference for visibility checking
+          instance.node = node
+          return instance
         }
     }
 
@@ -312,9 +361,6 @@ class MeshInstance: @unchecked Sendable {
     for (index, meshInstance) in meshInstances.enumerated() {
       // Simulate texture loading progress
       onTextureProgress(index + 1, totalTextures, 0.0)
-
-      // Small delay to make progress visible
-      // try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 seconds
 
       await MainActor.run {
         meshInstance.loadTexture()
@@ -433,245 +479,213 @@ class MeshInstance: @unchecked Sendable {
 
   private func loadTexture() {
     // Get material for this mesh
-    guard mesh.materialIndex < scene.materials.count else { return }
-    let material = scene.materials[mesh.materialIndex]
+    guard let material = material else { return }
 
     // Load material properties
     loadMaterialProperties(material: material)
 
     // Load all PBR texture types
-    loadTextureOfType(.diffuse, material: material, textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture)
-    loadTextureOfType(.normals, material: material, textureID: &normalTexture, hasTexture: &hasNormalTexture)
-    loadTextureOfType(
-      .diffuseRoughness, material: material, textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture)
-    loadTextureOfType(.metalness, material: material, textureID: &metallicTexture, hasTexture: &hasMetallicTexture)
-    loadTextureOfType(.ambientOcclusion, material: material, textureID: &aoTexture, hasTexture: &hasAoTexture)
+    if let path = material.diffuseTexturePath {
+      loadTextureFromPath(path: path, textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture)
+    }
+    if let path = material.normalTexturePath {
+      loadTextureFromPath(path: path, textureID: &normalTexture, hasTexture: &hasNormalTexture)
+    }
+    if let path = material.roughnessTexturePath {
+      loadTextureFromPath(path: path, textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture)
+    }
+    if let path = material.metallicTexturePath {
+      loadTextureFromPath(path: path, textureID: &metallicTexture, hasTexture: &hasMetallicTexture)
+    }
+    if let path = material.aoTexturePath {
+      loadTextureFromPath(path: path, textureID: &aoTexture, hasTexture: &hasAoTexture)
+    }
   }
 
   private func loadMaterialProperties(material: Material) {
-    // Load base color (diffuse color)
-    if let color = material.getMaterialColor(.COLOR_DIFFUSE) {
-      baseColor = vec3(color.x, color.y, color.z)
-    }
-
-    // Load PBR properties if available
-    if let metallicFactor = material.getMaterialProperty(.GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR)?.float.first {
-      metallic = metallicFactor
-    }
-
-    if let roughnessFactor = material.getMaterialProperty(.GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR)?.float.first {
-      roughness = roughnessFactor
-    }
-
-    // Load emissive color
-    if let emissiveColor = material.getMaterialColor(.COLOR_EMISSIVE) {
-      emissive = vec3(emissiveColor.x, emissiveColor.y, emissiveColor.z)
-    }
-
-    // Load opacity
-    if let opacityValue = material.getMaterialProperty(.OPACITY)?.float.first {
-      opacity = opacityValue
-    }
+    baseColor = material.baseColor
+    metallic = material.metallic
+    roughness = material.roughness
+    emissive = material.emissive
+    opacity = material.opacity
   }
 
-  private func loadTextureOfType(
-    _ texType: Assimp.TextureType, material: Material, textureID: inout GLuint, hasTexture: inout Bool
-  ) {
-    // Try to get texture path for this type
-    guard let texturePath = material.getMaterialTexture(texType: texType, texIndex: 0) else { return }
-
+  private func loadTextureFromPath(path: String, textureID: inout GLuint, hasTexture: inout Bool) {
     // Create stable cache key across loads for embedded textures by using scene file path
-    let cacheKey = texturePath.hasPrefix("*") ? "\(sceneIdentifier)#\(texturePath)" : texturePath
+    let cacheKey = path.hasPrefix("*") ? "\(sceneIdentifier)#\(path)" : path
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
-      logger.trace("Using cached \(texType) texture for key \(cacheKey)")
+      logger.debug("Using cached texture for key \(cacheKey)")
       textureID = cachedTexture
       hasTexture = true
       return
     }
 
-    //logger.info("Loading \(texType) texture with path \(texturePath)")
-
     // Check if it's an embedded texture (starts with "*")
-    if texturePath.hasPrefix("*") {
-      loadEmbeddedTexture(texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+    if path.hasPrefix("*") {
+      logger.debug("Loading embedded texture: \(path)")
+      loadEmbeddedTexture(texturePath: path, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
     } else {
-      loadExternalTexture(texturePath: texturePath)
+      logger.debug("Loading external texture: \(path)")
+      loadExternalTexture(texturePath: path, textureID: &textureID, hasTexture: &hasTexture)
     }
   }
 
   private func loadEmbeddedTexture(
     texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool
   ) {
-    // Extract texture index from "*0", "*1", etc.
-    guard let indexString = texturePath.dropFirst().first,
-      let textureIndex = Int(String(indexString)),
-      textureIndex < scene.textures.count
-    else { return }
+    // Extract texture index from "*0", "*1", "*10", etc.
+    // Drop the "*" prefix and parse the remaining string as an integer
+    guard texturePath.hasPrefix("*") else {
+      logger.warning("Invalid embedded texture path format: '\(texturePath)' (should start with '*')")
+      return
+    }
+    
+    let suffix = String(texturePath.dropFirst())
+    guard let textureIndex = Int(suffix) else {
+      logger.warning("Failed to parse embedded texture index from '\(texturePath)' (suffix: '\(suffix)')")
+      return
+    }
+    
+    guard textureIndex < sceneData.embeddedTextures.count else {
+      logger.warning("Embedded texture index \(textureIndex) out of bounds (total: \(sceneData.embeddedTextures.count))")
+      return
+    }
 
-    let texture = scene.textures[textureIndex]
+    logger.debug("Loading embedded texture [\(textureIndex)]: path=\(texturePath), total embedded textures=\(sceneData.embeddedTextures.count)")
+    let embeddedTexture = sceneData.embeddedTextures[textureIndex]
+    logger.debug("Embedded texture [\(textureIndex)]: data size=\(embeddedTexture.data.count) bytes, formatHint=\(embeddedTexture.formatHint ?? "nil")")
     createOpenGLTexture(
-      from: texture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+      from: embeddedTexture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
   }
 
-  private func loadExternalTexture(texturePath: String) {
-    // For now, skip external textures - would need to implement file loading
-    // This could be added later with proper file system access
-    logger.warning("External texture loading not implemented yet: \(texturePath)")
-  }
-
-  /// Async version of loadTexture with progress callback
-  private func loadTextureAsync(onProgress: @escaping @Sendable (Float) -> Void) async {
-    // Get material for this mesh
-    guard mesh.materialIndex < scene.materials.count else {
-      onProgress(1.0)
-      return
-    }
-    let material = scene.materials[mesh.materialIndex]
-
-    // Try to get diffuse texture path
-    guard let texturePath = material.getMaterialTexture(texType: .diffuse, texIndex: 0) else {
-      onProgress(1.0)
-      return
-    }
-    logger.trace("Loading texture with path \(texturePath)")
-
-    // Stable cache key across reloads
-    let cacheKey = texturePath.hasPrefix("*") ? "\(sceneIdentifier)#\(texturePath)" : texturePath
-
+  private func loadExternalTexture(texturePath: String, textureID: inout GLuint, hasTexture: inout Bool) {
+    // Create cache key for external textures
+    let cacheKey = texturePath
+    
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
-      logger.trace("Using cached texture for key \(cacheKey)")
-      diffuseTexture = cachedTexture
-      hasDiffuseTexture = true
-      onProgress(1.0)
+      logger.trace("Using cached external texture for key \(cacheKey)")
+      textureID = cachedTexture
+      hasTexture = true
       return
     }
-
-    // Load texture with progress
-    await loadEmbeddedTextureAsync(texturePath: texturePath, cacheKey: cacheKey, onProgress: onProgress)
-  }
-
-  /// Async version of loadEmbeddedTexture with progress callback
-  private func loadEmbeddedTextureAsync(
-    texturePath: String,
-    cacheKey: String,
-    onProgress: @escaping @Sendable (Float) -> Void
-  ) async {
-    // Extract texture index from "*0", "*1", etc.
-    guard let indexString = texturePath.dropFirst().first,
-      let textureIndex = Int(String(indexString)),
-      textureIndex < scene.textures.count
-    else {
-      onProgress(1.0)
+    
+    // Resolve texture path relative to the GLB file location
+    let sceneURL = URL(fileURLWithPath: sceneIdentifier)
+    let sceneDirectory = sceneURL.deletingLastPathComponent()
+    let textureURL = sceneDirectory.appendingPathComponent(texturePath)
+    
+    // Try to load from the resolved path
+    if let textureData = try? Data(contentsOf: textureURL) {
+      loadTextureFromData(textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
       return
     }
-
-    let texture = scene.textures[textureIndex]
-    await createOpenGLTextureAsync(from: texture, texturePath: texturePath, cacheKey: cacheKey, onProgress: onProgress)
-  }
-
-  /// Async version of createOpenGLTexture with progress callback
-  private func createOpenGLTextureAsync(
-    from texture: Texture, texturePath: String, cacheKey: String, onProgress: @escaping @Sendable (Float) -> Void
-  ) async {
-    glGenTextures(1, &diffuseTexture)
-    glBindTexture(GL_TEXTURE_2D, diffuseTexture)
-
-    // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-
-    if texture.isCompressed {
-      // Handle compressed texture using ImageFormats decoders
-      let data = texture.textureData
-      logger.trace("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
-
-      do {
-        var image: ImageFormats.Image<ImageFormats.RGBA>?
-
-        // Try to determine format from hint
-        if texture.achFormatHint.lowercased().contains("png") {
-          image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { progress in
-            Task { @MainActor in
-              onProgress(Float(progress))
-            }
-          } warningHandler: { warning in
-            logger.warning("\(texturePath) PNG warning: \(warning)")
-          }
-        } else if texture.achFormatHint.lowercased().contains("webp") {
-          image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
-          onProgress(1.0)
-        } else if texture.achFormatHint.lowercased().contains("jpg")
-          || texture.achFormatHint.lowercased().contains("jpeg")
-        {
-          // Decode JPEG as RGB and upload as RGB
-          let jpg = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: data)
-          jpg.bytes.withUnsafeBytes { bytes in
-            glTexImage2D(
-              GL_TEXTURE_2D, 0, GL_RGB,
-              GLsizei(jpg.width), GLsizei(jpg.height),
-              0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
-          }
-          onProgress(1.0)
-          image = nil
-        } else {
-          // Try generic loader
-          image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: data)
-          onProgress(1.0)
-        }
-        if let image {
-          image.bytes.withUnsafeBytes { bytes in
-            glTexImage2D(
-              GL_TEXTURE_2D, 0, GL_RGBA,
-              GLsizei(image.width), GLsizei(image.height),
-              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
-          }
-        }
-      } catch {
-        logger.error("Failed to decode compressed texture: \(error)")
-        glBindTexture(GL_TEXTURE_2D, 0)
-        onProgress(1.0)
+    
+    // If that fails, try loading from Bundle.game (for textures in the bundle)
+    // Remove any leading path separators and directory components
+    let cleanPath = texturePath.hasPrefix("/") ? String(texturePath.dropFirst()) : texturePath
+    let pathExtension = URL(fileURLWithPath: cleanPath).pathExtension
+    let pathWithoutExtension = URL(fileURLWithPath: cleanPath).deletingPathExtension().lastPathComponent
+    if let bundlePath = Bundle.game.path(forResource: cleanPath, ofType: nil) ?? (pathExtension.isEmpty ? nil : Bundle.game.path(forResource: pathWithoutExtension, ofType: pathExtension)) {
+      let bundleURL = URL(fileURLWithPath: bundlePath)
+      if let textureData = try? Data(contentsOf: bundleURL) {
+        loadTextureFromData(textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
         return
       }
-    } else {
-      // Handle uncompressed texture
-      let data = texture.textureData
-      logger.trace("Loading uncompressed texture: \(texture.width)x\(texture.height), data size: \(data.count)")
-
-      data.withUnsafeBytes { bytes in
-        // Assimp provides BGRA format, convert to RGBA for OpenGL
-        glTexImage2D(
-          GL_TEXTURE_2D, 0, GL_RGBA,
-          GLsizei(texture.width), GLsizei(texture.height),
-          0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+    }
+    
+    logger.warning("Failed to load external texture: \(texturePath) (tried: \(textureURL.path))")
+  }
+  
+  private func loadTextureFromData(_ data: Data, texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool) {
+    // Create a temporary EmbeddedTexture-like structure
+    let dataArray = Array(data)
+    let formatHint = URL(fileURLWithPath: texturePath).pathExtension.lowercased()
+    
+    // Determine format from file extension
+    let isPNG = formatHint == "png"
+    let isWebP = formatHint == "webp"
+    let isJPEG = formatHint == "jpg" || formatHint == "jpeg"
+    
+    do {
+      if isPNG {
+        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { _ in }
+        image.bytes.withUnsafeBytes { bytes in
+          glGenTextures(1, &textureID)
+          glBindTexture(GL_TEXTURE_2D, textureID)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          hasTexture = true
+        }
+      } else if isWebP {
+        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
+        image.bytes.withUnsafeBytes { bytes in
+          glGenTextures(1, &textureID)
+          glBindTexture(GL_TEXTURE_2D, textureID)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          hasTexture = true
+        }
+      } else if isJPEG {
+        let image = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
+        image.bytes.withUnsafeBytes { bytes in
+          glGenTextures(1, &textureID)
+          glBindTexture(GL_TEXTURE_2D, textureID)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGB,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          hasTexture = true
+        }
+      } else {
+        // Try generic loader
+        let image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
+        image.bytes.withUnsafeBytes { bytes in
+          glGenTextures(1, &textureID)
+          glBindTexture(GL_TEXTURE_2D, textureID)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          hasTexture = true
+        }
       }
-      onProgress(1.0)
+      
+      if hasTexture {
+        // Cache the texture
+        TextureCache.shared.cacheTexture(textureID, for: cacheKey)
+        logger.trace("Loaded external texture: \(texturePath)")
+      }
+    } catch {
+      logger.error("Failed to decode external texture \(texturePath): \(error)")
     }
-
-    // Check for OpenGL errors
-    let error = glGetError()
-    if error != GL_NO_ERROR {
-      logger.error("OpenGL texture error while loading \(texturePath): \(error)")
-      glBindTexture(GL_TEXTURE_2D, 0)
-      onProgress(1.0)
-      return
-    }
-
-    hasDiffuseTexture = true
-    glBindTexture(GL_TEXTURE_2D, 0)
-
-    // Cache the texture for future use
-    TextureCache.shared.cacheTexture(diffuseTexture, for: cacheKey)
-    logger.trace("Cached texture for key \(cacheKey)")
-    onProgress(1.0)
   }
 
+
   private func createOpenGLTexture(
-    from texture: Texture,
+    from embeddedTexture: EmbeddedTexture,
     texturePath: String,
     cacheKey: String,
     textureID: inout GLuint,
@@ -686,63 +700,54 @@ class MeshInstance: @unchecked Sendable {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
-    if texture.isCompressed {
-      // Handle compressed texture using ImageFormats decoders
-      let data = texture.textureData
-      logger.trace("Loading compressed texture: \(texture.achFormatHint), data size: \(data.count)")
+    let data = embeddedTexture.data
+    let dataArray = Array(data)
+    let formatHint = embeddedTexture.formatHint?.lowercased() ?? ""
+    
+    logger.debug("Creating OpenGL texture from embedded data: formatHint=\(formatHint), data size=\(data.count) bytes")
 
-      do {
-        // Try to determine format from hint
-        if texture.achFormatHint.lowercased().contains("png") {
-          let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { progress in
-            //print("Loading PNG texture: \(progress * 100)%")
-          }
-          image.bytes.withUnsafeBytes { bytes in
-            glTexImage2D(
-              GL_TEXTURE_2D, 0, GL_RGBA,
-              GLsizei(image.width), GLsizei(image.height),
-              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
-          }
-        } else if texture.achFormatHint.lowercased().contains("webp") {
-          let image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
-          image.bytes.withUnsafeBytes { bytes in
-            glTexImage2D(
-              GL_TEXTURE_2D, 0, GL_RGBA,
-              GLsizei(image.width), GLsizei(image.height),
-              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
-          }
-
-        } else if texture.achFormatHint.lowercased().contains("jpg")
-          || texture.achFormatHint.lowercased().contains("jpeg")
-        {
-          let image = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: data)
-          image.bytes.withUnsafeBytes { bytes in
-            glTexImage2D(
-              GL_TEXTURE_2D, 0, GL_RGB,
-              GLsizei(image.width), GLsizei(image.height),
-              0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
-          }
-        } else {
-          logger.error("Unsupported texture format: \(texture.achFormatHint)")
+    do {
+      // Try to determine format from hint
+      if formatHint.contains("png") {
+        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { progress in
+          //print("Loading PNG texture: \(progress * 100)%")
         }
-
-      } catch {
-        logger.error("Failed to decode compressed \(texture.achFormatHint) texture \(texturePath): \(error)")
-        glBindTexture(GL_TEXTURE_2D, 0)
-        return
+        image.bytes.withUnsafeBytes { bytes in
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        }
+      } else if formatHint.contains("webp") {
+        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
+        image.bytes.withUnsafeBytes { bytes in
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        }
+      } else if formatHint.contains("jpg") || formatHint.contains("jpeg") {
+        let image = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
+        image.bytes.withUnsafeBytes { bytes in
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGB,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        }
+      } else {
+        // Try generic loader
+        let image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
+        image.bytes.withUnsafeBytes { bytes in
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        }
       }
-    } else {
-      // Handle uncompressed texture
-      let data = texture.textureData
-      logger.trace("Loading uncompressed texture: \(texture.width)x\(texture.height), data size: \(data.count)")
-
-      data.withUnsafeBytes { bytes in
-        // Assimp provides BGRA format, convert to RGBA for OpenGL
-        glTexImage2D(
-          GL_TEXTURE_2D, 0, GL_RGBA,
-          GLsizei(texture.width), GLsizei(texture.height),
-          0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
-      }
+    } catch {
+      logger.error("Failed to decode texture \(texturePath): \(error)")
+      glBindTexture(GL_TEXTURE_2D, 0)
+      return
     }
 
     // Check for OpenGL errors
@@ -758,7 +763,7 @@ class MeshInstance: @unchecked Sendable {
 
     // Cache the texture for future use
     TextureCache.shared.cacheTexture(textureID, for: cacheKey)
-    logger.trace("Cached texture for key \(cacheKey)")
+    logger.debug("Cached texture for key \(cacheKey), textureID=\(textureID), hasTexture=\(hasTexture)")
   }
 
   /// Load HDRI environment map from EXR file
@@ -877,29 +882,25 @@ class MeshInstance: @unchecked Sendable {
 
 // MARK: - Scene helpers for transform matrices
 
-extension Assimp.Scene {
+extension Scene {
   /// Get transform matrix for a mesh by finding it in the node hierarchy
-  func getTransformMatrix(for mesh: Mesh) -> mat4 {
-    return findMeshTransform(mesh: mesh, node: rootNode, parentTransform: mat4(1))
+  func getTransformMatrix(for meshIndex: Int) -> mat4 {
+    return findMeshTransform(meshIndex: meshIndex, node: rootNode, parentTransform: mat4(1))
   }
 
-  private func findMeshTransform(mesh: Mesh, node: Assimp.Node, parentTransform: mat4) -> mat4 {
+  private func findMeshTransform(meshIndex: Int, node: Node, parentTransform: mat4) -> mat4 {
     // Get this node's transformation matrix
-    let nodeTransform = node.transformation.mat4Representation
+    let nodeTransform = node.transformation
     let globalTransform = parentTransform * nodeTransform
 
     // Check if this node contains the mesh
-    for i in 0..<node.numberOfMeshes {
-      let meshIndex = node.meshes[i]
-      if meshes[meshIndex] === mesh {
-        return globalTransform
-      }
+    if node.meshes.contains(meshIndex) {
+      return globalTransform
     }
 
     // Search in child nodes
-    for i in 0..<node.numberOfChildren {
-      let childNode = node.children[i]
-      let result = findMeshTransform(mesh: mesh, node: childNode, parentTransform: globalTransform)
+    for childNode in node.children {
+      let result = findMeshTransform(meshIndex: meshIndex, node: childNode, parentTransform: globalTransform)
       if result != mat4(1) {
         return result
       }
@@ -907,19 +908,12 @@ extension Assimp.Scene {
 
     return mat4(1)  // Not found
   }
-
 }
 
 // MARK: - Mesh helpers for packing GPU data
 
 extension Mesh {
   func makeVertices() -> [MeshVertex] {
-    let positions = vertices
-    let normals = self.normals
-    let uvs = texCoordsPacked.0
-    let tangents = self.tangents
-    let bitangents = self.bitangents
-
     var result: [MeshVertex] = []
     result.reserveCapacity(numberOfVertices)
 
@@ -930,7 +924,7 @@ extension Mesh {
     if numberOfBones > 0 {
       logger.trace("Mesh has \(numberOfBones) bones, weight map has \(boneWeightMap.count) entries")
       for (index, bone) in bones.enumerated() {
-        logger.trace("Bone \(index): \(bone.name ?? "Unknown") with \(bone.numberOfWeights) weights")
+        logger.trace("Bone \(index): \(bone.name ?? "Unknown") with \(bone.weights.count) weights")
       }
     }
 
@@ -940,26 +934,26 @@ extension Mesh {
         positions[i * 3 + 1],
         positions[i * 3 + 2]
       )
-      let n: (AssimpReal, AssimpReal, AssimpReal)
-      if normals.count >= (i * 3 + 3) {
+      let n: (Float, Float, Float)
+      if let normals = normals, normals.count >= (i * 3 + 3) {
         n = (normals[i * 3 + 0], normals[i * 3 + 1], normals[i * 3 + 2])
       } else {
         n = (0, 0, 0)
       }
-      let t: (AssimpReal, AssimpReal)
-      if let uvs, uvs.count >= (i * 2 + 2) {
+      let t: (Float, Float)
+      if let uvs = uvs, uvs.count >= (i * 2 + 2) {
         t = (uvs[i * 2 + 0], uvs[i * 2 + 1])
       } else {
         t = (0, 0)
       }
-      let tangent: (AssimpReal, AssimpReal, AssimpReal)
-      if tangents.count >= (i * 3 + 3) {
+      let tangent: (Float, Float, Float)
+      if let tangents = tangents, tangents.count >= (i * 3 + 3) {
         tangent = (tangents[i * 3 + 0], tangents[i * 3 + 1], tangents[i * 3 + 2])
       } else {
         tangent = (0, 0, 0)
       }
-      let bitangent: (AssimpReal, AssimpReal, AssimpReal)
-      if bitangents.count >= (i * 3 + 3) {
+      let bitangent: (Float, Float, Float)
+      if let bitangents = bitangents, bitangents.count >= (i * 3 + 3) {
         bitangent = (bitangents[i * 3 + 0], bitangents[i * 3 + 1], bitangents[i * 3 + 2])
       } else {
         bitangent = (0, 0, 0)
@@ -983,8 +977,8 @@ extension Mesh {
   }
 
   /// Create a mapping from vertex index to bone weights for efficient lookup
-  private func createBoneWeightMap() -> [Int: [(boneIndex: Int, weight: AssimpReal)]] {
-    var weightMap: [Int: [(boneIndex: Int, weight: AssimpReal)]] = [:]
+  private func createBoneWeightMap() -> [Int: [(boneIndex: Int, weight: Float)]] {
+    var weightMap: [Int: [(boneIndex: Int, weight: Float)]] = [:]
 
     // Initialize with empty arrays for all vertices
     for i in 0..<numberOfVertices {
@@ -994,15 +988,9 @@ extension Mesh {
     // Process each bone's weights with error handling
     for (boneIndex, bone) in bones.enumerated() {
       // Check if bone has valid weight data
-      guard bone.numberOfWeights > 0 else { continue }
+      guard !bone.weights.isEmpty else { continue }
 
-      // Try to access bone weights safely
-      let boneWeights = bone.weights
-
-      // Check if we got valid weights
-      guard !boneWeights.isEmpty else { continue }
-
-      for weight in boneWeights {
+      for weight in bone.weights {
         let vertexIndex = weight.vertexIndex
         if vertexIndex < numberOfVertices {
           weightMap[vertexIndex, default: []].append((boneIndex: boneIndex, weight: weight.weight))
@@ -1014,8 +1002,8 @@ extension Mesh {
   }
 
   /// Get bone indices and weights for a specific vertex
-  private func getBoneData(for vertexIndex: Int, boneWeightMap: [Int: [(boneIndex: Int, weight: AssimpReal)]]) -> (
-    (UInt8, UInt8, UInt8, UInt8), (AssimpReal, AssimpReal, AssimpReal, AssimpReal)
+  private func getBoneData(for vertexIndex: Int, boneWeightMap: [Int: [(boneIndex: Int, weight: Float)]]) -> (
+    (UInt8, UInt8, UInt8, UInt8), (Float, Float, Float, Float)
   ) {
     guard let vertexWeights = boneWeightMap[vertexIndex], !vertexWeights.isEmpty else {
       // No bone weights for this vertex
@@ -1026,7 +1014,7 @@ extension Mesh {
     let sortedWeights = vertexWeights.sorted { $0.weight > $1.weight }.prefix(4)
 
     var indices: (UInt8, UInt8, UInt8, UInt8) = (0, 0, 0, 0)
-    var weights: (AssimpReal, AssimpReal, AssimpReal, AssimpReal) = (0, 0, 0, 0)
+    var weights: (Float, Float, Float, Float) = (0, 0, 0, 0)
 
     for (i, weightData) in sortedWeights.enumerated() {
       switch i {

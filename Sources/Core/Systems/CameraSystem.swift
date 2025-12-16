@@ -1,4 +1,3 @@
-import Assimp
 import Foundation
 
 /// Manages camera syncing, triggers, and script overrides
@@ -6,7 +5,7 @@ import Foundation
 public final class CameraSystem {
   // MARK: - State
 
-  public private(set) var camera: Assimp.Camera?
+  public private(set) var camera: Camera?
   public private(set) var cameraNode: Node?
   public private(set) var cameraWorldTransform: mat4 = mat4(1)
 
@@ -65,47 +64,29 @@ public final class CameraSystem {
 
   /// Extract a Float value from node metadata
   private func extractFloatFromMetadata(_ node: Node, key: String) -> Float? {
-    guard let metadata = node.metadata?.metadata[key],
-      case .double(let value) = metadata
-    else { return nil }
-    return Float(value)
+    guard let metadata = node.metadata,
+      let entry = metadata.metadata[key]
+    else {
+      return nil
+    }
+    switch entry {
+    case .float(let value):
+      return value
+    case .int(let value):
+      return Float(value)
+    case .bool, .string, .vec3:
+      return nil
+    }
   }
 
   /// Print all metadata for a camera node (for debugging)
+  /// Note: Node doesn't have metadata - this is a placeholder for future implementation
   private func printCameraNodeMetadata(_ node: Node) {
-    guard let metadata = node.metadata else {
-      logger.trace("📋 Camera node '\(node.name)' has no metadata")
-      return
-    }
-
-    logger.trace("📋 Camera node '\(node.name)' metadata (\(metadata.numberOfProperties) properties):")
-    for i in 0..<metadata.numberOfProperties {
-      let key = metadata.keys[i]
-      let value = metadata.metadata[key]
-      let valueDescription: String
-      switch value {
-      case .bool(let v):
-        valueDescription = "bool(\(v))"
-      case .int32(let v):
-        valueDescription = "int32(\(v))"
-      case .float(let v):
-        valueDescription = "float(\(v))"
-      case .double(let v):
-        valueDescription = "double(\(v))"
-      case .string(let v):
-        valueDescription = "string(\"\(v)\")"
-      case .uint64(let v):
-        valueDescription = "uint64(\(v))"
-      case .vec3(let v):
-        valueDescription = "vec3(\(v.x), \(v.y), \(v.z))"
-      case .metadata(let v):
-        valueDescription = "metadata(\(v.numberOfProperties) properties)"
-      case .none:
-        valueDescription = "none"
-      @unknown default:
-        valueDescription = "unknown type"
-      }
-      logger.trace("  - \(key): \(valueDescription)")
+    // TODO: Add metadata support to Node if needed
+    if let metadata = node.metadata {
+      logger.trace("📋 Camera node '\(node.name)' has \(metadata.numberOfProperties) metadata properties")
+    } else {
+      logger.trace("📋 Camera node '\(node.name)' (metadata not yet supported for Node)")
     }
   }
 
@@ -119,7 +100,7 @@ public final class CameraSystem {
     // Find camera node by base name
     if let node = scene.cameraNode(named: baseName) {
       cameraNode = node
-      cameraWorldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      cameraWorldTransform = node.calculateWorldTransform()
       logger.trace("✅ Active camera node: \(node.name)")
       // Debug: Print camera transform
       let cameraPos = vec3(cameraWorldTransform[3].x, cameraWorldTransform[3].y, cameraWorldTransform[3].z)

@@ -1,5 +1,3 @@
-import Assimp
-
 final class ModelViewer: RenderLoop {
   // UI
   private let promptList = PromptList(.modelViewer)
@@ -70,14 +68,13 @@ final class ModelViewer: RenderLoop {
       self.meshInstances = loaded
       self.loadingProgress.markCompleted()
 
-      if let assimpScene = loaded.first?.scene {
-        // Wrap in our Scene wrapper
-        let scene = Scene(assimpScene)
-        currentScene = scene
-        currentAnimationNames = scene.animations.enumerated().map { idx, a in
+      if let sceneData = loaded.first?.sceneData {
+        currentScene = sceneData
+        currentAnimationNames = sceneData.animations.enumerated().map { idx, a in
           if let name = a.name, !name.isEmpty { return name }
           return "Animation \(idx + 1)"
         }
+
         currentAnimationIndex = 0
         playCurrentAnimation()
       }
@@ -197,8 +194,8 @@ final class ModelViewer: RenderLoop {
   }
 
   private func playCurrentAnimation() {
-    guard let scene = currentScene,
-      currentAnimationIndex < scene.animations.count
+    guard let sceneData = currentScene,
+      currentAnimationIndex < sceneData.animations.count
     else {
       logger.warning(
         "ModelViewer: Cannot play animation - scene: \(currentScene != nil), index: \(currentAnimationIndex), count: \(currentScene?.animations.count ?? 0)"
@@ -206,7 +203,7 @@ final class ModelViewer: RenderLoop {
       return
     }
 
-    let animation = scene.animations[currentAnimationIndex]
+    let animation = sceneData.animations[currentAnimationIndex]
     logger.trace(
       "ModelViewer: Playing animation \(currentAnimationIndex): \(currentAnimationNames[safe: currentAnimationIndex] ?? "Unknown")"
     )
@@ -288,7 +285,7 @@ final class ModelViewer: RenderLoop {
         "Controls".draw(
           at: Point(originX, headerTopY),
           style: headerStyle,
-          anchor: .topLeft
+          anchor: .bottomLeft
         )
 
         // Draw divider below the header
@@ -304,6 +301,7 @@ final class ModelViewer: RenderLoop {
         let promptListTopY = headerBottomY - headerSpacing
         let promptListOrigin = Point(originX, promptListTopY)
         //Rect(origin: promptListOrigin, size: Size(10, 10)).frame(with: .red)
+        secondaryPromptList.iconOpacity = 0.6
         secondaryPromptList.draw(
           prompts: prompts,
           inputSource: .player1,
@@ -323,7 +321,7 @@ final class ModelViewer: RenderLoop {
     // Get all bone transforms for skeletal animation
     let boneTransforms =
       currentScene != nil
-      ? nodeAnimator.calculateBoneTransforms(scene: currentScene!) : nodeAnimator.getAllNodeTransforms()
+      ? nodeAnimator.calculateBoneTransforms(sceneData: currentScene!) : nodeAnimator.getAllNodeTransforms()
 
     meshInstances.forEach { meshInstance in
       // Update bone transforms for skeletal meshes
@@ -352,15 +350,15 @@ final class ModelViewer: RenderLoop {
   }
 
   private func getAnimatedTransform(for meshInstance: MeshInstance) -> mat4 {
-    guard let scene = currentScene else { return mat4(1) }
+    guard let sceneData = currentScene else { return mat4(1) }
 
     // Find the mesh index in the scene
-    guard let meshIndex = findMeshIndex(for: meshInstance, in: scene) else {
+    guard let meshIndex = findMeshIndex(for: meshInstance, in: sceneData) else {
       return mat4(1)
     }
 
     // Get the mesh from the scene
-    let mesh = scene.meshes[meshIndex]
+    let mesh = sceneData.meshes[meshIndex]
 
     // If this mesh has bones, we need to apply skeletal animation
     if mesh.numberOfBones > 0 {
@@ -384,31 +382,16 @@ final class ModelViewer: RenderLoop {
     }
   }
 
-  private func findMeshIndex(for meshInstance: MeshInstance, in scene: Scene) -> Int? {
-    let index = scene.meshes.firstIndex { $0 === meshInstance.mesh }
+  private func findMeshIndex(for meshInstance: MeshInstance, in sceneData: Scene) -> Int? {
+    // Since Mesh is a struct, we need to compare by value or use a different approach
+    // For now, we'll search by comparing mesh properties
+    let index = sceneData.meshes.firstIndex { mesh in
+      mesh.numberOfVertices == meshInstance.mesh.numberOfVertices
+        && mesh.numberOfFaces == meshInstance.mesh.numberOfFaces
+        && mesh.materialIndex == meshInstance.mesh.materialIndex
+    }
     logger.trace("ModelViewer: Looking for mesh, found index: \(index ?? -1)")
     return index
-  }
-
-  private func findNodeName(for meshIndex: Int, in scene: Scene) -> String? {
-    return findNodeNameRecursive(node: scene.rootNode, meshIndex: meshIndex)
-  }
-
-  private func findNodeNameRecursive(node: Node, meshIndex: Int) -> String? {
-    // Check if this node contains the mesh
-    if node.meshes.contains(meshIndex) {
-      logger.trace("ModelViewer: Found node '\(node.name.isEmpty ? "unnamed" : node.name)' for mesh index \(meshIndex)")
-      return node.name.isEmpty ? nil : node.name
-    }
-
-    // Search in child nodes
-    for child in node.children {
-      if let found = findNodeNameRecursive(node: child, meshIndex: meshIndex) {
-        return found
-      }
-    }
-
-    return nil
   }
 
   private func drawLoadingProgress() {
@@ -440,7 +423,6 @@ final class ModelViewer: RenderLoop {
     // Position model name and animation name near bottom of screen
     let modelNameY: Float = 160  // 160 pixels from bottom
     let animationNameY: Float = 128  // 128 pixels from bottom
-    let dividerSpacing: Float = 20  // Space between text and divider
 
     // Gradient divider line between model name and animation name
     // Fade from both ends: clear -> white -> clear
@@ -464,19 +446,19 @@ final class ModelViewer: RenderLoop {
     // Align prompts vertically with text baseline
     prevModelPrompt.iconOpacity = 0.6
     prevModelPrompt.draw(
-      at: Point(centerX - promptAreaWidth / 2, modelNameY),
+      at: Point(centerX - promptAreaWidth * 0.4, modelNameY),
       anchor: .right
     )
 
     modelName.draw(
       at: Point(centerX, modelNameY),
       style: .itemName,
-      anchor: .bottom
+      anchor: .center
     )
 
     nextModelPrompt.iconOpacity = 0.6
     nextModelPrompt.draw(
-      at: Point(centerX + promptAreaWidth / 2, modelNameY),
+      at: Point(centerX + promptAreaWidth * 0.4, modelNameY),
       anchor: .left
     )
 
@@ -484,7 +466,7 @@ final class ModelViewer: RenderLoop {
     // Always draw the prompts, even if no animations are loaded
     prevAnimationPrompt.iconOpacity = 0.6
     prevAnimationPrompt.draw(
-      at: Point(centerX - promptAreaWidth / 2, animationNameY),
+      at: Point(centerX - promptAreaWidth * 0.4, animationNameY),
       anchor: .right
     )
 
@@ -496,13 +478,13 @@ final class ModelViewer: RenderLoop {
       displayText.draw(
         at: Point(centerX, animationNameY),
         style: .itemDescription,
-        anchor: .bottom
+        anchor: .center
       )
     }
 
     nextAnimationPrompt.iconOpacity = 0.6
     nextAnimationPrompt.draw(
-      at: Point(centerX + promptAreaWidth / 2, animationNameY),
+      at: Point(centerX + promptAreaWidth * 0.4, animationNameY),
       anchor: .left
     )
   }

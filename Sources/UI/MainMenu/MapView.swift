@@ -1,6 +1,7 @@
 import Assimp
 import Foundation
 import GLMath
+import GLTF
 
 private let defaultMapZoom: Float = 0.58
 
@@ -57,7 +58,7 @@ class MapView: RenderLoop {
   }
 
   // Camera from scene
-  private var debugCamera: Assimp.Camera?
+  private var debugCamera: Camera?
   private var debugCameraNode: Node?
   private var debugCameraWorldTransform: mat4 = mat4(1)
 
@@ -147,7 +148,7 @@ class MapView: RenderLoop {
     "reception_area",
   ]
 
-  private var currentMapIndex: Int = 1  // Start with shooting_range
+  private var currentMapIndex: Int = 0  // Start with shooting_range
 
   // Temporary hack: map raw map names to display names
   private let mapDisplayNames: [String: String] = [
@@ -178,14 +179,23 @@ class MapView: RenderLoop {
 
   init() {
     // Initialize map shader
-    do {
-      mapShaderProgram = try GLProgram("Common/mapMesh", "Common/mapMesh")
-    } catch {
-      // Failed to load map shader
-    }
+    mapShaderProgram = try! GLProgram("Common/mapMesh", "Common/mapMesh")
 
-    // Sync to current scene if available, otherwise use default
-    syncToCurrentScene()
+    // Note: Don't auto-sync to current scene - caller should call syncToCurrentScene() explicitly if needed
+  }
+
+  /// Convenience initializer for dev purposes - loads a specific scene
+  convenience init(scene sceneName: String) {
+    self.init()
+
+    // Load the specified scene
+    if let index = availableMaps.firstIndex(of: sceneName) {
+      currentMapIndex = index
+      loadMap(at: currentMapIndex)
+    } else {
+      logger.warning("⚠️ MapView: Scene '\(sceneName)' not found in availableMaps, using default")
+      loadMap(at: currentMapIndex)
+    }
   }
 
   /// Sync the map view to show the map that the player is currently in
@@ -244,17 +254,41 @@ class MapView: RenderLoop {
     Task {
       do {
         let scenePath = Bundle.game.path(forResource: "Scenes/\(mapName)", ofType: "glb")!
-        let assimpScene = try Assimp.Scene(
-          file: scenePath,
-          flags: [.triangulate, .flipUVs, .calcTangentSpace, .removeComponent]
-        )
+        let url = URL(fileURLWithPath: scenePath)
+        let gltfDocument = try await GLTFDocument(contentsOf: url)
         await MainActor.run {
-          self.scene = Scene(assimpScene)
+          self.scene = Scene(gltfDocument, filePath: scenePath, skipMaterials: true)
         }
       } catch {
         // Failed to load scene
       }
     }
+  }
+
+  /// Helper to calculate bounding box for a Node's meshes
+  private func calculateBoundingBox(for node: Node, transform: mat4, in scene: Scene) -> (min: vec3, max: vec3) {
+    var minBounds = vec3(Float.infinity, Float.infinity, Float.infinity)
+    var maxBounds = vec3(-Float.infinity, -Float.infinity, -Float.infinity)
+
+    for meshIndex in node.meshes {
+      guard meshIndex < scene.meshes.count else { continue }
+      let mesh = scene.meshes[meshIndex]
+      let meshBounds = mesh.calculateBoundingBox(transform: transform)
+      minBounds.x = min(minBounds.x, meshBounds.min.x)
+      minBounds.y = min(minBounds.y, meshBounds.min.y)
+      minBounds.z = min(minBounds.z, meshBounds.min.z)
+      maxBounds.x = max(maxBounds.x, meshBounds.max.x)
+      maxBounds.y = max(maxBounds.y, meshBounds.max.y)
+      maxBounds.z = max(maxBounds.z, meshBounds.max.z)
+    }
+
+    if minBounds.x == Float.infinity {
+      // No meshes - return small box around position
+      let pos = vec3(transform[3].x, transform[3].y, transform[3].z)
+      return (min: pos - vec3(0.1), max: pos + vec3(0.1))
+    }
+
+    return (min: minBounds, max: maxBounds)
   }
 
   private func setupMapRendering() {
@@ -263,7 +297,7 @@ class MapView: RenderLoop {
     // Find and set up @Camera 0 (debug/orthographic camera)
     if let cameraNode = scene.cameraNode(named: "0") {
       debugCameraNode = cameraNode
-      debugCameraWorldTransform = cameraNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      debugCameraWorldTransform = cameraNode.calculateWorldTransform()
     }
 
     if let cameraNode = scene.cameraNode(named: "0"),
@@ -283,8 +317,8 @@ class MapView: RenderLoop {
 
     // Store area data for labels (only actual area nodes)
     for node in areaNodes {
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
-      let boundingBox = node.assimpNode.calculateBoundingBox(transform: worldTransform, in: scene.assimpScene)
+      let worldTransform = node.calculateWorldTransform()
+      let boundingBox = calculateBoundingBox(for: node, transform: worldTransform, in: scene)
 
       // Find the Floor node within this area node's children
       let floorNode = findFloorNode(in: node)
@@ -292,8 +326,8 @@ class MapView: RenderLoop {
     }
 
     // Create mesh instances for floors
-    for node in floorNodes {
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    for node in scene.floorNodes {
+      let worldTransform = node.calculateWorldTransform()
 
       // Find which area this floor belongs to
       var areaIndex: Int? = nil
@@ -306,11 +340,11 @@ class MapView: RenderLoop {
 
       for meshIndex in node.meshes {
         guard meshIndex < scene.meshes.count else { continue }
-        let mesh = scene.meshes[Int(meshIndex)]
+        let mesh = scene.meshes[meshIndex]
         guard mesh.numberOfVertices > 0 else { continue }
 
         let meshInstance = MeshInstance(
-          scene: scene,
+          sceneData: scene,
           mesh: mesh,
           transformMatrix: worldTransform,
           sceneIdentifier: scene.filePath
@@ -331,15 +365,15 @@ class MapView: RenderLoop {
     }
 
     // Create mesh instances for door actions
-    for node in doorActionNodes {
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    for node in scene.doorNodes {
+      let worldTransform = node.calculateWorldTransform()
       for meshIndex in node.meshes {
         guard meshIndex < scene.meshes.count else { continue }
-        let mesh = scene.meshes[Int(meshIndex)]
+        let mesh = scene.meshes[meshIndex]
         guard mesh.numberOfVertices > 0 else { continue }
 
         let meshInstance = MeshInstance(
-          scene: scene,
+          sceneData: scene,
           mesh: mesh,
           transformMatrix: worldTransform,
           sceneIdentifier: scene.filePath
@@ -732,9 +766,9 @@ class MapView: RenderLoop {
     // Count edges from all faces
     for face in mesh.faces {
       guard face.indices.count >= 3 else { continue }
-      edgeCount[edgeKey(face.indices[0], face.indices[1]), default: 0] += 1
-      edgeCount[edgeKey(face.indices[1], face.indices[2]), default: 0] += 1
-      edgeCount[edgeKey(face.indices[2], face.indices[0]), default: 0] += 1
+      edgeCount[edgeKey(UInt32(face.indices[0]), UInt32(face.indices[1])), default: 0] += 1
+      edgeCount[edgeKey(UInt32(face.indices[1]), UInt32(face.indices[2])), default: 0] += 1
+      edgeCount[edgeKey(UInt32(face.indices[2]), UInt32(face.indices[0])), default: 0] += 1
     }
 
     // Collect border edges as line segments (local to this function)
@@ -750,20 +784,34 @@ class MapView: RenderLoop {
       ]
 
       for (a, b) in edges {
-        if edgeCount[edgeKey(a, b)] == 1 {
+        // Validate vertex indices are within bounds
+        guard a >= 0 && a < mesh.numberOfVertices && b >= 0 && b < mesh.numberOfVertices else {
+          logger.warning("⚠️ Invalid vertex indices in face: a=\(a), b=\(b), numberOfVertices=\(mesh.numberOfVertices)")
+          continue
+        }
+
+        if edgeCount[edgeKey(UInt32(a), UInt32(b))] == 1 {
           // This is a border edge
           let baseA = Int(a) * 3
           let baseB = Int(b) * 3
 
+          // Double-check bounds for position array access
+          guard baseA + 2 < mesh.positions.count && baseB + 2 < mesh.positions.count else {
+            logger.warning(
+              "⚠️ Position array bounds check failed: baseA=\(baseA), baseB=\(baseB), positions.count=\(mesh.positions.count)"
+            )
+            continue
+          }
+
           let localA = vec3(
-            Float(mesh.vertices[baseA]),
-            Float(mesh.vertices[baseA + 1]),
-            Float(mesh.vertices[baseA + 2])
+            mesh.positions[baseA],
+            mesh.positions[baseA + 1],
+            mesh.positions[baseA + 2]
           )
           let localB = vec3(
-            Float(mesh.vertices[baseB]),
-            Float(mesh.vertices[baseB + 1]),
-            Float(mesh.vertices[baseB + 2])
+            mesh.positions[baseB],
+            mesh.positions[baseB + 1],
+            mesh.positions[baseB + 2]
           )
 
           let worldA = transform * vec4(localA.x, localA.y, localA.z, 1.0)
@@ -891,12 +939,12 @@ class MapView: RenderLoop {
     // Calculate bounds from actual mesh vertices
     for meshInstance in floorMeshInstances {
       let transform = meshInstance.transformMatrix
-      let vertices = meshInstance.mesh.vertices
+      let positions = meshInstance.mesh.positions
       for i in 0..<meshInstance.mesh.numberOfVertices {
         let localPos = vec3(
-          Float(vertices[i * 3 + 0]),
-          Float(vertices[i * 3 + 1]),
-          Float(vertices[i * 3 + 2])
+          positions[i * 3 + 0],
+          positions[i * 3 + 1],
+          positions[i * 3 + 2]
         )
         let worldPos = transform * vec4(localPos.x, localPos.y, localPos.z, 1.0)
         minX = min(minX, worldPos.x)
@@ -908,12 +956,12 @@ class MapView: RenderLoop {
 
     for meshInstance in doorMeshInstances {
       let transform = meshInstance.transformMatrix
-      let vertices = meshInstance.mesh.vertices
+      let positions = meshInstance.mesh.positions
       for i in 0..<meshInstance.mesh.numberOfVertices {
         let localPos = vec3(
-          Float(vertices[i * 3 + 0]),
-          Float(vertices[i * 3 + 1]),
-          Float(vertices[i * 3 + 2])
+          positions[i * 3 + 0],
+          positions[i * 3 + 1],
+          positions[i * 3 + 2]
         )
         let worldPos = transform * vec4(localPos.x, localPos.y, localPos.z, 1.0)
         minX = min(minX, worldPos.x)
@@ -1635,19 +1683,14 @@ class MapView: RenderLoop {
         // Use area node's baseName (e.g., "@Area Hallway" -> "Hallway")
         labelText = areaBaseName
       } else if let floorNode = floorNode {
-        // Try floor node's metadata
-        if let metadata = floorNode.metadata?.metadata["label"],
-          case .string(let labelString) = metadata
-        {
-          labelText = labelString
+        // Try floor node's metadata (Node may have metadata from Assimp)
+        // Metadata access is available if node was created from Assimp
+        // Try floor node's baseName
+        let floorBaseName = floorNode.baseName
+        if !floorBaseName.isEmpty && floorBaseName != floorNode.name {
+          labelText = floorBaseName
         } else {
-          // Try floor node's baseName
-          let floorBaseName = floorNode.baseName
-          if !floorBaseName.isEmpty && floorBaseName != floorNode.name {
-            labelText = floorBaseName
-          } else {
-            labelText = "Area \(areaNumber)"
-          }
+          labelText = "Area \(areaNumber)"
         }
       } else {
         labelText = "Area \(areaNumber)"
@@ -1935,7 +1978,7 @@ class MapView: RenderLoop {
     let markerNodes = scene.mapMarkerNodes
 
     for node in markerNodes {
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let worldTransform = node.calculateWorldTransform()
       // Get position from transform matrix (translation component)
       let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
       mapMarkers.append((node: node, position: position))
@@ -2019,7 +2062,7 @@ class MapView: RenderLoop {
   private func findFloorNode(in areaNode: Node) -> Node? {
     // Check if this node itself is a floor node
     guard let scene = scene else { return nil }
-    if scene.hasHint(areaNode, hint: .floor) {
+    if scene.hasHint(areaNode, hint: ImportHint.floor) {
       return areaNode
     }
 

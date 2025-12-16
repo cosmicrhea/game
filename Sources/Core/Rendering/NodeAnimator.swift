@@ -1,6 +1,4 @@
-import Assimp
-
-/// A class that can play NodeAnimations from Assimp scenes
+/// A class that can play Animations from our scene data
 class NodeAnimator {
   private var currentTime: Double = 0.0
   private var isPlaying: Bool = false
@@ -24,6 +22,7 @@ class NodeAnimator {
     self.animation = animation
     self.isPlaying = true
     self.currentTime = 0.0
+    self.nodeTransforms.removeAll()
   }
 
   /// Stop the current animation
@@ -69,39 +68,54 @@ class NodeAnimator {
   }
 
   /// Calculate bone transforms for skeletal animation
-  func calculateBoneTransforms(scene: Scene) -> [String: mat4] {
+  /// Following LearnOpenGL tutorial: https://learnopengl.com/Guest-Articles/2020/Skeletal-Animation
+  ///
+  /// The standard approach:
+  /// 1. Calculate global transforms for all bones in current animated pose
+  /// 2. Calculate global inverse transform (inverse of root node's global transform)
+  /// 3. Final bone matrix = GlobalInverseTransform * currentGlobalTransform * offsetMatrix
+  ///    (where offsetMatrix is the inverse bind pose transform)
+  func calculateBoneTransforms(sceneData: Scene) -> [String: mat4] {
     var boneTransforms: [String: mat4] = [:]
 
-    // For skeletal animation, we need to calculate the final bone matrices
-    // that will be sent to the GPU. These should be: currentBoneTransform * offsetMatrix
+    // Step 1: Calculate global transforms for all bones in the CURRENT animated pose
+    var globalAnimatedTransforms: [String: mat4] = [:]
+    calculateGlobalNodeTransforms(
+      node: sceneData.rootNode,
+      parentTransform: mat4(1),
+      globalTransforms: &globalAnimatedTransforms,
+      depth: 0
+    )
 
-    // First, get all the node transforms from animation
-    let nodeTransforms = getAllNodeTransforms()
+    // Step 2: Calculate global inverse transform (inverse of root node's global transform)
+    // This accounts for any root-level transformations in the model
+    let rootGlobalTransform = globalAnimatedTransforms[sceneData.rootNode.name] ?? sceneData.rootNode.transformation
+    let globalInverseTransform = inverse(rootGlobalTransform)
 
-    // Debug: Print available node transforms
-    logger.trace("Available node transforms: \(nodeTransforms.keys.joined(separator: ", "))")
-
-    // Then calculate the final bone matrices for each mesh
-    for mesh in scene.meshes {
+    // Step 3: Calculate final bone matrices for each mesh
+    // The bone transform should transform vertices from bone space (bind pose) to mesh space (current pose)
+    //
+    // The offsetMatrix transforms: mesh space (bind pose) -> bone space (bind pose)
+    // To go the other way: bone space (bind pose) -> mesh space (bind pose), we need inverse(offsetMatrix)
+    // Then to go from bind pose to current pose: currentGlobalTransform
+    // So: currentGlobalTransform * inverse(offsetMatrix)
+    for mesh in sceneData.meshes {
       if mesh.numberOfBones > 0 {
-        logger.trace("Processing mesh with \(mesh.numberOfBones) bones")
         for (boneIndex, bone) in mesh.bones.enumerated() {
           guard let boneName = bone.name else { continue }
 
-          // Get the current animated transform for this bone
-          let currentTransform = nodeTransforms[boneName] ?? mat4(1)
+          // Get global transform in current animated pose
+          let currentGlobalTransform = globalAnimatedTransforms[boneName] ?? mat4(1)
 
-          // Convert Assimp offset matrix to GLMath mat4
-          let offsetMatrix = bone.offsetMatrix.mat4Representation
+          // Get offset matrix (transforms from mesh space to bone space in bind pose)
+          let offsetMatrix = bone.offsetMatrix
 
-          // The final bone matrix is: currentTransform * offsetMatrix
-          let finalBoneMatrix = currentTransform * offsetMatrix
+          // Try: currentGlobalTransform * inverse(offsetMatrix)
+          // This should transform: bone space (bind) -> mesh space (bind) -> mesh space (current)
+          let finalBoneMatrix = currentGlobalTransform * inverse(offsetMatrix)
 
           // Store with bone index as key for GPU access
           boneTransforms["\(boneIndex)"] = finalBoneMatrix
-
-          logger.trace(
-            "Bone \(boneIndex) (\(boneName)): current=\(currentTransform != mat4(1)), final=\(finalBoneMatrix)")
         }
       }
     }
@@ -109,31 +123,44 @@ class NodeAnimator {
     return boneTransforms
   }
 
-  private func calculateBoneTransformsRecursive(
+  /// Calculate global transforms for all nodes by traversing the hierarchy
+  private func calculateGlobalNodeTransforms(
     node: Node,
     parentTransform: mat4,
-    boneTransforms: inout [String: mat4]
+    globalTransforms: inout [String: mat4],
+    depth: Int = 0
   ) {
-    // Get the node's local transform
-    let nodeTransform = node.transformation.mat4Representation
+    // Get the node's bind pose transform from the scene hierarchy
+    let bindPoseTransform = node.transformation
 
-    // Get animated transform if available
-    let animatedTransform = nodeTransforms[node.name] ?? mat4(1)
-
-    // Calculate global transform
-    let globalTransform = parentTransform * nodeTransform * animatedTransform
-
-    // Store the transform if this is a bone
-    if !node.name.isEmpty {
-      boneTransforms[node.name] = globalTransform
+    // Determine the local transform for this node:
+    // 1. If it has animation in the current animation, use that
+    // 2. Otherwise, use the bind pose transform from the scene hierarchy
+    let localTransform: mat4
+    if let animatedTransform = nodeTransforms[node.name] {
+      // This node is animated in the current animation
+      localTransform = animatedTransform
+    } else {
+      // Use bind pose from scene hierarchy
+      localTransform = bindPoseTransform
     }
 
-    // Process children
+    // Calculate global transform: parentGlobalTransform * localTransform
+    // This builds the hierarchy from root to leaf
+    let globalTransform = parentTransform * localTransform
+
+    // Store the global transform for this node
+    if !node.name.isEmpty {
+      globalTransforms[node.name] = globalTransform
+    }
+
+    // Recursively process children
     for child in node.children {
-      calculateBoneTransformsRecursive(
+      calculateGlobalNodeTransforms(
         node: child,
         parentTransform: globalTransform,
-        boneTransforms: &boneTransforms
+        globalTransforms: &globalTransforms,
+        depth: depth + 1
       )
     }
   }
@@ -148,15 +175,18 @@ class NodeAnimator {
 
     // Process each animation channel
     for channel in animation.channels {
-      guard let nodeName = channel.nodeName else { continue }
+      let nodeName = channel.nodeName
 
       let transform = calculateNodeTransform(for: channel, at: currentTime)
       nodeTransforms[nodeName] = transform
     }
 
+    logger.trace(
+      "Updated \(nodeTransforms.count) node transforms for animation '\(animation.name ?? "unnamed")' at time \(currentTime)"
+    )
   }
 
-  private func calculateNodeTransform(for channel: NodeAnimation, at time: Double) -> mat4 {
+  private func calculateNodeTransform(for channel: AnimationChannel, at time: Double) -> mat4 {
     // Get interpolated position
     let position = interpolatePosition(channel: channel, time: time)
 
@@ -167,19 +197,23 @@ class NodeAnimator {
     let scale = interpolateScale(channel: channel, time: time)
 
     // Build transformation matrix
-    let translationMatrix = GLMath.translate(mat4(1), position)
-    let rotationMatrix = quaternionToMatrix(rotation)
+    // Order: Scale -> Rotate -> Translate (SRT order)
+    // This is the standard order for local transforms
     let scaleMatrix = GLMath.scale(mat4(1), scale)
+    let rotationMatrix = quaternionToMatrix(rotation)
+    let translationMatrix = GLMath.translate(mat4(1), position)
 
+    // Matrix multiplication order: T * R * S
+    // This means: first scale, then rotate, then translate
     return translationMatrix * rotationMatrix * scaleMatrix
   }
 
-  private func interpolatePosition(channel: NodeAnimation, time: Double) -> vec3 {
+  private func interpolatePosition(channel: AnimationChannel, time: Double) -> vec3 {
     let keys = channel.positionKeys
     guard !keys.isEmpty else { return vec3(0) }
 
     if keys.count == 1 {
-      return vec3(Float(keys[0].value.x), Float(keys[0].value.y), Float(keys[0].value.z))
+      return keys[0].value
     }
 
     // Find the two keys to interpolate between
@@ -189,25 +223,23 @@ class NodeAnimator {
         let t2 = keys[i + 1].time
         let factor = Float((time - t1) / (t2 - t1))
 
-        let v1 = vec3(Float(keys[i].value.x), Float(keys[i].value.y), Float(keys[i].value.z))
-        let v2 = vec3(Float(keys[i + 1].value.x), Float(keys[i + 1].value.y), Float(keys[i + 1].value.z))
+        let v1 = keys[i].value
+        let v2 = keys[i + 1].value
 
         return v1 + (v2 - v1) * factor
       }
     }
 
     // Return last key if time is beyond animation
-    let lastKey = keys.last!
-    return vec3(Float(lastKey.value.x), Float(lastKey.value.y), Float(lastKey.value.z))
+    return keys.last!.value
   }
 
-  private func interpolateRotation(channel: NodeAnimation, time: Double) -> Quaternion<Float> {
+  private func interpolateRotation(channel: AnimationChannel, time: Double) -> Quaternion<Float> {
     let keys = channel.rotationKeys
     guard !keys.isEmpty else { return Quaternion<Float>(1, 0, 0, 0) }
 
     if keys.count == 1 {
-      let q = keys[0].value
-      return Quaternion<Float>(q.w, q.x, q.y, q.z)
+      return keys[0].value
     }
 
     // Find the two keys to interpolate between
@@ -217,25 +249,23 @@ class NodeAnimator {
         let t2 = keys[i + 1].time
         let factor = Float((time - t1) / (t2 - t1))
 
-        let q1 = Quaternion<Float>(keys[i].value.w, keys[i].value.x, keys[i].value.y, keys[i].value.z)
-        let q2 = Quaternion<Float>(keys[i + 1].value.w, keys[i + 1].value.x, keys[i + 1].value.y, keys[i + 1].value.z)
+        let q1 = keys[i].value
+        let q2 = keys[i + 1].value
 
         return slerp(q1, q2, factor)
       }
     }
 
     // Return last key if time is beyond animation
-    let lastKey = keys.last!
-    let q = lastKey.value
-    return Quaternion<Float>(q.w, q.x, q.y, q.z)
+    return keys.last!.value
   }
 
-  private func interpolateScale(channel: NodeAnimation, time: Double) -> vec3 {
+  private func interpolateScale(channel: AnimationChannel, time: Double) -> vec3 {
     let keys = channel.scalingKeys
     guard !keys.isEmpty else { return vec3(1) }
 
     if keys.count == 1 {
-      return vec3(Float(keys[0].value.x), Float(keys[0].value.y), Float(keys[0].value.z))
+      return keys[0].value
     }
 
     // Find the two keys to interpolate between
@@ -245,16 +275,15 @@ class NodeAnimator {
         let t2 = keys[i + 1].time
         let factor = Float((time - t1) / (t2 - t1))
 
-        let v1 = vec3(Float(keys[i].value.x), Float(keys[i].value.y), Float(keys[i].value.z))
-        let v2 = vec3(Float(keys[i + 1].value.x), Float(keys[i + 1].value.y), Float(keys[i + 1].value.z))
+        let v1 = keys[i].value
+        let v2 = keys[i + 1].value
 
         return v1 + (v2 - v1) * factor
       }
     }
 
     // Return last key if time is beyond animation
-    let lastKey = keys.last!
-    return vec3(Float(lastKey.value.x), Float(lastKey.value.y), Float(lastKey.value.z))
+    return keys.last!.value
   }
 
   // Spherical linear interpolation for quaternions

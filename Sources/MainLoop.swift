@@ -1,6 +1,7 @@
 import Assimp
 import CJolt
 import Foundation
+import GLTF
 import Jolt
 
 private let startingScene = "tunnels"
@@ -89,7 +90,7 @@ private let startingEntry = "1"
   private(set) var scene: Scene?
 
   // Camera access (delegated to CameraSystem)
-  private var camera: Assimp.Camera? { cameraSystem.camera }
+  private var camera: Camera? { cameraSystem.camera }
   private var cameraWorldTransform: mat4 { cameraSystem.cameraWorldTransform }
 
   // Scene lights
@@ -219,7 +220,7 @@ private let startingEntry = "1"
 
       // Find the node with the same name as the light
       if let lightNode = scene.rootNode.findNode(named: lightName) {
-        let worldTransform = lightNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+        let worldTransform = lightNode.calculateWorldTransform()
         sceneLights.append((light: light, worldTransform: worldTransform))
         logger.trace("💡 Loaded light '\(lightName)' type: \(light.type)")
       } else {
@@ -245,17 +246,17 @@ private let startingEntry = "1"
       for i in 0..<node.numberOfMeshes {
         let meshIndex = node.meshes[i]
         if meshIndex < scene.meshes.count {
-          let mesh = scene.meshes[Int(meshIndex)]
+          let mesh = scene.meshes[meshIndex]
 
           // Only create instance if mesh has vertices
           guard mesh.numberOfVertices > 0 else { continue }
 
           // Get transform matrix for this mesh
-          let transformMatrix = scene.getTransformMatrix(for: mesh)
+          let transformMatrix = scene.getTransformMatrix(for: meshIndex)
 
           // Create MeshInstance (reusing existing init!)
           let meshInstance = MeshInstance(
-            scene: scene,
+            sceneData: scene,
             mesh: mesh,
             transformMatrix: transformMatrix,
             sceneIdentifier: scene.filePath
@@ -293,7 +294,7 @@ private let startingEntry = "1"
       }
 
       // Get world transform for position and rotation
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let worldTransform = node.calculateWorldTransform()
       let position = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
 
       // Extract forward direction and calculate rotation (same as entry positioning)
@@ -1084,7 +1085,7 @@ private let startingEntry = "1"
       return
     }
 
-    let entryWorld = entryNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    let entryWorld = entryNode.calculateWorldTransform()
     let extractedPosition = vec3(entryWorld[3].x, entryWorld[3].y, entryWorld[3].z)
     let fwd = vec3(entryWorld[2].x, entryWorld[2].y, entryWorld[2].z)
     let yaw = atan2(fwd.x, fwd.z)
@@ -1113,9 +1114,9 @@ private let startingEntry = "1"
 
       func searchChildren(_ node: Node) {
         for child in node.children {
-          if scene.hasHint(child, hint: .ledgeHigh) {
+          if scene.hasHint(child, hint: ImportHint.ledgeHigh) {
             highNode = child
-          } else if scene.hasHint(child, hint: .ledgeLow) {
+          } else if scene.hasHint(child, hint: ImportHint.ledgeLow) {
             lowNode = child
           }
           searchChildren(child)
@@ -1128,12 +1129,12 @@ private let startingEntry = "1"
       var lowY: Float? = nil
 
       if let highNode {
-        let highWorldTransform = highNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+        let highWorldTransform = highNode.calculateWorldTransform()
         highY = highWorldTransform[3].y
       }
 
       if let lowNode {
-        let lowWorldTransform = lowNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+        let lowWorldTransform = lowNode.calculateWorldTransform()
         lowY = lowWorldTransform[3].y
       }
 
@@ -1284,15 +1285,13 @@ private let startingEntry = "1"
       // Update scene name
       self.sceneName = sceneName
 
-      // Load the scene file
+      // Load the scene file with GLTF
       let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
-      let assimpScene = try Assimp.Scene(
-        file: scenePath,
-        flags: [.triangulate, .flipUVs, .calcTangentSpace]
-      )
-
-      // Wrap in our Scene wrapper
-      let scene = Scene(assimpScene)
+      let url = URL(fileURLWithPath: scenePath)
+      let gltfDocument = try await GLTFDocument(contentsOf: url)
+      
+      // Convert to our Scene
+      let scene = Scene(gltfDocument, filePath: scenePath)
 
       // Print debug description of all game-related nodes
       logger.trace("📋 Scene loaded: \(sceneName)")
@@ -1446,7 +1445,7 @@ private let startingEntry = "1"
   private func drawEntryArrows(scene: Scene, debugRenderer: DebugRenderer) {
     // Use scene.entryNodes instead of manual traversal
     for node in scene.entryNodes {
-      let world = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let world = node.calculateWorldTransform()
       let origin = vec3(world[3].x, world[3].y, world[3].z)
       // Extract forward direction from Z basis vector
       let forwardZ = vec3(world[2].x, world[2].y, world[2].z)

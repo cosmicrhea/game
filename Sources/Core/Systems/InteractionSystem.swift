@@ -469,9 +469,9 @@ public final class InteractionSystem {
 
     func searchChildren(_ node: Node) {
       for child in node.children {
-        if scene.hasHint(child, hint: .ledgeHigh) {
+        if scene.hasHint(child, hint: ImportHint.ledgeHigh) {
           highNode = child
-        } else if scene.hasHint(child, hint: .ledgeLow) {
+        } else if scene.hasHint(child, hint: ImportHint.ledgeLow) {
           lowNode = child
         }
         searchChildren(child)
@@ -494,7 +494,7 @@ public final class InteractionSystem {
     }
 
     // Get target position from target node
-    let targetWorldTransform = targetNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    let targetWorldTransform = targetNode.calculateWorldTransform()
     let targetY = targetWorldTransform[3].y
 
     // Preserve player's current X and Z position (stay at the same horizontal position where they interacted)

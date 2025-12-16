@@ -346,7 +346,7 @@ public final class PhysicsWorld {
     // Use scene.collisionNodes instead of manual traversal
     for node in scene.collisionNodes {
       let name = node.name
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let worldTransform = node.calculateWorldTransform()
 
       // Get mesh from this node
       if node.numberOfMeshes > 0 {
@@ -407,7 +407,7 @@ public final class PhysicsWorld {
     )
     for node in allActionNodes {
       let name = node.name
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let worldTransform = node.calculateWorldTransform()
 
       // Get mesh from this node
       if node.numberOfMeshes > 0 {
@@ -497,7 +497,7 @@ public final class PhysicsWorld {
 
     for node in allTriggerNodes {
       let name = node.name
-      let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let worldTransform = node.calculateWorldTransform()
 
       // Get mesh from this node
       if node.numberOfMeshes > 0 {
@@ -557,7 +557,7 @@ public final class PhysicsWorld {
       let ledgeBaseName = Scene.extractBaseName(from: ledgeName)
 
       // Create action body for the ledge node itself
-      let ledgeWorldTransform = ledgeNode.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+      let ledgeWorldTransform = ledgeNode.calculateWorldTransform()
 
       if ledgeNode.numberOfMeshes > 0 {
         let meshIndex = ledgeNode.meshes[0]
@@ -660,9 +660,9 @@ public final class PhysicsWorld {
 
     func searchChildren(_ node: Node) {
       for child in node.children {
-        if scene.hasHint(child, hint: .ledgeHigh) {
+        if scene.hasHint(child, hint: ImportHint.ledgeHigh) {
           highNode = child
-        } else if scene.hasHint(child, hint: .ledgeLow) {
+        } else if scene.hasHint(child, hint: ImportHint.ledgeLow) {
           lowNode = child
         }
         // Recursively search children
@@ -681,7 +681,7 @@ public final class PhysicsWorld {
     layer: ObjectLayer,
     bodyInterface: BodyInterface
   ) -> BodyID {
-    let worldTransform = node.assimpNode.calculateWorldTransform(scene: scene.assimpScene)
+    let worldTransform = node.calculateWorldTransform()
 
     guard node.numberOfMeshes > 0 else { return 0 }
     let meshIndex = node.meshes[0]
@@ -799,19 +799,19 @@ public final class PhysicsWorld {
 
   // MARK: - Helper Methods
 
-  private func extractTrianglesFromMesh(mesh: Assimp.Mesh, transform: mat4) -> [Triangle] {
+  private func extractTrianglesFromMesh(mesh: Mesh, transform: mat4) -> [Triangle] {
     guard mesh.numberOfVertices > 0, mesh.numberOfFaces > 0 else { return [] }
 
-    let vertices = mesh.vertices
+    let positions = mesh.positions
     var triangles: [Triangle] = []
 
     // Extract faces (triangles) and transform them to world space
     for face in mesh.faces {
-      guard face.numberOfIndices == 3 else { continue }  // Only process triangles
+      guard face.indices.count == 3 else { continue }  // Only process triangles
 
-      let i1 = Int(face.indices[0])
-      let i2 = Int(face.indices[1])
-      let i3 = Int(face.indices[2])
+      let i1 = face.indices[0]
+      let i2 = face.indices[1]
+      let i3 = face.indices[2]
 
       guard i1 < mesh.numberOfVertices, i2 < mesh.numberOfVertices, i3 < mesh.numberOfVertices else {
         continue
@@ -819,19 +819,19 @@ public final class PhysicsWorld {
 
       // Get vertex positions in local space
       let v1Local = vec3(
-        Float(vertices[i1 * 3 + 0]),
-        Float(vertices[i1 * 3 + 1]),
-        Float(vertices[i1 * 3 + 2])
+        positions[i1 * 3 + 0],
+        positions[i1 * 3 + 1],
+        positions[i1 * 3 + 2]
       )
       let v2Local = vec3(
-        Float(vertices[i2 * 3 + 0]),
-        Float(vertices[i2 * 3 + 1]),
-        Float(vertices[i2 * 3 + 2])
+        positions[i2 * 3 + 0],
+        positions[i2 * 3 + 1],
+        positions[i2 * 3 + 2]
       )
       let v3Local = vec3(
-        Float(vertices[i3 * 3 + 0]),
-        Float(vertices[i3 * 3 + 1]),
-        Float(vertices[i3 * 3 + 2])
+        positions[i3 * 3 + 0],
+        positions[i3 * 3 + 1],
+        positions[i3 * 3 + 2]
       )
 
       // Transform to world space (includes scale, rotation, translation)

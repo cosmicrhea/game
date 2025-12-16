@@ -175,8 +175,8 @@ public class Script {
 
   /// Find a camera by name
   /// The name should match the camera's base name (e.g., "desk" finds "@Camera desk")
-  /// Uses scene.camera(named:) to find the Assimp.Camera
-  func findCamera(_ name: String) -> Assimp.Camera? {
+  /// Uses scene.camera(named:) to find the Camera
+  func findCamera(_ name: String) -> Camera? {
     return scene.camera(named: name)
   }
 
@@ -266,7 +266,7 @@ public class Script {
   ///   - camera: The camera object to use for the closeup.
   ///   - perform: The work to execute during the closeup.
   @discardableResult
-  func withCloseup<T>(on camera: Assimp.Camera, perform: () throws -> T) rethrows -> T {
+  func withCloseup<T>(on camera: Camera, perform: () throws -> T) rethrows -> T {
     guard let cameraName = camera.name else {
       logger.warning("⚠️ Cannot activate closeup: camera has no name")
       return try perform()
@@ -286,7 +286,7 @@ public class Script {
 
   /// Async variant of `withCloseup(on:perform:)`.
   @discardableResult
-  func withCloseup<T>(on camera: Assimp.Camera, perform: () async throws -> T) async rethrows -> T {
+  func withCloseup<T>(on camera: Camera, perform: () async throws -> T) async rethrows -> T {
     guard let cameraName = camera.name else {
       logger.warning("⚠️ Cannot activate closeup: camera has no name")
       return try await perform()

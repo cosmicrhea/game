@@ -29,6 +29,7 @@ public struct RefMacro: AccessorMacro, PeerMacro {
 
     // Determine if this is a Camera or Node
     let isCamera = typeName == "Camera" || typeName.hasSuffix(".Camera")
+    let isNode = typeName == "Node" || typeName.hasSuffix(".Node")
 
     // Extract name from macro arguments, or derive from property name
     let rawName: String
@@ -50,10 +51,12 @@ public struct RefMacro: AccessorMacro, PeerMacro {
       searchName = rawName
       findMethod = "findCamera"
       errorMessage = "Camera"
-    } else {
+    } else if isNode {
       searchName = rawName
       findMethod = "findNode"
       errorMessage = "Node"
+    } else {
+      throw RefMacroError("@Ref can only be applied to Camera or Node types")
     }
 
     // Generate getter that finds the object if not already found
@@ -103,7 +106,7 @@ public struct RefMacro: AccessorMacro, PeerMacro {
     // Determine the storage type (Camera? or Node?)
     let storageType: String
     if typeName == "Camera" || typeName.hasSuffix(".Camera") {
-      storageType = "Assimp.Camera"
+      storageType = "Camera"
     } else {
       storageType = "Node"
     }
