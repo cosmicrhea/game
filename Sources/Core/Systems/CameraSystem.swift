@@ -320,7 +320,7 @@ public final class CameraSystem {
   public func cycleToNextCamera() {
     prerenderedEnvironment?.cycleToNextCamera()
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-    // Sync to corresponding Assimp camera using scene.cameraNode(named:)
+    // Sync to corresponding camera object using scene.cameraNode(named:)
     if let scene = self.scene, let cameraNode = scene.cameraNode(named: selectedCamera) {
       syncActiveCamera(name: cameraNode.name)
     } else {
@@ -332,7 +332,7 @@ public final class CameraSystem {
   public func cycleToPreviousCamera() {
     prerenderedEnvironment?.cycleToPreviousCamera()
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-    // Sync to corresponding Assimp camera using scene.cameraNode(named:)
+    // Sync to corresponding camera object using scene.cameraNode(named:)
     if let scene = self.scene, let cameraNode = scene.cameraNode(named: selectedCamera) {
       syncActiveCamera(name: cameraNode.name)
     } else {
@@ -344,7 +344,7 @@ public final class CameraSystem {
   public func switchToDebugCamera() {
     prerenderedEnvironment?.switchToDebugCamera()
     selectedCamera = prerenderedEnvironment?.getCurrentCameraName() ?? selectedCamera
-    // Sync to corresponding Assimp camera using scene.cameraNode(named:)
+    // Sync to corresponding camera object using scene.cameraNode(named:)
     if let scene = self.scene, let cameraNode = scene.cameraNode(named: selectedCamera) {
       syncActiveCamera(name: cameraNode.name)
     } else {

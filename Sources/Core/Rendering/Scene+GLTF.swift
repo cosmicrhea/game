@@ -2,28 +2,9 @@ import CGLTF
 import GLTF
 import GLMath
 
-// Helper function to extract data from a GLTF accessor
-// Uses cgltf's official unpack_floats function which handles all edge cases correctly
-private func extractAccessorData(_ accessor: GLTFAccessor) -> [Float]? {
-  // Use cgltf's official unpack_floats function - it handles:
-  // - Sparse accessors
-  // - Normalization
-  // - Correct stride calculation
-  // - Component type conversion
-  // - Buffer view data pointer resolution
-  // - All edge cases we were missing
-  return accessor.unpackFloats()
-}
-
-// Helper function to extract indices from a GLTF accessor
-// Use cgltf's official unpack_indices function as recommended by the readme
-private func extractIndices(_ accessor: GLTFAccessor) -> [UInt32]? {
-  guard accessor.type == .scalar else {
-    logger.error("❌ extractIndices: Accessor type is \(accessor.type), expected .scalar for indices")
-    return nil
-  }
-  return accessor.unpackIndices()
-}
+private let minWeightThreshold: Float = 0.0001
+private let normalizedByteScale: Float = 255.0
+private let normalizedShortScale: Float = 65535.0
 
 extension Mesh {
   /// Initialize from pre-extracted GLTF data (for two-pass loading)
@@ -36,12 +17,13 @@ extension Mesh {
     tangents: [Float]?,
     indexData: [UInt32]?,
     vertexCount: Int,
-    materialIndex: Int
+    materialIndex: Int,
+    numberOfBones: Int = 0,
+    bones: [Bone] = []
   ) {
     var bitangents: [Float]?
     let finalVertexCount: Int
 
-    // Validate positions
     let expectedPositionCount = vertexCount * 3
     if positions.count != expectedPositionCount {
       logger.error(
@@ -73,10 +55,8 @@ extension Mesh {
       finalVertexCount = vertexCount
     }
 
-    // Convert indices to faces
     var faces: [Face] = []
     if let indexData = indexData {
-      // Validate index data
       let maxIndexInData = indexData.max() ?? 0
       if maxIndexInData >= UInt32(finalVertexCount) {
         logger.error(
@@ -84,7 +64,6 @@ extension Mesh {
         )
       }
 
-      // Convert to triangular faces
       for i in stride(from: 0, to: indexData.count, by: 3) {
         if i + 2 < indexData.count {
           let idx0 = Int(indexData[i])
@@ -93,11 +72,6 @@ extension Mesh {
 
           guard idx0 >= 0 && idx1 >= 0 && idx2 >= 0 else {
             logger.warning("⚠️ Negative vertex index in face: [\(idx0), \(idx1), \(idx2)]")
-            continue
-          }
-
-          if idx0 > 100000 || idx1 > 100000 || idx2 > 100000 {
-            logger.error("❌ Mesh '\(name ?? "<unnamed>")': Corrupted index detected: [\(idx0), \(idx1), \(idx2)]")
             continue
           }
 
@@ -113,7 +87,6 @@ extension Mesh {
       }
     }
 
-    // Validate and filter faces
     let validFaces = faces.filter { face in
       guard face.indices.count == 3 else { return false }
       let idx0 = face.indices[0]
@@ -190,23 +163,19 @@ extension Mesh {
         bitangentsArray.append(b.z)
       }
 
-      // Update tangents (we can't reassign to the parameter, so we'll use a local var)
-      let calculatedTangents = tangentsArray
-      let calculatedBitangents = bitangentsArray
-
       self.init(
         name: name,
         numberOfVertices: finalVertexCount,
         numberOfFaces: validFaces.count,
-        numberOfBones: 0,
+        numberOfBones: numberOfBones,
         materialIndex: materialIndex,
         positions: positions,
         normals: normals,
         uvs: uvs,
-        tangents: calculatedTangents,
-        bitangents: calculatedBitangents,
+        tangents: tangentsArray,
+        bitangents: bitangentsArray,
         faces: validFaces,
-        bones: []
+        bones: bones
       )
       return
     } else if let normals = normals, let tangents = tangents, normals.count == tangents.count {
@@ -228,7 +197,7 @@ extension Mesh {
       name: name,
       numberOfVertices: finalVertexCount,
       numberOfFaces: validFaces.count,
-      numberOfBones: 0,
+      numberOfBones: numberOfBones,
       materialIndex: materialIndex,
       positions: positions,
       normals: normals,
@@ -236,14 +205,13 @@ extension Mesh {
       tangents: tangents,
       bitangents: bitangents,
       faces: validFaces,
-      bones: []
+      bones: bones
     )
   }
 
   /// Initialize from a GLTF Mesh primitive
   /// Note: GLTF meshes can have multiple primitives, so we create one Mesh per primitive
   public init(_ gltfPrimitive: GLTFPrimitive, gltfMesh: GLTFMesh, materialIndex: Int) {
-    // Extract vertex attributes
     var positions: [Float] = []
     var normals: [Float]?
     var uvs: [Float]?
@@ -254,11 +222,8 @@ extension Mesh {
     for attribute in gltfPrimitive.attributes {
       switch attribute.type {
       case .position:
-        if let data = extractAccessorData(attribute.data) {
+        if let data = attribute.data.unpackFloats() {
           positions = data
-          // For vec3 positions, vertexCount should be positions.count / 3
-          // But attribute.data.count is the accessor element count (number of vec3s)
-          // So both should match - validate this
           let expectedVertexCount = data.count / 3
           let accessorCount = attribute.data.count
           if expectedVertexCount != accessorCount {
@@ -266,19 +231,18 @@ extension Mesh {
               "⚠️ Position count mismatch in mesh '\(gltfMesh.name)': positions.count/3=\(expectedVertexCount), accessor.count=\(accessorCount)"
             )
           }
-          vertexCount = accessorCount  // Use accessor count as source of truth
+          vertexCount = accessorCount
         }
       case .normal:
-        if let data = extractAccessorData(attribute.data) {
+        if let data = attribute.data.unpackFloats() {
           normals = data
         }
       case .texcoord:
-        if attribute.index == 0, let data = extractAccessorData(attribute.data) {
-          // Only take first UV channel
+        if attribute.index == 0, let data = attribute.data.unpackFloats() {
           uvs = data
         }
       case .tangent:
-        if let data = extractAccessorData(attribute.data) {
+        if let data = attribute.data.unpackFloats() {
           tangents = data
         }
       default:
@@ -286,18 +250,13 @@ extension Mesh {
       }
     }
 
-    // Extract indices first (needed for tangent calculation)
-    // Note: We'll validate indices against finalVertexCount after we determine it
     var faces: [Face] = []
-    if let indices = gltfPrimitive.indices, let indexData = extractIndices(indices) {
-      // Validate index data immediately - check for obviously corrupted values
+    if let indices = gltfPrimitive.indices, let indexData = indices.unpackIndices() {
       let maxIndexInData = indexData.max() ?? 0
       let minIndexInData = indexData.min() ?? 0
 
-      // If we have vertexCount, validate indices are reasonable
       if vertexCount > 0 {
         if maxIndexInData >= UInt32(vertexCount) {
-          // Log detailed accessor information to help diagnose corruption
           let accessor = indices
           let bufferView = accessor.bufferView
           let buffer = bufferView?.buffer
@@ -318,50 +277,18 @@ extension Mesh {
             logger.error(
               "   Buffer details: size=\(buffer.size), hasDataPointer=\(buffer.dataPointer != nil)")
           }
-          // Don't return nil - filter bad indices instead
-        }
-      } else if maxIndexInData > 100000 {
-        // Log detailed accessor information to help diagnose corruption
-        let accessor = indices
-        let bufferView = accessor.bufferView
-        let buffer = bufferView?.buffer
-        logger.error(
-          "❌ Mesh '\(gltfMesh.name)': Index data appears corrupted - max index is \(maxIndexInData) (absurdly large). This suggests pointer corruption or wrong data type."
-        )
-        logger.error("   First 10 indices: \(Array(indexData.prefix(10)))")
-        logger.error(
-          "   Accessor details: componentType=\(accessor.componentType), type=\(accessor.type), count=\(accessor.count), offset=\(accessor.offset), stride=\(accessor.stride)"
-        )
-        if let bufferView = bufferView {
-          logger.error(
-            "   BufferView details: offset=\(bufferView.offset), size=\(bufferView.size), stride=\(bufferView.stride)")
-        }
-        if let buffer = buffer {
-          logger.error(
-            "   Buffer details: size=\(buffer.size), hasDataPointer=\(buffer.dataPointer != nil)")
         }
       }
 
-      // Convert to triangular faces
       for i in stride(from: 0, to: indexData.count, by: 3) {
         if i + 2 < indexData.count {
           let idx0 = Int(indexData[i])
           let idx1 = Int(indexData[i + 1])
           let idx2 = Int(indexData[i + 2])
 
-          // Validate indices are non-negative (will validate against final vertex count later)
           guard idx0 >= 0 && idx1 >= 0 && idx2 >= 0 else {
             logger.warning(
               "⚠️ Negative vertex index in face: indices=[\(idx0), \(idx1), \(idx2)], mesh='\(gltfMesh.name)'")
-            continue
-          }
-
-          // Early check for obviously corrupted indices (before we know finalVertexCount)
-          // If we have vertexCount, use it; otherwise just check for absurdly large values
-          if idx0 > 100000 || idx1 > 100000 || idx2 > 100000 {
-            logger.error(
-              "❌ Mesh '\(gltfMesh.name)': Corrupted index detected at face \(i/3): [\(idx0), \(idx1), \(idx2)]. Skipping face."
-            )
             continue
           }
 
@@ -379,7 +306,6 @@ extension Mesh {
       }
     }
 
-    // Validate that positions array size matches vertexCount
     let expectedPositionCount = vertexCount * 3
     let finalVertexCount: Int
     if positions.count != expectedPositionCount {
@@ -393,7 +319,6 @@ extension Mesh {
         finalVertexCount = actualVertexCount
       } else {
         logger.error("❌ Cannot recover: positions array is empty or invalid, creating empty mesh")
-        // Create empty mesh to prevent crashes
         self.init(
           name: gltfMesh.name.isEmpty ? nil : gltfMesh.name,
           numberOfVertices: 0,
@@ -414,7 +339,6 @@ extension Mesh {
       finalVertexCount = vertexCount
     }
 
-    // Now validate face indices against final vertex count and filter invalid faces
     let validFaces = faces.filter { face in
       guard face.indices.count == 3 else { return false }
       let idx0 = face.indices[0]
@@ -424,12 +348,9 @@ extension Mesh {
         idx0 >= 0 && idx0 < finalVertexCount && idx1 >= 0 && idx1 < finalVertexCount && idx2 >= 0
         && idx2 < finalVertexCount
       if !isValid {
-        // Log detailed information when invalid face is detected
-        // This helps diagnose if corruption happened during extraction or later
         logger.warning(
           "⚠️ Invalid vertex index in face: indices=[\(idx0), \(idx1), \(idx2)], finalVertexCount=\(finalVertexCount), mesh='\(gltfMesh.name)'"
         )
-        // If we have index accessor info, log it to help diagnose
         if let indices = gltfPrimitive.indices {
           let accessor = indices
           logger.warning(
@@ -440,10 +361,8 @@ extension Mesh {
       return isValid
     }
 
-    // Calculate tangent space if needed (like Assimp's calcTangentSpace)
-    // If tangents are missing but we have normals and UVs, calculate them from geometry
+    // Calculate tangent space if tangents are missing but we have normals and UVs
     if tangents == nil, let normals = normals, let uvs = uvs, !validFaces.isEmpty {
-      // Calculate tangents and bitangents from triangle geometry
       var tangentAccum: [vec3] = Array(repeating: vec3(0, 0, 0), count: finalVertexCount)
       var bitangentAccum: [vec3] = Array(repeating: vec3(0, 0, 0), count: finalVertexCount)
 
@@ -454,28 +373,23 @@ extension Mesh {
         let i1 = face.indices[1]
         let i2 = face.indices[2]
 
-        // Get positions
         let v0 = vec3(positions[i0 * 3], positions[i0 * 3 + 1], positions[i0 * 3 + 2])
         let v1 = vec3(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2])
         let v2 = vec3(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2])
 
-        // Get UVs
         let uv0 = vec2(uvs[i0 * 2], uvs[i0 * 2 + 1])
         let uv1 = vec2(uvs[i1 * 2], uvs[i1 * 2 + 1])
         let uv2 = vec2(uvs[i2 * 2], uvs[i2 * 2 + 1])
 
-        // Calculate edge vectors
         let deltaPos1 = v1 - v0
         let deltaPos2 = v2 - v0
         let deltaUV1 = uv1 - uv0
         let deltaUV2 = uv2 - uv0
 
-        // Calculate tangent and bitangent
         let r = 1.0 / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x)
         let tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * r
         let bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * r
 
-        // Accumulate for each vertex (will be averaged later)
         tangentAccum[i0] = tangentAccum[i0] + tangent
         tangentAccum[i1] = tangentAccum[i1] + tangent
         tangentAccum[i2] = tangentAccum[i2] + tangent
@@ -485,7 +399,6 @@ extension Mesh {
         bitangentAccum[i2] = bitangentAccum[i2] + bitangent
       }
 
-      // Orthonormalize and store tangents and bitangents
       var tangentsArray: [Float] = []
       var bitangentsArray: [Float] = []
       tangentsArray.reserveCapacity(finalVertexCount * 3)
@@ -499,10 +412,10 @@ extension Mesh {
         // Gram-Schmidt orthogonalization: make tangent orthogonal to normal
         t = normalize(t - dot(t, n) * n)
 
-        // Calculate bitangent from normal and tangent (ensure right-handed)
+        // Calculate bitangent from normal and tangent (ensure right-handed coordinate system)
         b = cross(n, t)
 
-        // Check handedness (bitangent should match accumulated bitangent direction)
+        // Check handedness: if bitangent direction doesn't match accumulated, flip tangent
         if dot(cross(n, t), b) < 0.0 {
           t = -t
         }
@@ -519,7 +432,6 @@ extension Mesh {
       tangents = tangentsArray
       bitangents = bitangentsArray
     } else if let normals = normals, let tangents = tangents, normals.count == tangents.count {
-      // Calculate bitangents from normals and tangents if tangents are provided
       var bitangentsArray: [Float] = []
       bitangentsArray.reserveCapacity(normals.count)
       for i in stride(from: 0, to: normals.count, by: 3) {
@@ -533,7 +445,6 @@ extension Mesh {
       bitangents = bitangentsArray
     }
 
-    // Initialize all properties using designated initializer
     self.init(
       name: gltfMesh.name.isEmpty ? nil : gltfMesh.name,
       numberOfVertices: finalVertexCount,
@@ -566,39 +477,31 @@ extension Material {
         return nil
       }
 
-      // Check if it's an embedded texture (buffer view)
       if image.bufferView != nil {
-        // This is an embedded texture - find the index in the embeddedTextures array
-        // Note: cName returns "<unnamed>" for empty strings, so we need to check for that
         let hasName = !image.name.isEmpty && image.name != "<unnamed>"
         let hasUri = !image.uri.isEmpty && image.uri != "<unnamed>"
 
         logger.debug(
           "Looking up embedded texture: name='\(image.name)', uri='\(image.uri)', hasName=\(hasName), hasUri=\(hasUri)")
 
-        // Try matching by name first (most reliable)
         if hasName, let embeddedIndex = imageToEmbeddedIndex[image.name] {
           logger.debug("Found embedded texture by name: '\(image.name)' -> *\(embeddedIndex)")
           return "*\(embeddedIndex)"
         }
-        // Try matching by URI
         if hasUri, let embeddedIndex = imageToEmbeddedIndex[image.uri] {
           logger.debug("Found embedded texture by URI: '\(image.uri)' -> *\(embeddedIndex)")
           return "*\(embeddedIndex)"
         }
-        // Try the combined identifier (name or URI or index)
         let imageIdentifier = hasName ? image.name : (hasUri ? image.uri : "")
         if !imageIdentifier.isEmpty, let embeddedIndex = imageToEmbeddedIndex[imageIdentifier] {
           logger.debug("Found embedded texture by identifier: '\(imageIdentifier)' -> *\(embeddedIndex)")
           return "*\(embeddedIndex)"
         }
-        // If no match found, this shouldn't happen but log a warning
         logger.warning(
           "Could not find embedded texture index for image: name='\(image.name)', uri='\(image.uri)'. Available keys: \(Array(imageToEmbeddedIndex.keys).prefix(10))"
         )
       }
 
-      // External texture - return the URI (but not if it's "<unnamed>")
       if !image.uri.isEmpty && image.uri != "<unnamed>" {
         return image.uri
       }
@@ -609,7 +512,6 @@ extension Material {
     self.name = gltfMaterial.name.isEmpty ? nil : gltfMaterial.name
     self.materialIndex = materialIndex
 
-    // Extract PBR properties
     var baseColor: vec3
     var opacity: Float
     var metallic: Float
@@ -626,7 +528,6 @@ extension Material {
       metallic = pbr.metallicFactor
       roughness = pbr.roughnessFactor
 
-      // Extract texture paths
       if pbr.baseColorTexture.texture != nil {
         diffuseTexturePath = getTexturePath(
           from: pbr.baseColorTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
@@ -645,25 +546,21 @@ extension Material {
       roughness = 0.5
     }
 
-    // Extract normal texture
     var normalTexturePath: String?
     if gltfMaterial.normalTexture.texture != nil {
       normalTexturePath = getTexturePath(
         from: gltfMaterial.normalTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
     }
 
-    // Extract AO texture (occlusion)
     var aoTexturePath: String?
     if gltfMaterial.occlusionTexture.texture != nil {
       aoTexturePath = getTexturePath(
         from: gltfMaterial.occlusionTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
     }
 
-    // Extract emissive
     let emissiveFactor = gltfMaterial.emissiveFactor
     let emissive = vec3(emissiveFactor[0], emissiveFactor[1], emissiveFactor[2])
 
-    // Now initialize all properties
     self.baseColor = baseColor
     self.opacity = opacity
     self.metallic = metallic
@@ -684,10 +581,10 @@ extension Animation {
 
     // Find max time across all samplers
     var maxTime: Double = 0.0
-    var ticksPerSecond: Double = 1.0
+    let ticksPerSecond: Double = 1.0
 
     for sampler in gltfAnimation.samplers {
-      if let inputData = extractAccessorData(sampler.input) {
+      if let inputData = sampler.input.unpackFloats() {
         if let lastTime = inputData.last {
           maxTime = max(maxTime, Double(lastTime))
         }
@@ -697,7 +594,6 @@ extension Animation {
     self.duration = maxTime
     self.ticksPerSecond = ticksPerSecond
 
-    // Convert channels
     var channelsByNode: [String: AnimationChannel] = [:]
 
     for channel in gltfAnimation.channels {
@@ -705,8 +601,8 @@ extension Animation {
       let nodeName = node.name
 
       let sampler = channel.sampler
-      guard let inputData = extractAccessorData(sampler.input),
-        let outputData = extractAccessorData(sampler.output)
+      guard let inputData = sampler.input.unpackFloats(),
+        let outputData = sampler.output.unpackFloats()
       else {
         continue
       }
@@ -723,15 +619,26 @@ extension Animation {
           positionKeys.append(VectorKey(time: time, value: value))
         }
       case .rotation:
+        // GLTF quaternion order is (x, y, z, w), which matches our Quaternion type
+        // Normalize quaternions to ensure they represent pure rotations (no scaling/shear)
+        // Non-normalized quaternions can cause unexpected transformations when converted to matrices
         for i in 0..<min(inputData.count, outputData.count / 4) {
           let time = Double(inputData[i])
           let q = Quaternion<Float>(
-            outputData[i * 4 + 3],  // w
             outputData[i * 4 + 0],  // x
             outputData[i * 4 + 1],  // y
-            outputData[i * 4 + 2]  // z
+            outputData[i * 4 + 2],  // z
+            outputData[i * 4 + 3]  // w
           )
-          rotationKeys.append(QuatKey(time: time, value: q))
+          let len = sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
+          let normalizedQ: Quaternion<Float>
+          if len > minWeightThreshold {
+            normalizedQ = Quaternion<Float>(q.x / len, q.y / len, q.z / len, q.w / len)
+          } else {
+            // Fallback to identity quaternion if length is too small (invalid quaternion)
+            normalizedQ = Quaternion<Float>(0, 0, 0, 1)
+          }
+          rotationKeys.append(QuatKey(time: time, value: normalizedQ))
         }
       case .scale:
         for i in 0..<min(inputData.count, outputData.count / 3) {
@@ -743,7 +650,6 @@ extension Animation {
         break
       }
 
-      // Merge with existing channel or create new
       if let existing = channelsByNode[nodeName] {
         channelsByNode[nodeName] = AnimationChannel(
           nodeName: nodeName,
@@ -765,6 +671,45 @@ extension Animation {
   }
 }
 
+extension Light {
+  /// Initialize from a GLTF Light
+  public init(_ gltfLight: GLTFLight) {
+    let lightName = gltfLight.name.isEmpty ? nil : gltfLight.name
+    let colorTuple = gltfLight.color
+    let color = vec3(colorTuple.0, colorTuple.1, colorTuple.2)
+
+    let lightType: LightType
+    switch gltfLight.type {
+    case .directional:
+      lightType = .directional
+    case .point:
+      lightType = .point
+    case .spot:
+      lightType = .spot
+    default:
+      lightType = .directional
+    }
+
+    // GLTF lights: direction defaults to -Z for directional/spot lights, position set from node transform
+    let direction = lightType == .point ? vec3(0, -1, 0) : vec3(0, 0, -1)
+
+    let innerConeAngle = lightType == .spot ? gltfLight.spotInnerConeAngle : nil
+    let outerConeAngle = lightType == .spot ? gltfLight.spotOuterConeAngle : nil
+
+    self.init(
+      name: lightName,
+      direction: direction,
+      position: vec3(0, 0, 0),  // Will be set from node transform
+      color: color,
+      intensity: gltfLight.intensity,
+      range: gltfLight.range > 0 ? gltfLight.range : 100.0,
+      type: lightType,
+      innerConeAngle: innerConeAngle,
+      outerConeAngle: outerConeAngle
+    )
+  }
+}
+
 // MARK: - Scene GLTF Conversion
 
 extension Scene {
@@ -775,22 +720,19 @@ extension Scene {
   ///   - filePath: Path to the GLTF file
   ///   - skipMaterials: If true, skip material conversion (useful for MapView where materials aren't needed)
   public convenience init(_ gltfDocument: GLTFDocument, filePath: String, skipMaterials: Bool = false) {
-    // Log which scene is being loaded for debugging
     let sceneName = URL(fileURLWithPath: filePath).lastPathComponent
     logger.debug("📦 Loading GLTF scene: '\(sceneName)' from path: \(filePath)")
 
     // Keep the GLTF document alive for the Scene's lifetime
     // The document's deinit calls cgltf_free() which frees all buffer data
+    // We must extract all buffer data before the document could be deallocated
 
-    // Extract all data from GLTF buffers first, before processing
-    // This ensures all buffer reads happen while the document is guaranteed to be alive
-    // We use a two-pass approach: extract all data first, then process it.
-
-    // Build a map from image to embedded texture index for fast lookup
-    var imageToEmbeddedIndex: [String: Int] = [:]  // Maps image identifier to embedded texture index
+    // Two-pass approach: extract all data first, then process it
+    // This ensures all cgltf buffer reads complete while the document is guaranteed to be alive
+    var imageToEmbeddedIndex: [String: Int] = [:]
 
     // FIRST PASS: Extract all mesh data into temporary structures
-    // This ensures all cgltf buffer reads complete before we start processing
+    // All buffer reads happen here, before any processing that could invalidate pointers
     struct ExtractedMeshData {
       let name: String
       let positions: [Float]
@@ -800,48 +742,93 @@ extension Scene {
       let indexData: [UInt32]?
       let vertexCount: Int
       let materialIndex: Int
+      let jointsData: [UInt16]?
+      let weightsData: [Float]?
+      let gltfMeshIndex: Int
+      let primitiveIndex: Int
     }
 
     var extractedMeshData: [ExtractedMeshData] = []
-    var meshIndexMap: [Int: [Int]] = [:]  // Maps GLTF mesh index to our mesh indices
+    var meshIndexMap: [Int: [Int]] = [:]
     var gltfMeshPtrToIndex: [UnsafeRawPointer: Int] = [:]
 
-    // Extract all mesh data first
     for (gltfMeshIndex, gltfMesh) in gltfDocument.meshes.enumerated() {
       let meshPtr = UnsafeRawPointer(gltfMesh.underlying)
       gltfMeshPtrToIndex[meshPtr] = gltfMeshIndex
 
       var meshIndices: [Int] = []
-      for primitive in gltfMesh.primitives {
+      for (primitiveIndex, primitive) in gltfMesh.primitives.enumerated() {
+        // Find material index by matching primitive's material name with document materials
+        // Default to 0 if material not found (some GLTF files may have missing material references)
         let materialIndex =
           gltfDocument.materials.firstIndex { material in
             primitive.material?.name == material.name
           } ?? 0
 
-        // Extract all data immediately
         var positions: [Float] = []
         var normals: [Float]?
         var uvs: [Float]?
         var tangents: [Float]?
+        var jointsData: [UInt16]? = nil
+        var weightsData: [Float]? = nil
         var vertexCount = 0
         var indexData: [UInt32]? = nil
 
-        // Extract vertex attributes
         for attribute in primitive.attributes {
           switch attribute.type {
           case .position:
-            if let data = extractAccessorData(attribute.data) {
+            if let data = attribute.data.unpackFloats() {
               positions = data
               vertexCount = attribute.data.count
             }
           case .normal:
-            normals = extractAccessorData(attribute.data)
+            normals = attribute.data.unpackFloats()
           case .texcoord:
             if attribute.index == 0 {
-              uvs = extractAccessorData(attribute.data)
+              uvs = attribute.data.unpackFloats()
             }
           case .tangent:
-            tangents = extractAccessorData(attribute.data)
+            tangents = attribute.data.unpackFloats()
+          case .joints:
+            // JOINTS_0 attribute: bone indices per vertex (usually UNSIGNED_BYTE or UNSIGNED_SHORT, vec4)
+            if attribute.index == 0 {
+              let componentCount = attribute.data.type == .vec4 ? 4 : (attribute.data.type == .vec3 ? 3 : 1)
+              let expectedCount = attribute.data.count * componentCount
+
+              switch attribute.data.componentType {
+              case .r_8u:
+                // UNSIGNED_BYTE: extract as floats, then convert (handle normalized vs non-normalized)
+                if let data = attribute.data.unpackFloats(), data.count >= expectedCount {
+                  if attribute.data.normalized {
+                    // Normalized [0,1] -> [0,255]
+                    jointsData = (0..<expectedCount).map { UInt16(data[$0] * normalizedByteScale) }
+                  } else {
+                    // Direct conversion
+                    jointsData = (0..<expectedCount).map { UInt16(data[$0]) }
+                  }
+                }
+              case .r_16u:
+                // UNSIGNED_SHORT: extract as floats, then convert (handle normalized vs non-normalized)
+                if let data = attribute.data.unpackFloats(), data.count >= expectedCount {
+                  if attribute.data.normalized {
+                    // Normalized [0,1] -> [0,65535]
+                    jointsData = (0..<expectedCount).map { UInt16(data[$0] * normalizedShortScale) }
+                  } else {
+                    // Direct conversion
+                    jointsData = (0..<expectedCount).map { UInt16(data[$0]) }
+                  }
+                }
+              default:
+                // Fallback: try unpackIndices for other component types
+                if let indices = attribute.data.unpackIndices() {
+                  jointsData = indices.map { UInt16($0) }
+                }
+              }
+            }
+          case .weights:
+            if attribute.index == 0 {
+              weightsData = attribute.data.unpackFloats()
+            }
           default:
             break
           }
@@ -849,80 +836,7 @@ extension Scene {
 
         // Extract indices
         if let indices = primitive.indices {
-          // Log accessor details BEFORE extraction to help diagnose
-          logger.debug(
-            "🔍 Extracting indices for mesh '\(gltfMesh.name)': accessor='\(indices.name)', componentType=\(indices.componentType), count=\(indices.count), offset=\(indices.offset)"
-          )
-          if let bufferView = indices.bufferView {
-            logger.debug(
-              "   BufferView: offset=\(bufferView.offset), size=\(bufferView.size), stride=\(bufferView.stride)"
-            )
-            if let buffer = bufferView.buffer {
-              logger.debug("   Buffer: size=\(buffer.size), hasDataPointer=\(buffer.dataPointer != nil)")
-              if let dataPtr = buffer.dataPointer {
-                logger.debug("   Buffer data pointer: \(String(describing: dataPtr))")
-              }
-            }
-          }
-
-          var extractedIndices = extractIndices(indices)
-
-          // Validate extracted indices
-          if var extracted = extractedIndices {
-            let maxIndex = extracted.max() ?? 0
-            let minIndex = extracted.min() ?? 0
-
-            // Validate indices are reasonable
-            if maxIndex > 1000000 {
-              logger.error(
-                "❌ IMMEDIATE CORRUPTION DETECTED in mesh '\(gltfMesh.name)': Max index \(maxIndex) is absurdly large right after extraction!"
-              )
-              // Log accessor details
-              logger.error(
-                "   Accessor: componentType=\(indices.componentType), count=\(indices.count), offset=\(indices.offset), stride=\(indices.stride)"
-              )
-              if let bufferView = indices.bufferView {
-                logger.error(
-                  "   BufferView: offset=\(bufferView.offset), size=\(bufferView.size), stride=\(bufferView.stride)"
-                )
-                if let buffer = bufferView.buffer {
-                  logger.error("   Buffer: size=\(buffer.size), hasDataPointer=\(buffer.dataPointer != nil)")
-                }
-              }
-              // Don't use corrupted data
-              extractedIndices = nil
-            } else if vertexCount > 0 && maxIndex >= UInt32(vertexCount) {
-              // Validate against vertex count if we have it
-              logger.error(
-                "❌ IMMEDIATE CORRUPTION DETECTED in mesh '\(gltfMesh.name)': Max index \(maxIndex) >= vertexCount \(vertexCount) right after extraction!"
-              )
-              logger.error("   First 10 indices: \(Array(extracted.prefix(10)))")
-              logger.error("   Index range: [\(minIndex), \(maxIndex)]")
-              // Log the accessor details again for debugging
-              logger.error(
-                "   Accessor: componentType=\(indices.componentType), count=\(indices.count), offset=\(indices.offset), stride=\(indices.stride)"
-              )
-              if let bufferView = indices.bufferView {
-                logger.error(
-                  "   BufferView: offset=\(bufferView.offset), size=\(bufferView.size), stride=\(bufferView.stride)"
-                )
-                if let buffer = bufferView.buffer {
-                  logger.error("   Buffer: size=\(buffer.size), hasDataPointer=\(buffer.dataPointer != nil)")
-                  if let dataPtr = buffer.dataPointer {
-                    logger.error("   Buffer data pointer: \(String(describing: dataPtr))")
-                  }
-                }
-              }
-              // Don't use corrupted data
-              extractedIndices = nil
-            }
-          } else {
-            logger.error(
-              "❌ extractIndices returned nil for mesh '\(gltfMesh.name)' accessor '\(indices.name)'"
-            )
-          }
-
-          indexData = extractedIndices
+          indexData = indices.unpackIndices()
         }
 
         extractedMeshData.append(
@@ -934,7 +848,11 @@ extension Scene {
             tangents: tangents,
             indexData: indexData,
             vertexCount: vertexCount,
-            materialIndex: materialIndex
+            materialIndex: materialIndex,
+            jointsData: jointsData,
+            weightsData: weightsData,
+            gltfMeshIndex: gltfMeshIndex,
+            primitiveIndex: primitiveIndex
           ))
 
         meshIndices.append(extractedMeshData.count - 1)
@@ -943,41 +861,152 @@ extension Scene {
     }
 
     // SECOND PASS: Convert extracted data into Mesh objects
-    // All buffer reads are now complete, so we can safely process the data
     var allMeshes: [Mesh] = []
 
     for extracted in extractedMeshData {
-      // Validate extracted data before creating mesh
-      // Check for obvious corruption
-      if let indexData = extracted.indexData {
-        let maxIndex = indexData.max() ?? 0
-        if maxIndex > 1000000 {
-          logger.error(
-            "❌ Mesh '\(extracted.name)': Corrupted index data detected after extraction - max index: \(maxIndex), vertexCount: \(extracted.vertexCount)"
-          )
-          // Skip this mesh or create empty one
-          continue
-        }
 
-        // Validate indices are within reasonable bounds
-        if extracted.vertexCount > 0 && maxIndex >= UInt32(extracted.vertexCount) {
-          logger.error(
-            "❌ Mesh '\(extracted.name)': Index out of bounds after extraction - max index: \(maxIndex), vertexCount: \(extracted.vertexCount)"
-          )
-          // Filter out invalid indices or skip mesh
-          continue
-        }
-      }
-
-      // Validate positions
       let expectedPositionCount = extracted.vertexCount * 3
       if extracted.positions.count != expectedPositionCount {
         logger.error(
           "❌ Mesh '\(extracted.name)': Position count mismatch after extraction - expected: \(expectedPositionCount), got: \(extracted.positions.count)"
         )
-        // Try to recover or skip
         if extracted.positions.count < 3 {
           continue
+        }
+      }
+
+      var bones: [Bone] = []
+      if let jointsData = extracted.jointsData, let weightsData = extracted.weightsData {
+        logger.debug(
+          "🔍 Mesh '\(extracted.name)' has JOINTS_0 (\(jointsData.count) values) and WEIGHTS_0 (\(weightsData.count) values)"
+        )
+
+        let gltfMesh = gltfDocument.meshes[extracted.gltfMeshIndex]
+        let meshPtr = UnsafeRawPointer(gltfMesh.underlying)
+
+        var owningNode: GLTFNode? = nil
+        func findOwningNode(_ gltfNode: GLTFNode) {
+          if let nodeMesh = gltfNode.mesh,
+            UnsafeRawPointer(nodeMesh.underlying) == meshPtr
+          {
+            owningNode = gltfNode
+            return
+          }
+          for child in gltfNode.children {
+            findOwningNode(child)
+          }
+        }
+        for rootNode in gltfDocument.nodes.filter({ $0.parent == nil }) {
+          findOwningNode(rootNode)
+          if owningNode != nil { break }
+        }
+
+        if owningNode == nil {
+          logger.warning("⚠️ Could not find owning node for mesh '\(extracted.name)'")
+        } else {
+          logger.debug("✅ Found owning node '\(owningNode!.name)' for mesh '\(extracted.name)'")
+        }
+
+        if let node = owningNode, let skin = node.skin {
+          logger.debug("✅ Node '\(node.name)' has skin with \(skin.joints.count) joints")
+          var inverseBindMatrices: [mat4] = []
+          if let ibmAccessor = skin.inverseBindMatrices {
+            if let matrixData = ibmAccessor.unpackFloats() {
+              // Matrices are stored as 16 floats each (column-major)
+              let matrixCount = matrixData.count / 16
+              for i in 0..<matrixCount {
+                let base = i * 16
+                let m = mat4(
+                  vec4(matrixData[base + 0], matrixData[base + 1], matrixData[base + 2], matrixData[base + 3]),
+                  vec4(matrixData[base + 4], matrixData[base + 5], matrixData[base + 6], matrixData[base + 7]),
+                  vec4(matrixData[base + 8], matrixData[base + 9], matrixData[base + 10], matrixData[base + 11]),
+                  vec4(matrixData[base + 12], matrixData[base + 13], matrixData[base + 14], matrixData[base + 15])
+                )
+                inverseBindMatrices.append(m)
+              }
+            }
+          }
+
+          let joints = skin.joints
+          let jointCount = min(joints.count, inverseBindMatrices.count)
+
+          // JOINTS_0 and WEIGHTS_0 are vec4 (4 components per vertex)
+          let vertexCount = extracted.vertexCount
+          var boneWeights: [Int: [VertexWeight]] = [:]
+
+          // Collect all weights per vertex and normalize them (similar to Assimp's aiProcess_LimitBoneWeights)
+          var vertexWeights: [[(boneIndex: Int, weight: Float)]] = Array(repeating: [], count: vertexCount)
+
+          for vertexIndex in 0..<vertexCount {
+            let base = vertexIndex * 4
+            if base + 3 < jointsData.count && base + 3 < weightsData.count {
+              var weights: [(boneIndex: Int, weight: Float)] = []
+              for i in 0..<4 {
+                let boneIndex = Int(jointsData[base + i])
+                let weight = weightsData[base + i]
+
+                if boneIndex < jointCount && weight > minWeightThreshold {
+                  weights.append((boneIndex: boneIndex, weight: weight))
+                }
+              }
+
+              // Normalize weights so they sum to 1.0 (similar to Assimp's aiProcess_LimitBoneWeights)
+              // This ensures proper skinning even if source data has non-normalized weights
+              let totalWeight = weights.reduce(0.0) { $0 + $1.weight }
+              if totalWeight > minWeightThreshold {
+                let normalizationFactor = 1.0 / totalWeight
+                for weight in weights {
+                  let normalizedWeight = weight.weight * normalizationFactor
+                  vertexWeights[vertexIndex].append((boneIndex: weight.boneIndex, weight: normalizedWeight))
+                }
+              }
+            }
+          }
+
+          // Build bone-to-vertex-weight mapping from normalized weights
+          for vertexIndex in 0..<vertexCount {
+            for (boneIndex, weight) in vertexWeights[vertexIndex] {
+              if boneWeights[boneIndex] == nil {
+                boneWeights[boneIndex] = []
+              }
+              boneWeights[boneIndex]?.append(VertexWeight(vertexIndex: vertexIndex, weight: weight))
+            }
+          }
+
+          // CRITICAL: Bones MUST be in the same order as skin.joints
+          // JOINTS_0 vertex attribute indices refer directly to skin.joints array indices
+          // Changing this order would break all bone index references in vertex data
+          for i in 0..<jointCount {
+            let jointNode = joints[i]
+            let offsetMatrix = i < inverseBindMatrices.count ? inverseBindMatrices[i] : mat4(1)
+            let weights = boneWeights[i] ?? []
+
+            bones.append(
+              Bone(
+                name: jointNode.name.isEmpty ? nil : jointNode.name,
+                offsetMatrix: offsetMatrix,
+                weights: weights
+              ))
+
+            if i < 3 {
+              logger.debug("  Bone[\(i)] = '\(jointNode.name)' (from skin.joints[\(i)])")
+            }
+          }
+
+          logger.debug("📦 Loaded \(bones.count) bones for mesh '\(extracted.name)'")
+          if !bones.isEmpty {
+            logger.debug("  Bone names: \(bones.compactMap { $0.name })")
+            logger.debug("  Bone indices: 0..<\(bones.count)")
+            if let firstBone = bones.first {
+              logger.debug(
+                "  First bone '\(firstBone.name ?? "Unknown")' offset matrix translation: (\(firstBone.offsetMatrix[3].x), \(firstBone.offsetMatrix[3].y), \(firstBone.offsetMatrix[3].z))"
+              )
+            }
+          }
+        } else {
+          if owningNode != nil {
+            logger.warning("⚠️ Node '\(owningNode!.name)' does not have a skin for mesh '\(extracted.name)'")
+          }
         }
       }
 
@@ -989,12 +1018,14 @@ extension Scene {
         tangents: extracted.tangents,
         indexData: extracted.indexData,
         vertexCount: extracted.vertexCount,
-        materialIndex: extracted.materialIndex
+        materialIndex: extracted.materialIndex,
+        numberOfBones: bones.count,
+        bones: bones
       )
       allMeshes.append(mesh)
     }
 
-    // Convert embedded textures and build mapping FIRST (before materials need them)
+    // Convert embedded textures and build mapping (before materials need them)
     var embeddedTextureIndex = 0
     let embeddedTextures: [EmbeddedTexture] = gltfDocument.images.enumerated().compactMap { documentIndex, image in
       guard let bufferView = image.bufferView,
@@ -1003,15 +1034,14 @@ extension Scene {
         return nil
       }
 
-      // Map this image to its embedded texture index
-      // Use name if available, otherwise URI, otherwise document index as fallback
-      // Note: cName returns "<unnamed>" for empty strings, so we need to check for that
+      // Map image to embedded texture index (use name, URI, or document index as fallback)
+      // Note: cgltf returns "<unnamed>" for empty strings, so we check for that explicitly
       let hasName = !image.name.isEmpty && image.name != "<unnamed>"
       let hasUri = !image.uri.isEmpty && image.uri != "<unnamed>"
       let imageIdentifier = hasName ? image.name : (hasUri ? image.uri : "\(documentIndex)")
       imageToEmbeddedIndex[imageIdentifier] = embeddedTextureIndex
 
-      // Also map by name and URI separately for fallback matching
+      // Also map by name and URI separately for fallback matching during material lookup
       if hasName {
         imageToEmbeddedIndex[image.name] = embeddedTextureIndex
         logger.debug("Mapped embedded texture [\(embeddedTextureIndex)]: name='\(image.name)'")
@@ -1024,10 +1054,7 @@ extension Scene {
         logger.debug("Mapped embedded texture [\(embeddedTextureIndex)]: documentIndex=\(documentIndex)")
       }
 
-      // Use bufferView.dataPointer which already includes the offset
       let data = Data(bytes: dataPtr, count: bufferView.size)
-      // We don't know width/height from buffer view alone, would need to decode image
-      // For now, use placeholder values
       let embeddedTexture = EmbeddedTexture(
         index: embeddedTextureIndex,
         data: data,
@@ -1044,8 +1071,7 @@ extension Scene {
 
     logger.debug("Total embedded textures: \(embeddedTextures.count), mapping entries: \(imageToEmbeddedIndex.count)")
 
-    // Convert materials (pass the imageToEmbeddedIndex map - now it's populated!)
-    // Skip if skipMaterials is true (useful for MapView where materials aren't needed)
+    // Skip materials if requested (useful for MapView where materials aren't needed)
     let materials: [Material]
     if skipMaterials {
       materials = []
@@ -1055,15 +1081,13 @@ extension Scene {
       }
     }
 
-    // Convert animations
     let animations = gltfDocument.animations.map { Animation($0, document: gltfDocument) }
 
-    // Convert cameras
     let cameras = gltfDocument.cameras.map { gltfCamera in
       Camera(gltfCamera: gltfCamera)
     }
 
-    // Create mapping from GLTF camera name to Camera object for fast lookup
+    // Create mapping from GLTF camera name to Camera object
     var gltfCameraNameToCamera: [String: Camera] = [:]
     for (index, gltfCamera) in gltfDocument.cameras.enumerated() {
       let cameraName = gltfCamera.name.isEmpty ? "<unnamed>" : gltfCamera.name
@@ -1071,31 +1095,37 @@ extension Scene {
     }
 
     // Mapping from camera node base name to Camera object
-    // This is needed because GLTF allows camera objects to have different names than their nodes
+    // GLTF allows camera objects to have different names than their nodes
     var cameraNodeToCamera: [String: Camera] = [:]
 
-    // Convert node hierarchy
+    // Create mapping from GLTF light to our Light type
+    var gltfLightToLight: [UnsafeRawPointer: Light] = [:]
+    for gltfLight in gltfDocument.lights {
+      let lightPtr = UnsafeRawPointer(gltfLight.underlying)
+      gltfLightToLight[lightPtr] = Light(gltfLight)
+    }
+
+    var collectedLights: [(light: Light, nodeName: String)] = []
+
     func convertNode(
       _ gltfNode: GLTFNode, gltfDocument: GLTFDocument, meshIndexMap: [Int: [Int]],
       gltfMeshPtrToIndex: [UnsafeRawPointer: Int]
     ) -> Node {
-      // Get transformation matrix using the wrapper's method
-      // This uses cgltf's built-in function to compute the local transform matrix
+      // Get transformation matrix using cgltf's built-in function
+      // This handles TRS (translation, rotation, scale) decomposition automatically
       let cgltfMatrix = gltfNode.localTransformMatrix
 
-      // cgltf stores matrices in column-major order
-      // Construct mat4 from 4 vec4 columns
+      // cgltf stores matrices in column-major order (OpenGL convention)
+      // Construct mat4 from 4 vec4 columns: [col0, col1, col2, col3]
       let transformation = mat4(
-        vec4(cgltfMatrix[0], cgltfMatrix[1], cgltfMatrix[2], cgltfMatrix[3]),  // first column
-        vec4(cgltfMatrix[4], cgltfMatrix[5], cgltfMatrix[6], cgltfMatrix[7]),  // second column
-        vec4(cgltfMatrix[8], cgltfMatrix[9], cgltfMatrix[10], cgltfMatrix[11]),  // third column
-        vec4(cgltfMatrix[12], cgltfMatrix[13], cgltfMatrix[14], cgltfMatrix[15])  // fourth column
+        vec4(cgltfMatrix[0], cgltfMatrix[1], cgltfMatrix[2], cgltfMatrix[3]),
+        vec4(cgltfMatrix[4], cgltfMatrix[5], cgltfMatrix[6], cgltfMatrix[7]),
+        vec4(cgltfMatrix[8], cgltfMatrix[9], cgltfMatrix[10], cgltfMatrix[11]),
+        vec4(cgltfMatrix[12], cgltfMatrix[13], cgltfMatrix[14], cgltfMatrix[15])
       )
 
-      // Get mesh indices - use underlying pointer for accurate matching
       var meshIndices: [Int] = []
       if let gltfMesh = gltfNode.mesh {
-        // Now that underlying is accessible, we can directly compare pointers
         let meshPtr = UnsafeRawPointer(gltfMesh.underlying)
         if let gltfMeshIndex = gltfMeshPtrToIndex[meshPtr] {
           meshIndices = meshIndexMap[gltfMeshIndex] ?? []
@@ -1104,30 +1134,49 @@ extension Scene {
               "Node '\(gltfNode.name)' found GLTF mesh index \(gltfMeshIndex) but meshIndexMap returned empty array")
           }
         } else {
-          // Debug: This shouldn't happen if pointer matching is working
           logger.warning(
             "Node '\(gltfNode.name)' references mesh '\(gltfMesh.name)' but couldn't find it in gltfMeshPtrToIndex (map has \(gltfMeshPtrToIndex.count) entries)"
           )
         }
       }
 
-      // If this node has a camera, map it to the Camera object
-      // GLTF allows camera objects to have different names than their nodes
+      // Map camera node to Camera object (GLTF allows camera objects to have different names than their nodes)
       if let gltfCamera = gltfNode.camera {
         let cameraName = gltfCamera.name.isEmpty ? "<unnamed>" : gltfCamera.name
         if let camera = gltfCameraNameToCamera[cameraName] {
-          // Extract base name from node name (e.g., "@Camera 1" -> "1")
           let baseName = Scene.extractBaseName(from: gltfNode.name)
           cameraNodeToCamera[baseName] = camera
         }
       }
 
-      // Convert children
+      if let gltfLight = gltfNode.light {
+        let lightPtr = UnsafeRawPointer(gltfLight.underlying)
+        if var light = gltfLightToLight[lightPtr] {
+          if light.name == nil || light.name!.isEmpty {
+            light.name = gltfNode.name.isEmpty ? nil : gltfNode.name
+          }
+          let nodeTransform = transformation
+          let position = vec3(nodeTransform[3].x, nodeTransform[3].y, nodeTransform[3].z)
+          // Default direction is -Z in GLTF, transform it by the node's rotation
+          if light.type != .point {
+            let defaultDir = vec3(0, 0, -1)
+            let rotMatrix = mat3(
+              vec3(nodeTransform[0].x, nodeTransform[0].y, nodeTransform[0].z),
+              vec3(nodeTransform[1].x, nodeTransform[1].y, nodeTransform[1].z),
+              vec3(nodeTransform[2].x, nodeTransform[2].y, nodeTransform[2].z)
+            )
+            let transformedDir = normalize(rotMatrix * defaultDir)
+            light.direction = transformedDir
+          }
+          light.position = position
+          collectedLights.append((light: light, nodeName: gltfNode.name))
+        }
+      }
+
       let children = gltfNode.children.map {
         convertNode($0, gltfDocument: gltfDocument, meshIndexMap: meshIndexMap, gltfMeshPtrToIndex: gltfMeshPtrToIndex)
       }
 
-      // Parse GLTF extras into metadata
       let gltfMetadata: NodeMetadata?
       if let extrasJSON = gltfNode.extrasJSON {
         gltfMetadata = NodeMetadata(from: extrasJSON)
@@ -1142,16 +1191,13 @@ extension Scene {
         children: children
       )
 
-      // Store GLTF metadata
       node._gltfMetadata = gltfMetadata
 
       return node
     }
 
-    // Find root nodes (nodes without parents)
     let rootNodes = gltfDocument.nodes.filter { $0.parent == nil }
 
-    // Create a root node that contains all root nodes as children
     let rootNode: Node
     if rootNodes.count == 1 {
       rootNode = convertNode(
@@ -1164,49 +1210,19 @@ extension Scene {
       rootNode = Node(name: "Root", transformation: mat4(1), meshes: [], children: children)
     }
 
-    // Call designated initializer
+    let lights = collectedLights.map { $0.light }
+
     self.init(
       filePath: filePath,
       rootNode: rootNode,
       meshes: allMeshes,
       materials: materials,
       cameras: cameras,
+      lights: lights,
       animations: animations,
       embeddedTextures: embeddedTextures
     )
 
-    // Store the camera node to camera mapping
     self._cameraNodeToCamera = cameraNodeToCamera
-
-    // _gltfDocument was already set at the start of the initializer to keep the document alive
   }
-}
-
-// Helper to convert quaternion to matrix
-private func quaternionToMatrix(_ q: Quaternion<Float>) -> mat4 {
-  let x = q.x
-  let y = q.y
-  let z = q.z
-  let w = q.w
-
-  let x2 = x + x
-  let y2 = y + y
-  let z2 = z + z
-
-  let xx = x * x2
-  let xy = x * y2
-  let xz = x * z2
-  let yy = y * y2
-  let yz = y * z2
-  let zz = z * z2
-  let wx = w * x2
-  let wy = w * y2
-  let wz = w * z2
-
-  return mat4(
-    1 - (yy + zz), xy + wz, xz - wy, 0,
-    xy - wz, 1 - (xx + zz), yz + wx, 0,
-    xz + wy, yz - wx, 1 - (xx + yy), 0,
-    0, 0, 0, 1
-  )
 }

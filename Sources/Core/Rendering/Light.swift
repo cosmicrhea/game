@@ -1,28 +1,36 @@
 /// Enhanced light for 3D rendering with position support
-struct Light: Equatable, @unchecked Sendable {
+public struct Light: Equatable, @unchecked Sendable {
+  var name: String?
   var direction: vec3
   var position: vec3
   var color: vec3
   var intensity: Float
   var range: Float
   var type: LightType
+  var innerConeAngle: Float?  // For spot lights only
+  var outerConeAngle: Float?  // For spot lights only
 
-  enum LightType {
+  public enum LightType {
     case directional
     case point
     case spot
   }
 
-  init(
+  public init(
+    name: String? = nil,
     direction: vec3 = vec3(0.0, -1.0, 0.0), position: vec3 = vec3(0.0, 0.0, 0.0), color: vec3 = vec3(1.0, 1.0, 1.0),
-    intensity: Float = 1.0, range: Float = 100.0, type: LightType = .directional
+    intensity: Float = 1.0, range: Float = 100.0, type: LightType = .directional,
+    innerConeAngle: Float? = nil, outerConeAngle: Float? = nil
   ) {
+    self.name = name
     self.direction = normalize(direction)
     self.position = position
     self.color = color
     self.intensity = intensity
     self.range = range
     self.type = type
+    self.innerConeAngle = innerConeAngle
+    self.outerConeAngle = outerConeAngle
   }
 
   /// Create a light pointing down and slightly backward for item inspection

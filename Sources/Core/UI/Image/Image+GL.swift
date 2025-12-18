@@ -139,4 +139,32 @@ extension Image {
 
     return Image(handle: handle, naturalSize: Size(Float(width), Float(height)), pixelScale: pixelScale)
   }
+
+  /// Upload RGBA32F float pixels to GL and return a GPU-backed Image.
+  /// Used for HDR/EXR images to preserve precision.
+  public static func uploadToGLFloat(pixels: [Float], width: Int, height: Int, pixelScale: Float = 1.0) -> Image {
+    var tex: GLuint = 0
+    glGenTextures(1, &tex)
+    let handle = GLTextureHandle(id: tex)
+    glBindTexture(GL_TEXTURE_2D, tex)
+    pixels.withUnsafeBytes { raw in
+      glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA32F,
+        GLsizei(width),
+        GLsizei(height),
+        0,
+        GL_RGBA,
+        GL_FLOAT,
+        raw.baseAddress
+      )
+    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+
+    return Image(handle: handle, naturalSize: Size(Float(width), Float(height)), pixelScale: pixelScale)
+  }
 }

@@ -17,7 +17,7 @@ let package = Package(
 
   platforms: [
     // .macOS(.v13), // FIXME: build assimp for v13
-    .macOS(.v15),
+    .macOS(.v13),
     .custom("Linux", versionString: "6"),
     .custom("Windows", versionString: "10"),
   ],
@@ -27,7 +27,7 @@ let package = Package(
   ],
 
   dependencies: [
-    .package("assimp", branch: "master"),
+    //.package("assimp", branch: "master"),
     .package("cgltf", branch: "master"),
     .package("gl", branch: "master"),
     .package("gl-math", branch: "master"),
@@ -71,7 +71,7 @@ let package = Package(
         //"Inject",
         // .product(name: "HarfBuzz", package: "HarfBuzz"),
 
-        .product(name: "Assimp", package: "assimp"),
+        //.product(name: "Assimp", package: "assimp"),
         .product(name: "GL", package: "gl"),
         .product(name: "GLMath", package: "gl-math"),
         .product(name: "GLFW", package: "glfw-swift"),

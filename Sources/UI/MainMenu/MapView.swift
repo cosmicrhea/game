@@ -1,4 +1,3 @@
-import Assimp
 import Foundation
 import GLMath
 import GLTF
@@ -1683,8 +1682,6 @@ class MapView: RenderLoop {
         // Use area node's baseName (e.g., "@Area Hallway" -> "Hallway")
         labelText = areaBaseName
       } else if let floorNode = floorNode {
-        // Try floor node's metadata (Node may have metadata from Assimp)
-        // Metadata access is available if node was created from Assimp
         // Try floor node's baseName
         let floorBaseName = floorNode.baseName
         if !floorBaseName.isEmpty && floorBaseName != floorNode.name {

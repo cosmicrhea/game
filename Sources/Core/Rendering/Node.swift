@@ -1,8 +1,7 @@
-import Assimp
 import Foundation
 import GLMath
 
-/// Format-agnostic scene node that works with both Assimp and GLTF
+/// Scene node for GLTF scenes
 /// Provides persistent state (like isHidden) and builds the entire tree upfront
 public final class Node {
   public let name: String
@@ -14,28 +13,12 @@ public final class Node {
   /// Weak reference to parent (set during tree construction for world transform calculation)
   weak var parent: Node?
 
-  // Optional: Store Assimp node for backward compatibility (only if created from Assimp)
-  internal var _assimpNode: Assimp.Node?
-
-  // Optional: Store parsed GLTF metadata (only if created from GLTF)
+  // Optional: Store parsed GLTF metadata
   internal var _gltfMetadata: NodeMetadata?
 
-  // Backward compatibility: Access Assimp node if available
-  public var assimpNode: Assimp.Node? {
-    return _assimpNode
-  }
-
-  // Unified metadata access - works for both Assimp and GLTF
+  // Metadata access from GLTF
   public var metadata: NodeMetadata? {
-    // Prefer GLTF metadata if available, otherwise fall back to Assimp
-    if let gltfMetadata = _gltfMetadata {
-      return gltfMetadata
-    }
-    // Convert Assimp metadata to unified format
-    if let assimpMetadata = _assimpNode?.metadata {
-      return NodeMetadata(from: assimpMetadata)
-    }
-    return nil
+    return _gltfMetadata
   }
 
   /// The base name of the node, with all hint prefixes removed
@@ -64,23 +47,6 @@ public final class Node {
     for child in children {
       child.parent = self
     }
-  }
-
-  /// Initialize from Assimp.Node (for backward compatibility)
-  convenience init(_ assimpNode: Assimp.Node) {
-    let transformation = assimpNode.transformation.mat4Representation
-    let meshes = assimpNode.meshes
-    let children = assimpNode.children.map { Node($0) }
-
-    self.init(
-      name: assimpNode.name ?? "",
-      transformation: transformation,
-      meshes: meshes,
-      children: children
-    )
-
-    // Store Assimp node for backward compatibility
-    self._assimpNode = assimpNode
   }
 
   /// Find a node by name in the hierarchy
@@ -134,8 +100,8 @@ extension Node: CustomDebugStringConvertible {
   }
 }
 
-/// Unified metadata system that works with both Assimp and GLTF
-/// Provides a dictionary-like interface similar to Assimp.SceneMetadata
+/// Metadata system for GLTF scenes
+/// Provides a dictionary-like interface for node metadata
 public struct NodeMetadata {
   private let _metadata: [String: MetadataEntry]
 
@@ -145,36 +111,6 @@ public struct NodeMetadata {
 
   public var metadata: [String: MetadataEntry] {
     _metadata
-  }
-
-  /// Initialize from Assimp metadata
-  init(from assimpMetadata: Assimp.SceneMetadata) {
-    var dict: [String: MetadataEntry] = [:]
-    for (key, entry) in assimpMetadata.metadata {
-      switch entry {
-      case .bool(let value):
-        dict[key] = .bool(value)
-      case .int32(let value):
-        dict[key] = .int(Int(value))
-      case .uint64(let value):
-        dict[key] = .int(Int(value))
-      case .float(let value):
-        dict[key] = .float(value)
-      case .double(let value):
-        dict[key] = .float(Float(value))
-      case .string(let value):
-        dict[key] = .string(value)
-      case .vec3(let vec):
-        dict[key] = .vec3((vec.x, vec.y, vec.z))
-      case .metadata:
-        // Nested metadata not supported in unified format
-        break
-      @unknown default:
-        // Ignore unknown entry types
-        break
-      }
-    }
-    self._metadata = dict
   }
 
   /// Initialize from GLTF JSON extras

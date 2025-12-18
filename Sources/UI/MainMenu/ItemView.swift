@@ -1,5 +1,3 @@
-import Assimp
-
 @Editable final class ItemView: RenderLoop {
   private let item: Item
   private let promptList = PromptList(.itemView)

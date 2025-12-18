@@ -163,7 +163,7 @@ extension Item {
   static let lighter = Item(
     id: "lighter",
     name: "Empty Lighter",
-    description: "Simple butane lighter. It's empty and needs fuel.",
+    description: "Simple butane lighter. It needs fuel to function.",
   )
 
   static let catStatue = Item(

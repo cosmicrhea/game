@@ -1,24 +1,24 @@
-/// Our own Mesh type - independent of Assimp or GLTF
+/// TODO: docs
 public struct Mesh {
   public let name: String?
   public let numberOfVertices: Int
   public let numberOfFaces: Int
   public let numberOfBones: Int
   public let materialIndex: Int
-  
+
   // Vertex data
   public let positions: [Float]  // numberOfVertices * 3
-  public let normals: [Float]?    // numberOfVertices * 3
-  public let uvs: [Float]?        // numberOfVertices * 2 (first UV channel)
-  public let tangents: [Float]?   // numberOfVertices * 3
-  public let bitangents: [Float]? // numberOfVertices * 3
-  
+  public let normals: [Float]?  // numberOfVertices * 3
+  public let uvs: [Float]?  // numberOfVertices * 2 (first UV channel)
+  public let tangents: [Float]?  // numberOfVertices * 3
+  public let bitangents: [Float]?  // numberOfVertices * 3
+
   // Face data
   public let faces: [Face]
-  
+
   // Bone data
   public let bones: [Bone]
-  
+
   public init(
     name: String? = nil,
     numberOfVertices: Int,
@@ -51,7 +51,7 @@ public struct Mesh {
 /// Face representing a triangle (3 vertex indices)
 public struct Face {
   public let indices: [Int]
-  
+
   public init(indices: [Int]) {
     self.indices = indices
   }
@@ -62,7 +62,7 @@ public struct Bone {
   public let name: String?
   public let offsetMatrix: mat4  // Transform from mesh space to bone space in bind pose
   public let weights: [VertexWeight]
-  
+
   public init(name: String?, offsetMatrix: mat4, weights: [VertexWeight]) {
     self.name = name
     self.offsetMatrix = offsetMatrix
@@ -74,7 +74,7 @@ public struct Bone {
 public struct VertexWeight {
   public let vertexIndex: Int
   public let weight: Float
-  
+
   public init(vertexIndex: Int, weight: Float) {
     self.vertexIndex = vertexIndex
     self.weight = weight
@@ -109,4 +109,3 @@ extension Mesh {
     return (min: vec3(minX, minY, minZ), max: vec3(maxX, maxY, maxZ))
   }
 }
-

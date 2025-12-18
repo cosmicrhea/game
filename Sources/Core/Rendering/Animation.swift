@@ -1,10 +1,10 @@
-/// Our own Animation type - independent of Assimp or GLTF
+/// TODO: docs
 public struct Animation {
   public let name: String?
   public let duration: Double  // Duration in ticks
   public let ticksPerSecond: Double
   public let channels: [AnimationChannel]
-  
+
   public init(
     name: String? = nil,
     duration: Double,
@@ -24,7 +24,7 @@ public struct AnimationChannel {
   public let positionKeys: [VectorKey]
   public let rotationKeys: [QuatKey]
   public let scalingKeys: [VectorKey]
-  
+
   public init(
     nodeName: String,
     positionKeys: [VectorKey] = [],
@@ -42,7 +42,7 @@ public struct AnimationChannel {
 public struct VectorKey {
   public let time: Double
   public let value: vec3
-  
+
   public init(time: Double, value: vec3) {
     self.time = time
     self.value = value
@@ -53,10 +53,9 @@ public struct VectorKey {
 public struct QuatKey {
   public let time: Double
   public let value: Quaternion<Float>  // (w, x, y, z)
-  
+
   public init(time: Double, value: Quaternion<Float>) {
     self.time = time
     self.value = value
   }
 }
-

@@ -1,5 +1,3 @@
-import Assimp
-
 /// Macro to automatically generate method registry and dynamic calling for scene scripts
 @attached(
   member, names: named(methodRegistry), named(availableMethods), named(callMethod), named(_register),

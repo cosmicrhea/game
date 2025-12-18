@@ -1,4 +1,3 @@
-import Assimp
 import CJolt
 import Foundation
 import GLTF
@@ -94,7 +93,7 @@ private let startingEntry = "1"
   private var cameraWorldTransform: mat4 { cameraSystem.cameraWorldTransform }
 
   // Scene lights
-  private var sceneLights: [(light: Assimp.Light, worldTransform: mat4)] = []
+  private var sceneLights: [(light: Light, worldTransform: mat4)] = []
 
   // Prerendered environment renderer
   private var prerenderedEnvironment: PrerenderedEnvironment?
@@ -340,8 +339,8 @@ private let startingEntry = "1"
 
       // Use negative direction (light points toward negative direction)
       mainLight.direction = -worldDir
-      mainLight.color = vec3(light.colorDiffuse.x, light.colorDiffuse.y, light.colorDiffuse.z)
-      mainLight.intensity = 1.0
+      mainLight.color = light.color
+      mainLight.intensity = light.intensity
 
       logger.trace(
         "💡 Using directional light '\(light.name ?? "unnamed")' - direction: \(mainLight.direction), color: \(mainLight.color)"
@@ -370,8 +369,8 @@ private let startingEntry = "1"
         fillLight.direction = toPlayer
       }
 
-      fillLight.color = vec3(light.colorDiffuse.x, light.colorDiffuse.y, light.colorDiffuse.z)
-      fillLight.intensity = 0.4
+      fillLight.color = light.color
+      fillLight.intensity = light.intensity
     }
 
     return (mainLight, fillLight)
@@ -1289,7 +1288,7 @@ private let startingEntry = "1"
       let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
       let url = URL(fileURLWithPath: scenePath)
       let gltfDocument = try await GLTFDocument(contentsOf: url)
-      
+
       // Convert to our Scene
       let scene = Scene(gltfDocument, filePath: scenePath)
 
@@ -2159,6 +2158,37 @@ private let startingEntry = "1"
       cameraDetails = "FOV unknown"
     }
 
+    // Prefer mist values parsed from camera node metadata (propagated to prerendered environment)
+    let mistStart: Float?
+    let mistEnd: Float?
+    if let environment = prerenderedEnvironment {
+      mistStart = environment.near
+      mistEnd = environment.far
+    } else if let camera {
+      mistStart = camera.clipPlaneNear
+      mistEnd = camera.clipPlaneFar
+    } else {
+      mistStart = nil
+      mistEnd = nil
+    }
+
+    func formatMistValue(_ value: Float) -> String {
+      // Drop decimals when close to an integer, otherwise keep one decimal place
+      let rounded = value.rounded()
+      if abs(rounded - value) < 0.05 || abs(value) >= 10 {
+        return String(format: "%.0f", Double(value))
+      }
+      return String(format: "%.1f", Double(value))
+    }
+
+    let cameraDetailsWithMist: String
+    if let mistStart, let mistEnd {
+      let mistString = "\(formatMistValue(mistStart))–\(formatMistValue(mistEnd)) m mist"
+      cameraDetailsWithMist = "\(cameraDetails); \(mistString)"
+    } else {
+      cameraDetailsWithMist = cameraDetails
+    }
+
     let sceneLine: String
     if let areaName = currentAreaName, !areaName.isEmpty {
       sceneLine = "Scene: \(sceneName) (\(areaName))"
@@ -2169,7 +2199,7 @@ private let startingEntry = "1"
     var overlayLines = [
       //String(format: "FPS: %.0f", smoothedFPS),
       sceneLine,
-      "Camera: \(cameraDisplayName) (\(cameraDetails))",
+      "Camera: \(cameraDisplayName) (\(cameraDetailsWithMist))",
 
       String(
         format: "Position: %.2f, %.2f, %.2f",

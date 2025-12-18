@@ -44,6 +44,10 @@ extension Image {
       return Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
     }
 
+    // Log filename for debugging (memory loading path)
+    let filenameOnly = url.lastPathComponent
+    logger.debug("🖼️ Loading EXR: \(filenameOnly) (from memory)")
+
     let memoryResult = loadEXR(from: data, pixelScale: pixelScale)
 
     // If memory loading fails, try direct file loading as fallback
@@ -84,34 +88,27 @@ extension Image {
       return Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
     }
 
-    // Convert float RGBA data to UInt8 RGBA8
+    // EXR files are 32-bit float per channel (128 bits per pixel)
+    let bitDepth = 32
+    let filenameOnly = url.lastPathComponent
+    logger.debug("🖼️ Loading EXR: \(filenameOnly) - \(width)x\(height), \(bitDepth)-bit float per channel")
+
+    // Convert to array format for upload (preserve full precision, no tone mapping/gamma)
     let pixelCount = Int(width * height)
-    var bytes: [UInt8] = []
-    bytes.reserveCapacity(pixelCount * 4)
+    var floatPixels: [Float] = []
+    floatPixels.reserveCapacity(pixelCount * 4)
 
     for i in 0..<pixelCount {
-      let r = rgbaData[i * 4 + 0]
-      let g = rgbaData[i * 4 + 1]
-      let b = rgbaData[i * 4 + 2]
-      let a = rgbaData[i * 4 + 3]
-
-      // Convert from float [0,1] to UInt8 [0,255]
-      // Apply tone mapping for HDR values
-      let toneMappedR = performToneMapping(r)
-      let toneMappedG = performToneMapping(g)
-      let toneMappedB = performToneMapping(b)
-      let toneMappedA = performToneMapping(a)
-
-      bytes.append(UInt8(max(0, min(255, toneMappedR * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedG * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedB * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedA * 255))))
+      floatPixels.append(rgbaData[i * 4 + 0])  // R
+      floatPixels.append(rgbaData[i * 4 + 1])  // G
+      floatPixels.append(rgbaData[i * 4 + 2])  // B
+      floatPixels.append(rgbaData[i * 4 + 3])  // A
     }
 
-    logger.trace("Decoded EXR image from file: \(width)x\(height)")
+    logger.trace("Decoded EXR image from file: \(width)x\(height), preserving full float precision")
 
-    return Image.uploadToGL(
-      pixels: bytes,
+    return Image.uploadToGLFloat(
+      pixels: floatPixels,
       width: Int(width),
       height: Int(height),
       pixelScale: pixelScale
@@ -153,34 +150,26 @@ extension Image {
       return Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
     }
 
-    // Convert float RGBA data to UInt8 RGBA8
+    // EXR files are 32-bit float per channel (128 bits per pixel)
+    let bitDepth = 32
+    logger.debug("🖼️ Loading EXR from memory - \(width)x\(height), \(bitDepth)-bit float per channel")
+
+    // Convert to array format for upload (preserve full precision, no tone mapping/gamma)
     let pixelCount = Int(width * height)
-    var bytes: [UInt8] = []
-    bytes.reserveCapacity(pixelCount * 4)
+    var floatPixels: [Float] = []
+    floatPixels.reserveCapacity(pixelCount * 4)
 
     for i in 0..<pixelCount {
-      let r = rgbaData[i * 4 + 0]
-      let g = rgbaData[i * 4 + 1]
-      let b = rgbaData[i * 4 + 2]
-      let a = rgbaData[i * 4 + 3]
-
-      // Convert from float [0,1] to UInt8 [0,255]
-      // Apply tone mapping for HDR values
-      let toneMappedR = performToneMapping(r)
-      let toneMappedG = performToneMapping(g)
-      let toneMappedB = performToneMapping(b)
-      let toneMappedA = performToneMapping(a)
-
-      bytes.append(UInt8(max(0, min(255, toneMappedR * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedG * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedB * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedA * 255))))
+      floatPixels.append(rgbaData[i * 4 + 0])  // R
+      floatPixels.append(rgbaData[i * 4 + 1])  // G
+      floatPixels.append(rgbaData[i * 4 + 2])  // B
+      floatPixels.append(rgbaData[i * 4 + 3])  // A
     }
 
-    logger.trace("Decoded EXR image: \(width)x\(height)")
+    logger.trace("Decoded EXR image: \(width)x\(height), preserving full float precision")
 
-    return Image.uploadToGL(
-      pixels: bytes,
+    return Image.uploadToGLFloat(
+      pixels: floatPixels,
       width: Int(width),
       height: Int(height),
       pixelScale: pixelScale
@@ -237,34 +226,27 @@ extension Image {
       return Image.uploadToGL(pixels: [255, 255, 255, 255], width: 1, height: 1, pixelScale: pixelScale)
     }
 
-    // Convert float RGBA data to UInt8 RGBA8
+    // EXR files are 32-bit float per channel (128 bits per pixel)
+    let bitDepth = 32
+    let filenameOnly = url.lastPathComponent
+    logger.debug("🖼️ Loading EXR layer '\(layerName)' from \(filenameOnly) - \(width)x\(height), \(bitDepth)-bit float per channel")
+
+    // Convert to array format for upload (preserve full precision, no tone mapping/gamma)
     let pixelCount = Int(width * height)
-    var bytes: [UInt8] = []
-    bytes.reserveCapacity(pixelCount * 4)
+    var floatPixels: [Float] = []
+    floatPixels.reserveCapacity(pixelCount * 4)
 
     for i in 0..<pixelCount {
-      let r = rgbaData[i * 4 + 0]
-      let g = rgbaData[i * 4 + 1]
-      let b = rgbaData[i * 4 + 2]
-      let a = rgbaData[i * 4 + 3]
-
-      // Convert from float [0,1] to UInt8 [0,255]
-      // Apply tone mapping for HDR values
-      let toneMappedR = performToneMapping(r)
-      let toneMappedG = performToneMapping(g)
-      let toneMappedB = performToneMapping(b)
-      let toneMappedA = performToneMapping(a)
-
-      bytes.append(UInt8(max(0, min(255, toneMappedR * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedG * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedB * 255))))
-      bytes.append(UInt8(max(0, min(255, toneMappedA * 255))))
+      floatPixels.append(rgbaData[i * 4 + 0])  // R
+      floatPixels.append(rgbaData[i * 4 + 1])  // G
+      floatPixels.append(rgbaData[i * 4 + 2])  // B
+      floatPixels.append(rgbaData[i * 4 + 3])  // A
     }
 
-    logger.trace("Decoded EXR layer '\(layerName)' at \(url.path): \(width)x\(height)")
+    logger.trace("Decoded EXR layer '\(layerName)' at \(url.path): \(width)x\(height), preserving full float precision")
 
-    return Image.uploadToGL(
-      pixels: bytes,
+    return Image.uploadToGLFloat(
+      pixels: floatPixels,
       width: Int(width),
       height: Int(height),
       pixelScale: pixelScale
@@ -312,29 +294,4 @@ extension Image {
     return layerNamesArray
   }
 
-  /// Tone mapping function for HDR values with exposure and gamma correction
-  /// - Parameter value: Input float value (can be > 1.0 for HDR)
-  /// - Returns: Tone-mapped value in [0,1] range
-  private static func performToneMapping(_ value: Float) -> Float {
-    // Apply exposure adjustment (brighten the image)
-    // Higher exposure = brighter image. For prerendered EXR that looks too dark, increase this
-    let exposure: Float = 1.0
-    let exposed = value * exposure
-
-    // Only apply tone mapping to very bright HDR values (> 2.0)
-    // This preserves normal and mid-tone values much better
-    let toneMapped: Float
-    if exposed > 2.0 {
-      // For very bright values, use gentle Reinhard: x / (1 + x * 0.3)
-      // The 0.3 factor makes it much less aggressive than standard Reinhard
-      toneMapped = exposed / (1.0 + exposed * 0.3)
-    } else {
-      // For normal values, just clamp (no tone mapping needed)
-      toneMapped = min(1.0, exposed)
-    }
-
-    // Apply gamma correction (linear to sRGB)
-    let gamma: Float = 1.0 / 2.2
-    return pow(max(0.0, toneMapped), gamma)
-  }
 }

@@ -152,10 +152,10 @@ enum CreditsData {
       "Tabler Icons",
     ],
 
-    "Asset Pipeline Programming": [
-      // Assimp
-      "Christian Treffs"
-    ],
+    // "Asset Pipeline Programming": [
+    //   // Assimp
+    //   "Christian Treffs"
+    // ],
 
     "Physics Programming": [
       // Jolt

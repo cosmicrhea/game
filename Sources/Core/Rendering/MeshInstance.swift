@@ -52,7 +52,7 @@ struct MeshVertex {
   var bitangent: (Float, Float, Float)
 
   // Skeletal animation data
-  var boneIndices: (UInt8, UInt8, UInt8, UInt8)  // Up to 4 bone indices per vertex
+  var boneIndices: (Int32, Int32, Int32, Int32)  // Up to 4 bone indices per vertex (Int32 for GL_INT)
   var boneWeights: (Float, Float, Float, Float)  // Corresponding weights
 }
 
@@ -74,6 +74,9 @@ class MeshInstance: @unchecked Sendable {
   private var boneTransforms: [mat4] = []
   private var boneNames: [String] = []
   private var isSkeletalMesh: Bool = false
+
+  // Animation - uses shared controller for node transforms
+  // Bone transforms are calculated per-mesh from shared node transforms
 
   // PBR Texture support
   var diffuseTexture: GLuint = 0
@@ -174,9 +177,11 @@ class MeshInstance: @unchecked Sendable {
       UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.bitangent)!))
 
     // bone indices (4 components as unsigned bytes)
+    // CRITICAL: Use glVertexAttribIPointer (with I) for integer attributes!
+    // LearnOpenGL: "We are using glVertexAttribIPointer and we passed GL_INT as third parameter"
     glEnableVertexAttribArray(5)
-    glVertexAttribPointer(
-      5, 4, GL_UNSIGNED_BYTE, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+    glVertexAttribIPointer(
+      5, 4, GL_INT, GLsizei(MemoryLayout<MeshVertex>.stride),
       UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.boneIndices)!))
 
     // bone weights (4 components as floats)
@@ -199,37 +204,125 @@ class MeshInstance: @unchecked Sendable {
     boneTransforms = Array(repeating: mat4(1), count: mesh.numberOfBones)
     boneNames = mesh.bones.map { $0.name ?? "Unknown" }
   }
-  
+
   /// Get material for this mesh
   private var material: Material? {
     guard mesh.materialIndex < sceneData.materials.count else { return nil }
     return sceneData.materials[mesh.materialIndex]
   }
 
-  /// Update bone transforms for skeletal animation
-  func updateBoneTransforms(_ transforms: [String: mat4]) {
-    guard isSkeletalMesh else { return }
+  // MARK: - Animation
 
-    // Check if we have any animated transforms
-    let hasAnimatedTransforms = transforms.values.contains { $0 != mat4(1) }
-
-    if !hasAnimatedTransforms {
-      // No animation data, use identity matrices to avoid distortion
-      logger.trace("No animated transforms found, using identity matrices")
-      for index in 0..<boneTransforms.count {
-        boneTransforms[index] = mat4(1)
-      }
+  /// Update bone transforms from shared animated node transforms
+  /// Called by the animation controller after it updates node transforms
+  /// Matches LearnOpenGL's recursive CalculateBoneTransform approach
+  func updateBoneTransforms(animatedNodeTransforms: [String: mat4]) {
+    guard isSkeletalMesh else {
+      // For non-skeletal meshes, we could apply node transforms here if needed
+      // But for now, skeletal animation is the main use case
       return
     }
 
-    // Update bone transforms using bone index as key
-    for index in 0..<boneTransforms.count {
-      if let transform = transforms["\(index)"] {
-        boneTransforms[index] = transform
-      } else {
-        // Fallback to identity if no transform found
-        boneTransforms[index] = mat4(1)
+    // Create a map from bone name to bone index and offset matrix
+    var boneMap: [String: (index: Int, offsetMatrix: mat4)] = [:]
+    for (index, bone) in mesh.bones.enumerated() {
+      if let boneName = bone.name {
+        boneMap[boneName] = (index: index, offsetMatrix: bone.offsetMatrix)
       }
+    }
+
+    // Verify bone map
+    if boneMap.count != mesh.numberOfBones {
+      logger.warning("⚠️ Bone map count (\(boneMap.count)) != mesh.numberOfBones (\(mesh.numberOfBones))")
+    }
+
+    // CRITICAL: Reset all bone transforms to identity first (like LearnOpenGL does)
+    // This ensures bones that aren't found in the hierarchy get identity instead of stale values
+    for i in 0..<boneTransforms.count {
+      boneTransforms[i] = mat4(1)
+    }
+
+    // LearnOpenGL approach: Recursively calculate bone transforms starting from root
+    // Only processes nodes that are bones (checks if node name is in boneMap)
+    var dummyOutput: [Int: mat4]? = nil
+    calculateBoneTransform(
+      node: sceneData.rootNode,
+      parentTransform: mat4(1),
+      animatedNodeTransforms: animatedNodeTransforms.isEmpty ? [:] : animatedNodeTransforms,
+      boneMap: boneMap,
+      outputTransforms: &dummyOutput
+    )
+
+    // Verify bones were processed
+    var bonesNotProcessed: [String] = []
+    for (index, bone) in mesh.bones.enumerated() {
+      // A bone is "processed" if its transform is NOT identity (was set by calculateBoneTransform)
+      if boneTransforms[index] == mat4(1), let boneName = bone.name {
+        bonesNotProcessed.append(boneName)
+      }
+    }
+    if !bonesNotProcessed.isEmpty {
+      logger.warning("⚠️ Bones NOT processed: \(bonesNotProcessed.prefix(5))")
+    }
+  }
+
+  /// LearnOpenGL's CalculateBoneTransform approach:
+  /// Recursively traverse node hierarchy, only process nodes that are bones
+  /// For each bone: get local transform → multiply with parent → multiply with offsetMatrix
+  private func calculateBoneTransform(
+    node: Node,
+    parentTransform: mat4,
+    animatedNodeTransforms: [String: mat4],
+    boneMap: [String: (index: Int, offsetMatrix: mat4)],
+    outputTransforms: inout [Int: mat4]?
+  ) {
+    // Check if this node is a bone (matches LearnOpenGL's bone check)
+    let nodeName = node.name
+    let isBone = !nodeName.isEmpty && boneMap[nodeName] != nil
+
+    // Get local transform: use animated transform if available, otherwise use bind pose
+    // CRITICAL: GLTF animations might work differently than Assimp!
+    let localTransform: mat4
+    if let animatedTransform = animatedNodeTransforms[nodeName] {
+      // GLTF animations provide absolute transforms (they replace bind pose)
+      // But maybe we need to handle coordinate system conversion?
+      localTransform = animatedTransform
+    } else {
+      // Use bind pose transform from node
+      localTransform = node.transformation
+    }
+
+    // Calculate global transform: parentTransform * localTransform
+    // For column-major matrices, this order is correct
+    // BUT: Maybe for GLTF animated transforms, we need a different order?
+    // Standard (bind pose): parentTransform * localTransform
+    // Try reverse for animated: localTransform * parentTransform (probably wrong)
+    let globalTransform = parentTransform * localTransform
+
+    // If this node is a bone, calculate final bone matrix
+    if isBone, let boneInfo = boneMap[nodeName] {
+      let boneIndex = boneInfo.index
+      guard boneIndex < boneTransforms.count else { return }
+
+      // LearnOpenGL formula: finalBoneMatrix = globalTransformation * offsetMatrix
+      let finalBoneMatrix = globalTransform * boneInfo.offsetMatrix
+      boneTransforms[boneIndex] = finalBoneMatrix
+      if var output = outputTransforms {
+        output[boneIndex] = finalBoneMatrix
+        outputTransforms = output
+      }
+
+    }
+
+    // Recursively process children (LearnOpenGL passes globalTransform as new parentTransform)
+    for child in node.children {
+      calculateBoneTransform(
+        node: child,
+        parentTransform: globalTransform,
+        animatedNodeTransforms: animatedNodeTransforms,
+        boneMap: boneMap,
+        outputTransforms: &outputTransforms
+      )
     }
   }
 
@@ -276,13 +369,13 @@ class MeshInstance: @unchecked Sendable {
     // Load GLTF document with progress
     let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
     let url = URL(fileURLWithPath: scenePath)
-    
+
     let gltfDocument = try await GLTFDocument(contentsOf: url) { progress in
       Task { @MainActor in
         onSceneProgress(Float(progress))
       }
     }
-    
+
     // Convert to our Scene
     let sceneData = Scene(gltfDocument, filePath: scenePath)
 
@@ -302,18 +395,22 @@ class MeshInstance: @unchecked Sendable {
         }
       }
       buildMeshToNodeMap(node: sceneData.rootNode)
-      
+
       // Debug: Print root node structure
-      logger.debug("Root node: '\(sceneData.rootNode.name)', children: \(sceneData.rootNode.children.count), meshes: \(sceneData.rootNode.meshes.count)")
-      logger.debug("Root node transform translation: (\(sceneData.rootNode.transformation[3].x), \(sceneData.rootNode.transformation[3].y), \(sceneData.rootNode.transformation[3].z))")
-      
+      logger.debug(
+        "Root node: '\(sceneData.rootNode.name)', children: \(sceneData.rootNode.children.count), meshes: \(sceneData.rootNode.meshes.count)"
+      )
+      logger.debug(
+        "Root node transform translation: (\(sceneData.rootNode.transformation[3].x), \(sceneData.rootNode.transformation[3].y), \(sceneData.rootNode.transformation[3].z))"
+      )
+
       // Debug: Print mesh-to-node mapping
       logger.debug("Mesh-to-node mapping:")
       for (meshIndex, node) in meshToNodeMap.sorted(by: { $0.key < $1.key }) {
         logger.debug("  Mesh \(meshIndex) -> Node '\(node.name)' (has \(node.meshes.count) meshes)")
       }
       logger.debug("Total meshes: \(sceneData.meshes.count), Mapped: \(meshToNodeMap.count)")
-      
+
       return sceneData.meshes
         .enumerated()
         .filter { $0.element.numberOfVertices > 0 }
@@ -321,7 +418,7 @@ class MeshInstance: @unchecked Sendable {
           // Get transform from the node that owns this mesh
           let node = meshToNodeMap[index]
           let transformMatrix = node?.calculateWorldTransform() ?? mat4(1)
-          
+
           if node == nil {
             logger.warning("Mesh at index \(index) has no associated node, using identity transform")
           } else {
@@ -329,17 +426,24 @@ class MeshInstance: @unchecked Sendable {
             if index < 3 {
               let m = transformMatrix
               let translation = vec3(m[3].x, m[3].y, m[3].z)
-              let localTranslation = vec3(node!.transformation[3].x, node!.transformation[3].y, node!.transformation[3].z)
+              let localTranslation = vec3(
+                node!.transformation[3].x, node!.transformation[3].y, node!.transformation[3].z)
               logger.debug("Mesh \(index) ('\(mesh.name ?? "unnamed")') transform from node '\(node!.name)':")
               logger.debug("  World translation: (\(translation.x), \(translation.y), \(translation.z))")
               logger.debug("  Local translation: (\(localTranslation.x), \(localTranslation.y), \(localTranslation.z))")
               if let parent = node!.parent {
-                let parentTranslation = vec3(parent.transformation[3].x, parent.transformation[3].y, parent.transformation[3].z)
+                let parentTranslation = vec3(
+                  parent.transformation[3].x, parent.transformation[3].y, parent.transformation[3].z)
                 // Calculate scale from parent transform (length of first 3 columns)
-                let parentScaleX = length(vec3(parent.transformation[0].x, parent.transformation[0].y, parent.transformation[0].z))
-                let parentScaleY = length(vec3(parent.transformation[1].x, parent.transformation[1].y, parent.transformation[1].z))
-                let parentScaleZ = length(vec3(parent.transformation[2].x, parent.transformation[2].y, parent.transformation[2].z))
-                logger.debug("  Parent '\(parent.name)' translation: (\(parentTranslation.x), \(parentTranslation.y), \(parentTranslation.z))")
+                let parentScaleX = length(
+                  vec3(parent.transformation[0].x, parent.transformation[0].y, parent.transformation[0].z))
+                let parentScaleY = length(
+                  vec3(parent.transformation[1].x, parent.transformation[1].y, parent.transformation[1].z))
+                let parentScaleZ = length(
+                  vec3(parent.transformation[2].x, parent.transformation[2].y, parent.transformation[2].z))
+                logger.debug(
+                  "  Parent '\(parent.name)' translation: (\(parentTranslation.x), \(parentTranslation.y), \(parentTranslation.z))"
+                )
                 logger.debug("  Parent scale: (\(parentScaleX), \(parentScaleY), \(parentScaleZ))")
                 logger.debug("  Parent has parent: \(parent.parent != nil)")
               } else {
@@ -347,7 +451,7 @@ class MeshInstance: @unchecked Sendable {
               }
             }
           }
-          
+
           let instance = MeshInstance(
             sceneData: sceneData, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: sceneData.filePath)
           // Store node reference for visibility checking
@@ -398,12 +502,6 @@ class MeshInstance: @unchecked Sendable {
       program.setInt("numBones", value: Int32(boneTransforms.count))
       for (index, transform) in boneTransforms.enumerated() {
         program.setMat4("boneTransforms[\(index)]", value: transform)
-      }
-
-      // Debug: Print bone transform info
-      logger.trace("Skeletal mesh: \(boneTransforms.count) bone transforms")
-      for (index, transform) in boneTransforms.enumerated() {
-        logger.trace("Bone \(index): \(transform)")
       }
     }
 
@@ -516,7 +614,7 @@ class MeshInstance: @unchecked Sendable {
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
-      logger.debug("Using cached texture for key \(cacheKey)")
+      logger.trace("Using cached texture for key \(cacheKey)")
       textureID = cachedTexture
       hasTexture = true
       return
@@ -541,29 +639,35 @@ class MeshInstance: @unchecked Sendable {
       logger.warning("Invalid embedded texture path format: '\(texturePath)' (should start with '*')")
       return
     }
-    
+
     let suffix = String(texturePath.dropFirst())
     guard let textureIndex = Int(suffix) else {
       logger.warning("Failed to parse embedded texture index from '\(texturePath)' (suffix: '\(suffix)')")
       return
     }
-    
+
     guard textureIndex < sceneData.embeddedTextures.count else {
-      logger.warning("Embedded texture index \(textureIndex) out of bounds (total: \(sceneData.embeddedTextures.count))")
+      logger.warning(
+        "Embedded texture index \(textureIndex) out of bounds (total: \(sceneData.embeddedTextures.count))")
       return
     }
 
-    logger.debug("Loading embedded texture [\(textureIndex)]: path=\(texturePath), total embedded textures=\(sceneData.embeddedTextures.count)")
+    logger.trace(
+      "Loading embedded texture [\(textureIndex)]: path=\(texturePath), total embedded textures=\(sceneData.embeddedTextures.count)"
+    )
     let embeddedTexture = sceneData.embeddedTextures[textureIndex]
-    logger.debug("Embedded texture [\(textureIndex)]: data size=\(embeddedTexture.data.count) bytes, formatHint=\(embeddedTexture.formatHint ?? "nil")")
+    logger.trace(
+      "Embedded texture [\(textureIndex)]: data size=\(embeddedTexture.data.count) bytes, formatHint=\(embeddedTexture.formatHint ?? "nil")"
+    )
     createOpenGLTexture(
-      from: embeddedTexture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+      from: embeddedTexture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID,
+      hasTexture: &hasTexture)
   }
 
   private func loadExternalTexture(texturePath: String, textureID: inout GLuint, hasTexture: inout Bool) {
     // Create cache key for external textures
     let cacheKey = texturePath
-    
+
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
       logger.trace("Using cached external texture for key \(cacheKey)")
@@ -571,44 +675,50 @@ class MeshInstance: @unchecked Sendable {
       hasTexture = true
       return
     }
-    
+
     // Resolve texture path relative to the GLB file location
     let sceneURL = URL(fileURLWithPath: sceneIdentifier)
     let sceneDirectory = sceneURL.deletingLastPathComponent()
     let textureURL = sceneDirectory.appendingPathComponent(texturePath)
-    
+
     // Try to load from the resolved path
     if let textureData = try? Data(contentsOf: textureURL) {
-      loadTextureFromData(textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+      loadTextureFromData(
+        textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
       return
     }
-    
+
     // If that fails, try loading from Bundle.game (for textures in the bundle)
     // Remove any leading path separators and directory components
     let cleanPath = texturePath.hasPrefix("/") ? String(texturePath.dropFirst()) : texturePath
     let pathExtension = URL(fileURLWithPath: cleanPath).pathExtension
     let pathWithoutExtension = URL(fileURLWithPath: cleanPath).deletingPathExtension().lastPathComponent
-    if let bundlePath = Bundle.game.path(forResource: cleanPath, ofType: nil) ?? (pathExtension.isEmpty ? nil : Bundle.game.path(forResource: pathWithoutExtension, ofType: pathExtension)) {
+    if let bundlePath = Bundle.game.path(forResource: cleanPath, ofType: nil)
+      ?? (pathExtension.isEmpty ? nil : Bundle.game.path(forResource: pathWithoutExtension, ofType: pathExtension))
+    {
       let bundleURL = URL(fileURLWithPath: bundlePath)
       if let textureData = try? Data(contentsOf: bundleURL) {
-        loadTextureFromData(textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+        loadTextureFromData(
+          textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
         return
       }
     }
-    
+
     logger.warning("Failed to load external texture: \(texturePath) (tried: \(textureURL.path))")
   }
-  
-  private func loadTextureFromData(_ data: Data, texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool) {
+
+  private func loadTextureFromData(
+    _ data: Data, texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool
+  ) {
     // Create a temporary EmbeddedTexture-like structure
     let dataArray = Array(data)
     let formatHint = URL(fileURLWithPath: texturePath).pathExtension.lowercased()
-    
+
     // Determine format from file extension
     let isPNG = formatHint == "png"
     let isWebP = formatHint == "webp"
     let isJPEG = formatHint == "jpg" || formatHint == "jpeg"
-    
+
     do {
       if isPNG {
         let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { _ in }
@@ -672,7 +782,7 @@ class MeshInstance: @unchecked Sendable {
           hasTexture = true
         }
       }
-      
+
       if hasTexture {
         // Cache the texture
         TextureCache.shared.cacheTexture(textureID, for: cacheKey)
@@ -682,7 +792,6 @@ class MeshInstance: @unchecked Sendable {
       logger.error("Failed to decode external texture \(texturePath): \(error)")
     }
   }
-
 
   private func createOpenGLTexture(
     from embeddedTexture: EmbeddedTexture,
@@ -703,7 +812,7 @@ class MeshInstance: @unchecked Sendable {
     let data = embeddedTexture.data
     let dataArray = Array(data)
     let formatHint = embeddedTexture.formatHint?.lowercased() ?? ""
-    
+
     logger.debug("Creating OpenGL texture from embedded data: formatHint=\(formatHint), data size=\(data.count) bytes")
 
     do {
@@ -1003,32 +1112,32 @@ extension Mesh {
 
   /// Get bone indices and weights for a specific vertex
   private func getBoneData(for vertexIndex: Int, boneWeightMap: [Int: [(boneIndex: Int, weight: Float)]]) -> (
-    (UInt8, UInt8, UInt8, UInt8), (Float, Float, Float, Float)
+    (Int32, Int32, Int32, Int32), (Float, Float, Float, Float)
   ) {
     guard let vertexWeights = boneWeightMap[vertexIndex], !vertexWeights.isEmpty else {
-      // No bone weights for this vertex
-      return ((0, 0, 0, 0), (0, 0, 0, 0))
+      // No bone weights for this vertex - return -1 for indices (like LearnOpenGL uses -1 for unused)
+      return ((-1, -1, -1, -1), (0, 0, 0, 0))
     }
 
     // Sort weights by weight value (descending) and take up to 4
     let sortedWeights = vertexWeights.sorted { $0.weight > $1.weight }.prefix(4)
 
-    var indices: (UInt8, UInt8, UInt8, UInt8) = (0, 0, 0, 0)
+    var indices: (Int32, Int32, Int32, Int32) = (-1, -1, -1, -1)  // -1 means unused (like LearnOpenGL)
     var weights: (Float, Float, Float, Float) = (0, 0, 0, 0)
 
     for (i, weightData) in sortedWeights.enumerated() {
       switch i {
       case 0:
-        indices.0 = UInt8(weightData.boneIndex)
+        indices.0 = Int32(weightData.boneIndex)
         weights.0 = weightData.weight
       case 1:
-        indices.1 = UInt8(weightData.boneIndex)
+        indices.1 = Int32(weightData.boneIndex)
         weights.1 = weightData.weight
       case 2:
-        indices.2 = UInt8(weightData.boneIndex)
+        indices.2 = Int32(weightData.boneIndex)
         weights.2 = weightData.weight
       case 3:
-        indices.3 = UInt8(weightData.boneIndex)
+        indices.3 = Int32(weightData.boneIndex)
         weights.3 = weightData.weight
       default:
         break

@@ -1,22 +1,22 @@
-/// Our own Material type - independent of Assimp or GLTF
+/// TODO: docs
 public struct Material {
   public let name: String?
   public let materialIndex: Int
-  
+
   // PBR properties
   public let baseColor: vec3
   public let metallic: Float
   public let roughness: Float
   public let emissive: vec3
   public let opacity: Float
-  
+
   // Texture paths (can be embedded texture references like "*0" or file paths)
   public let diffuseTexturePath: String?
   public let normalTexturePath: String?
   public let roughnessTexturePath: String?
   public let metallicTexturePath: String?
   public let aoTexturePath: String?
-  
+
   public init(
     name: String? = nil,
     materialIndex: Int = 0,
@@ -45,4 +45,3 @@ public struct Material {
     self.aoTexturePath = aoTexturePath
   }
 }
-

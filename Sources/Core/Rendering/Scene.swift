@@ -1,4 +1,3 @@
-import Assimp
 import GLTF
 
 /// Import hint types for scene nodes.
@@ -29,7 +28,7 @@ public enum ImportHint: String, CaseIterable {
   }
 }
 
-/// Our own Scene type - independent of Assimp or GLTF
+/// Scene type for GLTF scenes
 /// This represents the loaded scene data with all game logic
 public final class Scene {
   public let filePath: String
@@ -41,9 +40,6 @@ public final class Scene {
   // Embedded textures (for GLB files)
   public let embeddedTextures: [EmbeddedTexture]
 
-  // Optional: Store Assimp scene for backward compatibility (only if created from Assimp)
-  internal var _assimpScene: Assimp.Scene?
-
   // Optional: Store GLTF document to keep buffer data alive during initialization
   // This prevents buffer data from being freed by cgltf_free() while we're still reading it
   internal var _gltfDocument: GLTFDocument?
@@ -52,18 +48,11 @@ public final class Scene {
   // In GLTF, camera objects can have different names than their nodes, so we need this mapping
   internal var _cameraNodeToCamera: [String: Camera] = [:]
 
-  // Backward compatibility: Access Assimp scene if available
-  public var assimpScene: Assimp.Scene? {
-    return _assimpScene
-  }
-
-  // Our own cameras (from GLTF or Assimp)
+  // Cameras from GLTF
   public let cameras: [Camera]
 
-  // Backward compatibility: Access Assimp lights if available
-  public var lights: [Assimp.Light] {
-    return _assimpScene?.lights ?? []
-  }
+  // Lights from GLTF
+  public let lights: [Light]
 
   // Game-specific: Hint-based node collections
   public private(set) var actionNodes: [Node] = []
@@ -90,6 +79,7 @@ public final class Scene {
     meshes: [Mesh],
     materials: [Material],
     cameras: [Camera] = [],
+    lights: [Light] = [],
     animations: [Animation] = [],
     embeddedTextures: [EmbeddedTexture] = []
   ) {
@@ -98,6 +88,7 @@ public final class Scene {
     self.meshes = meshes
     self.materials = materials
     self.cameras = cameras
+    self.lights = lights
     self.animations = animations
     self.embeddedTextures = embeddedTextures
 
@@ -304,19 +295,18 @@ public final class Scene {
 
   /// Find a camera by base name (e.g., "0" finds "@Camera 0")
   /// Returns the Camera if available
-  /// For GLTF scenes, uses the mapping from camera node to Camera object
-  /// For Assimp scenes, matches by name
+  /// Uses the mapping from camera node to Camera object
   public func camera(named baseName: String) -> Camera? {
     guard let cameraNode = cameraNode(named: baseName) else {
       return nil
     }
 
-    // For GLTF scenes, use the mapping (camera objects can have different names than nodes)
+    // Use the mapping (camera objects can have different names than nodes)
     if let camera = _cameraNodeToCamera[baseName] {
       return camera
     }
 
-    // Fallback for Assimp: try to match by camera node name first, then by base name
+    // Fallback: try to match by camera node name first, then by base name
     return cameras.first(where: { $0.name == cameraNode.name })
       ?? cameras.first(where: { $0.name == baseName })
   }

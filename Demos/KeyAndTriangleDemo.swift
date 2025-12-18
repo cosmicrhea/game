@@ -1,7 +1,3 @@
-import Assimp
-
-import class Foundation.Bundle
-
 /// A demo that renders a triangle and a key.
 @MainActor
 final class KeyAndTriangleDemo: RenderLoop {
@@ -14,7 +10,6 @@ final class KeyAndTriangleDemo: RenderLoop {
   /// Test triangle renderer for basic geometry testing.
   private let testTriangle = TestTriangle()
 
-  // Assimp mesh
   /// Array of mesh renderers for 3D objects.
   private let meshInstances: [MeshInstance]
 

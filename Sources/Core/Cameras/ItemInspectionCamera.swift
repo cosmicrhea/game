@@ -29,24 +29,24 @@ class ItemInspectionCamera {
   var mouseSensitivity: Float
 
   // Distance bounds (calculated from default distance)
-  private let minDistance: Float
-  private let maxDistance: Float
-  private let defaultDistance: Float
+  internal let minDistance: Float
+  internal let maxDistance: Float
+  internal let defaultDistance: Float
 
   // Internal mouse tracking state
-  private var lastMouseX: Float = 0
-  private var lastMouseY: Float = 0
-  private var isFirstMouseEvent: Bool = true
-  private var isDragging: Bool = false
+  internal var lastMouseX: Float = 0
+  internal var lastMouseY: Float = 0
+  internal var isFirstMouseEvent: Bool = true
+  internal var isDragging: Bool = false
 
   // Pan state
-  private var isPanning: Bool = false
-  private var panOffset: vec3 = vec3(0, 0, 0)
+  internal var isPanning: Bool = false
+  internal var panOffset: vec3 = vec3(0, 0, 0)
 
   // Momentum/inertia for smooth rotation
-  private var angularVelocity: (yaw: Float, pitch: Float) = (0, 0)
-  private let friction: Float = 0.93
-  private let maxAngularVelocity: Float = 150.0
+  internal var angularVelocity: (yaw: Float, pitch: Float) = (0, 0)
+  internal let friction: Float = 0.93
+  internal let maxAngularVelocity: Float = 150.0
 
   // Momentum/inertia for smooth zoom
   public var zoomVelocity: Float = 0.0
@@ -54,26 +54,26 @@ class ItemInspectionCamera {
   public var maxZoomVelocity: Float = 2.0
 
   // Momentum/inertia for smooth panning
-  private var panVelocity: vec3 = vec3(0, 0, 0)
-  private let panFriction: Float = 0.90
-  private let maxPanVelocity: Float = 5.0
+  internal var panVelocity: vec3 = vec3(0, 0, 0)
+  internal let panFriction: Float = 0.90
+  internal let maxPanVelocity: Float = 5.0
 
   // Keyboard controls
-  private let keyboardSensitivity: Float = 100.0
-  private let keyboardZoomSpeed: Float = 2.0
+  internal let keyboardSensitivity: Float = 100.0
+  internal let keyboardZoomSpeed: Float = 2.0
 
   // Reset animation
-  private var isResetting: Bool = false
-  private var resetStartTime: Float = 0.0
-  private let resetDuration: Float = 1.0
-  private var resetStartYaw: Float = 0.0
-  private var resetStartPitch: Float = 0.0
-  private var resetStartDistance: Float = 0.0
-  private var resetStartPanOffset: vec3 = vec3(0, 0, 0)
-  private var resetTargetYaw: Float = 0.0
-  private var resetTargetPitch: Float = 0.0
-  private var resetTargetDistance: Float = 0.0
-  private let initialTarget: vec3
+  internal var isResetting: Bool = false
+  internal var resetStartTime: Float = 0.0
+  internal let resetDuration: Float = 1.0
+  internal var resetStartYaw: Float = 0.0
+  internal var resetStartPitch: Float = 0.0
+  internal var resetStartDistance: Float = 0.0
+  internal var resetStartPanOffset: vec3 = vec3(0, 0, 0)
+  internal var resetTargetYaw: Float = 0.0
+  internal var resetTargetPitch: Float = 0.0
+  internal var resetTargetDistance: Float = 0.0
+  internal let initialTarget: vec3
 
   init(
     target: vec3 = vec3(0.0, 0.0, 0.0),  // Object position
@@ -442,7 +442,7 @@ class ItemInspectionCamera {
   }
 
   /// Updates the camera position based on target, distance, and pitch
-  private func updateCameraPosition() {
+  internal func updateCameraPosition() {
     if verticalRotationMode == .orbitCamera {
       // Calculate camera position based on distance and pitch
       // This is similar to OrbitCamera but we keep the model at the center

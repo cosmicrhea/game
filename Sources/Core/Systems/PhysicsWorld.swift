@@ -1,4 +1,3 @@
-import Assimp
 import CJolt
 import Foundation
 import Jolt

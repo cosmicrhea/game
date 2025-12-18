@@ -19,9 +19,6 @@
 @_exported import class Foundation.DispatchQueue
 @_exported import struct Foundation.LocalizedStringResource
 
-// FIXME: remove this once we have a proper scene graph ourselves
-@_exported import class Assimp.Camera
-
 #if canImport(Darwin)
   @_exported import Darwin
 #elseif canImport(Glibc)

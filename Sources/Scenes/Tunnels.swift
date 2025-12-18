@@ -4,7 +4,7 @@ class Tunnels: Script {
   private var thirdRailTouches = 0
 
   func door() {
-    goTo(scene: "nexus", entry: "1")
+    goTo(scene: "nexus", entry: "4")
   }
 
   func thirdRail() async {

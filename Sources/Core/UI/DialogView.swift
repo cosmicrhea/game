@@ -512,7 +512,7 @@
       tint: dialogStyle.color,
       scale: 0.5,
       deltaTime: deltaTime,
-      strokeWidth: dialogStyle.strokeWidth,  // / 2,
+      strokeWidth: dialogStyle.strokeWidth / 2,  // / 2 ????
       strokeColor: dialogStyle.strokeColor
     )
   }

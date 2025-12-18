@@ -99,8 +99,6 @@ public final class Engine {
       print("|ω･)ﾉ♡☆")
     #endif
 
-    print(Locale.game)
-
     //    print("Bundle.game: \(Bundle.game)")
     //    print("Bundle.main: \(Bundle.main)")
     //    print("Bundle.module: \(Bundle.module)")
@@ -269,32 +267,32 @@ public final class Engine {
 
   private func setupLoops() {
     loops = [
-      MainLoop()
-      // TitleScreenStack(),
+       MainLoop(),
+       TitleScreenStack(),
 
       // //PauseScreenStack(),
 
       // DeathScreenStack(),
 
-      // DialogDemo(),
-      // MapView(scene: "shooting_range"),
-      // ItemView(item: .sigp320),
+       DialogDemo(),
+       MapView(scene: "shooting_range"),
+       ItemView(item: .sigp320),
+       DocumentDemo(),
       // //PickupView(item: .catStatue),
-      // StorageView(),
-      // SaveScreen(),
-      // LoadScreen(),
+       StorageView(),
+       SaveScreen(),
+       LoadScreen(),
       // //MainMenu(),
-      // UIDemo(),
-      // //DocumentDemo(),
-      // MovieDemo(),
-      // ModelViewer(),
-      // CreditsScreen(),
+       UIDemo(),
+       MovieDemo(),
+      ModelViewer(),
+//       CreditsScreen(),
 
       // InventoryView(),
       // GradientDemo(),
-      // SVGDemo(),
-      // SlotDemo(),
-      // SlotGridDemo(),
+//       SVGDemo(),
+//       SlotDemo(),
+//       SlotGridDemo(),
       // LibraryView(),
       // CalloutDemo(),
       // PromptListDemo(),

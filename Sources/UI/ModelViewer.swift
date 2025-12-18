@@ -1,3 +1,6 @@
+import GLTF
+
+@Editable
 final class ModelViewer: RenderLoop {
   // UI
   private let promptList = PromptList(.modelViewer)
@@ -13,10 +16,10 @@ final class ModelViewer: RenderLoop {
   // Models
   private let modelPaths: [String] = [
     "Actors/alex",
-    "Actors/goth_girl",
+    //"Actors/goth_girl",
     //"Actors/guard",
     "Actors/marit",
-    "Actors/rat",
+    //"Actors/rat",
   ]
   private var currentModelIndex: Int = 0
   private var meshInstances: [MeshInstance] = []
@@ -24,9 +27,15 @@ final class ModelViewer: RenderLoop {
 
   // Scene/Animations
   private var currentAnimationNames: [String] = []
+  private var animationOrder: [Int] = []
   private var currentAnimationIndex: Int = 0
-  private var nodeAnimator = NodeAnimator()
   private var currentScene: Scene?
+  private var animationController = AnimationController()
+  private let preferredAnimationOrder: [String] = [
+    "Idle",
+    "Walk",
+    "Run",
+  ]
 
   // Camera / lights
   private var camera = ModelViewerCamera()
@@ -40,6 +49,27 @@ final class ModelViewer: RenderLoop {
   // UI visibility toggle
   private var showControls: Bool = true
 
+  // Layout tuning
+  @Editor(200...500) var controlsPanelWidth: Float = 320
+  @Editor(50...500) var controlsTopMargin: Float = 200
+  @Editor(5...20) var controlsHeaderSpacing: Float = 10
+  @Editor(16...32) var controlsHeaderFontSize: Float = 24
+  @Editor(256...1024) var controlsDividerWidth: Float = 384
+  @Editor(1...5) var controlsDividerHeight: Float = 2
+
+  @Editor(100...300) var modelNameBaseline: Float = 160
+  @Editor(100...300) var animationNameBaseline: Float = 128
+  @Editor(200...500) var promptAreaWidth: Float = 400
+  @Editor(0.1...0.9) var promptHorizontalFactor: Float = 0.36
+  @Editor(5...20) var modelPromptVerticalOffset: Float = 8
+  @Editor(5...20) var animationPromptVerticalOffset: Float = 8
+  @Editor(256...1024) var modelNameDividerWidth: Float = 512
+  @Editor(1...5) var modelNameDividerHeight: Float = 2
+
+  @Editor(20...100) var loadingProgressTopMargin: Float = 40
+  @Editor(16...32) var loadingProgressLineHeight: Float = 24
+  @Editor(20...100) var loadingProgressLeftMargin: Float = 40
+
   init() {
     Task { await loadCurrentModel() }
   }
@@ -52,35 +82,61 @@ final class ModelViewer: RenderLoop {
 
     let path = modelPaths[safe: currentModelIndex] ?? modelPaths[0]
     do {
-      let loaded = try await MeshInstance.loadAsync(
-        path: path,
-        onSceneProgress: { [weak self] progress in
-          Task { @MainActor [weak self] in
-            self?.loadingProgress.updateSceneProgress(progress)
+      // Load GLTF document
+      let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
+      let url = URL(fileURLWithPath: scenePath)
+      let gltfDocument = try await GLTFDocument(contentsOf: url)
+
+      // Convert to Scene
+      let scene = Scene(gltfDocument, filePath: scenePath)
+      self.currentScene = scene
+
+      // Create mesh instances from scene
+      await MainActor.run {
+        // Build a map from mesh index to node for proper transform lookup
+        var meshToNodeMap: [Int: Node] = [:]
+        func buildMeshToNodeMap(node: Node) {
+          for meshIndex in node.meshes {
+            if meshToNodeMap[meshIndex] == nil {
+              meshToNodeMap[meshIndex] = node
+            }
           }
-        },
-        onTextureProgress: { [weak self] current, total, progress in
-          Task { @MainActor [weak self] in
-            self?.loadingProgress.updateTextureProgress(current: current, total: total, progress: progress)
+          for child in node.children {
+            buildMeshToNodeMap(node: child)
           }
         }
-      )
-      self.meshInstances = loaded
-      self.loadingProgress.markCompleted()
+        buildMeshToNodeMap(node: scene.rootNode)
 
-      if let sceneData = loaded.first?.sceneData {
-        currentScene = sceneData
-        currentAnimationNames = sceneData.animations.enumerated().map { idx, a in
-          if let name = a.name, !name.isEmpty { return name }
+        // Create mesh instances
+        self.meshInstances = scene.meshes
+          .enumerated()
+          .filter { $0.element.numberOfVertices > 0 }
+          .map { (index, mesh) in
+            let node = meshToNodeMap[index]
+            let transformMatrix = node?.calculateWorldTransform() ?? mat4(1)
+            return MeshInstance(sceneData: scene, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: path)
+          }
+
+        self.loadingProgress.markCompleted()
+
+        // Setup animations with preferred ordering and humanized names
+        let rawAnimationNames = scene.animations.enumerated().map { idx, animation in
+          if let name = animation.name, !name.isEmpty { return name }
           return "Animation \(idx + 1)"
         }
 
-        currentAnimationIndex = 0
-        playCurrentAnimation()
+        let humanizedNames = rawAnimationNames.map { self.humanizeAnimationName($0) }
+        let orderedIndices = self.buildAnimationOrder(from: humanizedNames)
+
+        self.animationOrder = orderedIndices
+        self.currentAnimationNames = orderedIndices.compactMap { humanizedNames[safe: $0] }
+        self.currentAnimationIndex = 0
+        self.playCurrentAnimation()
       }
     } catch {
       self.meshInstances = []
       self.currentAnimationNames = []
+      self.animationOrder = []
       self.loadingProgress.progressMessages.append("Failed to load: \(path)")
     }
   }
@@ -195,7 +251,7 @@ final class ModelViewer: RenderLoop {
 
   private func playCurrentAnimation() {
     guard let sceneData = currentScene,
-      currentAnimationIndex < sceneData.animations.count
+      currentAnimationIndex < currentAnimationNames.count
     else {
       logger.warning(
         "ModelViewer: Cannot play animation - scene: \(currentScene != nil), index: \(currentAnimationIndex), count: \(currentScene?.animations.count ?? 0)"
@@ -203,18 +259,42 @@ final class ModelViewer: RenderLoop {
       return
     }
 
-    let animation = sceneData.animations[currentAnimationIndex]
-    logger.trace(
-      "ModelViewer: Playing animation \(currentAnimationIndex): \(currentAnimationNames[safe: currentAnimationIndex] ?? "Unknown")"
+    let orderedIndex = animationOrder[safe: currentAnimationIndex] ?? currentAnimationIndex
+    guard orderedIndex < sceneData.animations.count else {
+      logger.warning(
+        "ModelViewer: Animation order out of bounds - orderedIndex: \(orderedIndex), count: \(sceneData.animations.count)"
+      )
+      return
+    }
+
+    let animation = sceneData.animations[orderedIndex]
+    logger.debug(
+      "ModelViewer: Playing animation \(currentAnimationIndex): '\(currentAnimationNames[safe: currentAnimationIndex] ?? "Unknown")'"
     )
-    nodeAnimator.play(animation: animation)
+    logger.debug("  Animation duration: \(animation.duration), tps: \(animation.ticksPerSecond)")
+    logger.debug("  Animation channels: \(animation.channels.count)")
+    for (idx, channel) in animation.channels.prefix(5).enumerated() {
+      logger.debug(
+        "    Channel \(idx): node='\(channel.nodeName)', posKeys=\(channel.positionKeys.count), rotKeys=\(channel.rotationKeys.count), scaleKeys=\(channel.scalingKeys.count)"
+      )
+    }
+
+    // Check mesh bone counts
+    logger.debug("  Mesh instances: \(meshInstances.count)")
+    for (idx, instance) in meshInstances.enumerated() {
+      logger.debug(
+        "    Mesh \(idx): bones=\(instance.mesh.numberOfBones), isSkeletal=\(instance.mesh.numberOfBones > 0)")
+    }
+
+    // Play animation on shared controller
+    animationController.play(animation: animation)
   }
 
   private func toggleAnimation() {
-    if nodeAnimator.playing {
-      nodeAnimator.pause()
+    if animationController.playing {
+      animationController.pause()
     } else {
-      nodeAnimator.resume()
+      animationController.resume()
     }
     UISound.select()
   }
@@ -229,12 +309,17 @@ final class ModelViewer: RenderLoop {
       camera.processGamepadState(gamepad, deltaTime)
     }
 
-    nodeAnimator.update(deltaTime: deltaTime)
+    // Update shared animation controller
+    animationController.update(deltaTime: deltaTime)
+
+    // Update bone transforms for all mesh instances from shared animation
+    let animatedTransforms = animationController.getAnimatedNodeTransforms()
+    meshInstances.forEach { $0.updateBoneTransforms(animatedNodeTransforms: animatedTransforms) }
 
     // Debug: Print animation status every 2 seconds
-    if Int(nodeAnimator.animationTime) % 2 == 0 && nodeAnimator.playing {
+    if Int(animationController.time) % 2 == 0 && animationController.playing {
       logger.trace(
-        "ModelViewer: Animation playing - time: \(nodeAnimator.animationTime), transforms: \(nodeAnimator.getAllNodeTransforms().count)"
+        "ModelViewer: Animation playing - time: \(animationController.time)"
       )
     }
   }
@@ -266,32 +351,36 @@ final class ModelViewer: RenderLoop {
 
       if let prompts = PromptGroup.prompts[.modelViewerControls] {
         let viewportHeight = Float(Engine.viewportSize.height)
-        let originX = Float(Engine.viewportSize.width) - 400
+        let originX = Float(Engine.viewportSize.width) - controlsPanelWidth
 
         // Calculate prompt list size and header height
         let promptListSize = secondaryPromptList.size(for: prompts, inputSource: .player1)
-        let headerStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 24, color: .white)
-        let headerHeight = "Controls".size(with: headerStyle).height
-        let headerSpacing: Float = 16
-        let dividerHeight: Float = 2
+        let headerStyle = TextStyle(
+          fontName: "CreatoDisplay-Bold",
+          fontSize: controlsHeaderFontSize,
+          color: .white
+        )
+        //let headerHeight = "Controls".size(with: headerStyle).height
+        let headerSpacing = controlsHeaderSpacing
+        let dividerHeight = controlsDividerHeight
 
         // Position from top of screen (higher Y = higher on screen in OpenGL)
         // In OpenGL, Y=0 is at bottom, viewportHeight is at top
         // Position near top with some margin
-        let topMargin: Float = 100
+        let topMargin = controlsTopMargin
         let headerTopY = viewportHeight - topMargin
 
         // Draw "Controls" header first (at the top)
         "Controls".draw(
-          at: Point(originX, headerTopY),
+          at: Point(originX + 5, headerTopY),
           style: headerStyle,
           anchor: .bottomLeft
         )
 
         // Draw divider below the header
-        let headerBottomY = headerTopY - headerHeight
+        let headerBottomY = headerTopY - headerSpacing
         let dividerGradient = Gradient(colors: [.clear, .white.withAlphaComponent(0.15)], locations: [0.0, 0.1])
-        let dividerWidth: Float = 512
+        let dividerWidth = controlsDividerWidth
         let dividerX = Engine.viewportSize.width - dividerWidth
         let dividerY = headerBottomY
         let divider = Rect(x: dividerX, y: dividerY - dividerHeight / 2, width: dividerWidth, height: dividerHeight)
@@ -318,20 +407,10 @@ final class ModelViewer: RenderLoop {
     let view = camera.getViewMatrix()
     let cameraModelMatrix = camera.getModelMatrix()
 
-    // Get all bone transforms for skeletal animation
-    let boneTransforms =
-      currentScene != nil
-      ? nodeAnimator.calculateBoneTransforms(sceneData: currentScene!) : nodeAnimator.getAllNodeTransforms()
-
     meshInstances.forEach { meshInstance in
-      // Update bone transforms for skeletal meshes
-      meshInstance.updateBoneTransforms(boneTransforms)
-
-      // Get animated transform for this mesh's node (if it exists)
-      let animatedTransform = getAnimatedTransform(for: meshInstance)
-
-      // Combine camera model matrix with mesh transform and animation
-      let combinedModelMatrix = cameraModelMatrix * meshInstance.transformMatrix * animatedTransform
+      // Bone transforms are already calculated in update() for skeletal meshes
+      // Just draw with the current model matrix
+      let combinedModelMatrix = cameraModelMatrix * meshInstance.transformMatrix
 
       meshInstance.draw(
         projection: projection,
@@ -349,51 +428,6 @@ final class ModelViewer: RenderLoop {
     }
   }
 
-  private func getAnimatedTransform(for meshInstance: MeshInstance) -> mat4 {
-    guard let sceneData = currentScene else { return mat4(1) }
-
-    // Find the mesh index in the scene
-    guard let meshIndex = findMeshIndex(for: meshInstance, in: sceneData) else {
-      return mat4(1)
-    }
-
-    // Get the mesh from the scene
-    let mesh = sceneData.meshes[meshIndex]
-
-    // If this mesh has bones, we need to apply skeletal animation
-    if mesh.numberOfBones > 0 {
-      // This is a skeletal mesh - let's try applying different bone transforms
-      // to see if we can get some bone movement
-
-      // Try applying the Hips bone transform (should show some movement)
-      let hipsBoneName = "Hips"
-      let hipsTransform = nodeAnimator.getNodeTransform(nodeName: hipsBoneName)
-
-      if hipsTransform != mat4(1) {
-        return hipsTransform
-      } else {
-        // Fall back to root bone if hips doesn't have animation
-        let rootBoneName = "Root"
-        return nodeAnimator.getNodeTransform(nodeName: rootBoneName)
-      }
-    } else {
-      // This is a static mesh (like the handgun) - no animation
-      return mat4(1)
-    }
-  }
-
-  private func findMeshIndex(for meshInstance: MeshInstance, in sceneData: Scene) -> Int? {
-    // Since Mesh is a struct, we need to compare by value or use a different approach
-    // For now, we'll search by comparing mesh properties
-    let index = sceneData.meshes.firstIndex { mesh in
-      mesh.numberOfVertices == meshInstance.mesh.numberOfVertices
-        && mesh.numberOfFaces == meshInstance.mesh.numberOfFaces
-        && mesh.materialIndex == meshInstance.mesh.materialIndex
-    }
-    logger.trace("ModelViewer: Looking for mesh, found index: \(index ?? -1)")
-    return index
-  }
-
   private func drawLoadingProgress() {
     let progressStyle = TextStyle(
       fontName: "CreatoDisplay-Medium",
@@ -402,11 +436,11 @@ final class ModelViewer: RenderLoop {
       strokeWidth: 1,
       strokeColor: .gray900
     )
-    let startY = Float(Engine.viewportSize.height) - 40
-    let lineHeight: Float = 24
+    let startY = Float(Engine.viewportSize.height) - loadingProgressTopMargin
+    let lineHeight = loadingProgressLineHeight
     for (index, message) in loadingProgress.progressMessages.enumerated() {
       let y = startY - Float(index) * lineHeight
-      message.draw(at: Point(40, y), style: progressStyle, anchor: .topLeft)
+      message.draw(at: Point(loadingProgressLeftMargin, y), style: progressStyle, anchor: .topLeft)
     }
   }
 
@@ -421,8 +455,8 @@ final class ModelViewer: RenderLoop {
 
     // In OpenGL, Y=0 is at bottom, so we calculate from bottom
     // Position model name and animation name near bottom of screen
-    let modelNameY: Float = 160  // 160 pixels from bottom
-    let animationNameY: Float = 128  // 128 pixels from bottom
+    let modelNameY = modelNameBaseline
+    let animationNameY = animationNameBaseline
 
     // Gradient divider line between model name and animation name
     // Fade from both ends: clear -> white -> clear
@@ -430,8 +464,8 @@ final class ModelViewer: RenderLoop {
       colors: [.clear, .white.withAlphaComponent(0.15), .white.withAlphaComponent(0.15), .clear],
       locations: [0.0, 0.1, 0.9, 1.0]
     )
-    let dividerWidth: Float = 512
-    let dividerHeight: Float = 2
+    let dividerWidth = modelNameDividerWidth
+    let dividerHeight = modelNameDividerHeight
 
     // Divider positioned between model name and animation name
     let dividerY = (modelNameY + animationNameY) / 2
@@ -440,34 +474,40 @@ final class ModelViewer: RenderLoop {
     divider.fill(with: dividerGradient)
 
     // Draw model name with Q/E prompts
-    // Hardcode prompt positions to 400px wide from center
-    let promptAreaWidth: Float = 400
-
     // Align prompts vertically with text baseline
     prevModelPrompt.iconOpacity = 0.6
     prevModelPrompt.draw(
-      at: Point(centerX - promptAreaWidth * 0.4, modelNameY),
-      anchor: .right
+      at: Point(
+        centerX - promptAreaWidth * promptHorizontalFactor,
+        modelNameY - modelPromptVerticalOffset
+      ),
+      anchor: .topRight
     )
 
     modelName.draw(
       at: Point(centerX, modelNameY),
       style: .itemName,
-      anchor: .center
+      anchor: .bottom
     )
 
     nextModelPrompt.iconOpacity = 0.6
     nextModelPrompt.draw(
-      at: Point(centerX + promptAreaWidth * 0.4, modelNameY),
-      anchor: .left
+      at: Point(
+        centerX + promptAreaWidth * promptHorizontalFactor,
+        modelNameY - modelPromptVerticalOffset
+      ),
+      anchor: .topLeft
     )
 
     // Draw animation name and 1/3 prompts
     // Always draw the prompts, even if no animations are loaded
     prevAnimationPrompt.iconOpacity = 0.6
     prevAnimationPrompt.draw(
-      at: Point(centerX - promptAreaWidth * 0.4, animationNameY),
-      anchor: .right
+      at: Point(
+        centerX - promptAreaWidth * promptHorizontalFactor,
+        animationNameY + animationPromptVerticalOffset
+      ),
+      anchor: .bottomRight
     )
 
     // Only draw animation name if animations are available
@@ -478,15 +518,58 @@ final class ModelViewer: RenderLoop {
       displayText.draw(
         at: Point(centerX, animationNameY),
         style: .itemDescription,
-        anchor: .center
+        anchor: .top
       )
     }
 
     nextAnimationPrompt.iconOpacity = 0.6
     nextAnimationPrompt.draw(
-      at: Point(centerX + promptAreaWidth * 0.4, animationNameY),
-      anchor: .left
+      at: Point(
+        centerX + promptAreaWidth * promptHorizontalFactor,
+        animationNameY + animationPromptVerticalOffset
+      ),
+      anchor: .bottomLeft
     )
+  }
+
+  // MARK: - Helpers
+
+  private func humanizeAnimationName(_ name: String) -> String {
+    let replacedSeparators =
+      name
+      .replacingOccurrences(of: "_", with: " ")
+      .replacingOccurrences(of: "-", with: " ")
+
+    let spacedCamelCase = replacedSeparators.replacingOccurrences(
+      of: #"(?<=[a-z])(?=[A-Z])"#,
+      with: " ",
+      options: .regularExpression
+    )
+
+    let trimmed = spacedCamelCase.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { return "Animation" }
+    return trimmed.titleCased
+  }
+
+  private func buildAnimationOrder(from names: [String]) -> [Int] {
+    var orderedIndices: [Int] = []
+    var used: Set<Int> = []
+    let preferredLower = preferredAnimationOrder.map { $0.lowercased() }
+
+    for preferred in preferredLower {
+      if let match = names.enumerated().first(where: { $0.element.lowercased() == preferred }) {
+        orderedIndices.append(match.offset)
+        used.insert(match.offset)
+      }
+    }
+
+    let remaining = names.enumerated()
+      .filter { !used.contains($0.offset) }
+      .sorted { $0.element.localizedCaseInsensitiveCompare($1.element) == .orderedAscending }
+      .map { $0.offset }
+
+    orderedIndices.append(contentsOf: remaining)
+    return orderedIndices
   }
 }
 
@@ -502,11 +585,47 @@ class ModelViewerCamera: ItemInspectionCamera {
   }
 
   override func update(deltaTime: Float) {
-    // Apply zoom momentum with custom distance limits
-    if abs(zoomVelocity) > 0.01 {
-      distance += zoomVelocity * deltaTime
+    // Handle reset animation (copy from parent but with our distance limits)
+    if isResetting {
+      resetStartTime += deltaTime
+      let progress = min(resetStartTime / resetDuration, 1.0)
+      let easedProgress = 1.0 - (1.0 - progress) * (1.0 - progress) * (1.0 - progress)
 
-      // Clamp distance to custom bounds
+      modelYaw = resetStartYaw + (resetTargetYaw - resetStartYaw) * easedProgress
+      modelPitch = resetStartPitch + (resetTargetPitch - resetStartPitch) * easedProgress
+      distance = resetStartDistance + (resetTargetDistance - resetStartDistance) * easedProgress
+
+      let targetPanOffset = vec3(0, 0, 0)
+      panOffset = resetStartPanOffset + (targetPanOffset - resetStartPanOffset) * easedProgress
+      target = initialTarget + panOffset
+      updateCameraPosition()
+
+      if progress >= 1.0 {
+        isResetting = false
+        modelYaw = resetTargetYaw
+        modelPitch = resetTargetPitch
+        distance = resetTargetDistance
+        panOffset = vec3(0, 0, 0)
+        target = initialTarget
+        updateCameraPosition()
+      }
+      return
+    }
+
+    // Apply momentum if not dragging
+    if !isDragging {
+      modelYaw += angularVelocity.yaw * deltaTime
+      modelPitch += angularVelocity.pitch * deltaTime
+      updateCameraPosition()
+      angularVelocity.yaw *= friction
+      angularVelocity.pitch *= friction
+    }
+
+    // Apply zoom momentum with CUSTOM distance limits
+    if abs(zoomVelocity) > 0.01 {
+      distance -= zoomVelocity * deltaTime
+
+      // Clamp distance to custom bounds (NOT parent's bounds)
       if distance < modelViewerMinDistance {
         distance = modelViewerMinDistance
         zoomVelocity = 0.0
@@ -515,12 +634,18 @@ class ModelViewerCamera: ItemInspectionCamera {
         distance = modelViewerMaxDistance
         zoomVelocity = 0.0
       }
+
+      updateCameraPosition()
+      zoomVelocity *= zoomFriction
     }
 
-    // Apply friction to slow down momentum
-    zoomVelocity *= zoomFriction
-
-    // Call parent update for other camera logic
-    super.update(deltaTime: deltaTime)
+    // Apply pan momentum
+    if length(panVelocity) > 0.01 {
+      let panDelta = panVelocity * deltaTime
+      target += panDelta
+      panOffset += panDelta
+      updateCameraPosition()
+      panVelocity *= panFriction
+    }
   }
 }
