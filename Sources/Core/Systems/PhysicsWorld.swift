@@ -44,8 +44,7 @@ public final class PhysicsWorld {
   // Mapping from ledge low collision body IDs to their node names
   private var ledgeLowBodyNames: [BodyID: String] = [:]
 
-  // Ledge state tracking
-  private var ledgeStates: [String: LedgeState] = [:]
+  // Ledge collision body tracking
   private var ledgeHighBodyIDsByLedge: [String: BodyID] = [:]
   private var ledgeLowBodyIDsByLedge: [String: BodyID] = [:]
   // Track which body is currently active for each ledge (so we know which one to remove)
@@ -329,7 +328,6 @@ public final class PhysicsWorld {
     ledgeLowBodyNames.removeAll()
 
     // Clear ledge state tracking
-    ledgeStates.removeAll()
     ledgeHighBodyIDsByLedge.removeAll()
     ledgeLowBodyIDsByLedge.removeAll()
     ledgeActiveBodyIDsByLedge.removeAll()
@@ -712,14 +710,14 @@ public final class PhysicsWorld {
     return bodyID
   }
 
-  /// Set ledge state and enable/disable appropriate collision bodies
-  public func setLedgeState(_ state: LedgeState, for ledgeName: String) {
+  /// Update ledge collision bodies based on state (state is managed by InteractionSystem)
+  public func updateLedgeCollisionBodies(state: LedgeState, for ledgeName: String) {
     let bodyInterface = physicsSystem.bodyInterface()
 
     guard let highBodyID = ledgeHighBodyIDsByLedge[ledgeName],
       let lowBodyID = ledgeLowBodyIDsByLedge[ledgeName]
     else {
-      logger.warning("⚠️ Cannot set ledge state: ledge '\(ledgeName)' not found")
+      logger.warning("⚠️ Cannot update ledge collision bodies: ledge '\(ledgeName)' not found")
       return
     }
 
@@ -745,16 +743,10 @@ public final class PhysicsWorld {
       bodyInterface.addBody(targetBodyID, activation: .dontActivate)
     }
 
-    // Update state tracking
-    ledgeStates[ledgeName] = state
+    // Update active body tracking
     ledgeActiveBodyIDsByLedge[ledgeName] = targetBodyID
 
-    logger.trace("🔧 Ledge '\(ledgeName)': set to \(state == .high ? "high" : "low")")
-  }
-
-  /// Get current ledge state
-  public func ledgeState(for ledgeName: String) -> LedgeState? {
-    return ledgeStates[ledgeName]
+    logger.trace("🔧 Ledge '\(ledgeName)': updated collision bodies to \(state == .high ? "high" : "low")")
   }
 
   /// Create ground plane

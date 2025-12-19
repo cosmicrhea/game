@@ -1102,64 +1102,6 @@ private let startingEntry = "1"
     logger.trace("🚀 Positioned player at \(entryBaseName): \(extractedPosition)")
   }
 
-  /// Initialize ledge states based on entry Y position
-  private func initializeLedgeStates(entryY: Float, scene: Scene) {
-    for ledgeNode in scene.ledgeNodes {
-      let ledgeBaseName = Scene.extractBaseName(from: ledgeNode.name)
-
-      // Find high and low child nodes
-      var highNode: Node? = nil
-      var lowNode: Node? = nil
-
-      func searchChildren(_ node: Node) {
-        for child in node.children {
-          if scene.hasHint(child, hint: ImportHint.ledgeHigh) {
-            highNode = child
-          } else if scene.hasHint(child, hint: ImportHint.ledgeLow) {
-            lowNode = child
-          }
-          searchChildren(child)
-        }
-      }
-      searchChildren(ledgeNode)
-
-      // Determine initial state by comparing entry Y to high/low positions
-      var highY: Float? = nil
-      var lowY: Float? = nil
-
-      if let highNode {
-        let highWorldTransform = highNode.calculateWorldTransform()
-        highY = highWorldTransform[3].y
-      }
-
-      if let lowNode {
-        let lowWorldTransform = lowNode.calculateWorldTransform()
-        lowY = lowWorldTransform[3].y
-      }
-
-      // Determine which is closer to entry Y
-      let initialState: LedgeState
-      if let highY, let lowY {
-        let distanceToHigh = abs(entryY - highY)
-        let distanceToLow = abs(entryY - lowY)
-        initialState = distanceToHigh < distanceToLow ? .high : .low
-      } else if highY != nil {
-        initialState = .high
-      } else if lowY != nil {
-        initialState = .low
-      } else {
-        // No high/low children found, skip this ledge
-        logger.warning("⚠️ Ledge '\(ledgeBaseName)' has no high or low children")
-        continue
-      }
-
-      // Set initial state (this will enable/disable appropriate collision bodies)
-      physicsWorld.setLedgeState(initialState, for: ledgeBaseName)
-      logger.trace(
-        "🔧 Initialized ledge '\(ledgeBaseName)' to \(initialState == .high ? "high" : "low") (entry Y: \(entryY), high Y: \(highY?.description ?? "nil"), low Y: \(lowY?.description ?? "nil"))"
-      )
-    }
-  }
 
   /// Transition to a different entry in the current scene
   /// - Parameter entry: The entry name (e.g., "hallway", "Entry_2")
@@ -1330,6 +1272,7 @@ private let startingEntry = "1"
       physicsWorld.clearAllBodies()
       playerController.clear()
       enemySystem.clearAll()
+      interactionSystem.clearLedgeStates()
 
       // Load new collision bodies
       physicsWorld.loadCollisionBodies(scene: scene)
@@ -1342,9 +1285,6 @@ private let startingEntry = "1"
       // Position player at entry (updates player position/rotation)
       // This already adjusts for capsule height, so playerPosition is the center position
       positionPlayerAtEntry(entry, in: scene)
-
-      // Initialize ledge states based on entry position
-      initializeLedgeStates(entryY: playerPosition.y, scene: scene)
 
       // Create character controller at the positioned location
       // Use the position that was set by positionPlayerAtEntry (already adjusted for capsule height)
@@ -2227,7 +2167,7 @@ private let startingEntry = "1"
     if let detectedLedgeName = interactionSystem.detectedLedgeName {
       let ledgeName = detectedLedgeName.prefix(1).lowercased() + detectedLedgeName.dropFirst()
       let stateString =
-        physicsWorld.ledgeState(for: detectedLedgeName).map { $0 == .high ? "high" : "low" } ?? "unknown"
+        interactionSystem.ledgeState(for: detectedLedgeName).map { $0 == .high ? "high" : "low" } ?? "unknown"
       overlayLines.append("Ledge: \(ledgeName) (\(stateString))")
     }
 
