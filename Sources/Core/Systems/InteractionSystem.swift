@@ -26,6 +26,9 @@ public final class InteractionSystem {
   // Cached trigger check point for debug visualization
   private var triggerCheckPoint: vec3 = vec3(0, 0, 0)
 
+  // Ledge state tracking (managed by InteractionSystem)
+  private var ledgeStates: [String: LedgeState] = [:]
+
   // MARK: - References
 
   private weak var physicsWorld: PhysicsWorld?
@@ -47,16 +50,18 @@ public final class InteractionSystem {
   // MARK: - Update
 
   /// Update interaction system - detect actions and triggers
-  func update(
-    sceneScript: Script?,
-    currentAreaName: String?
-  ) {
-    guard let physicsWorld = physicsWorld,
-      let playerController = playerController
-    else { return }
+  func update(sceneScript: Script?, currentAreaName: String?) {
+    updateDetectedActions()
+    updateDetectedLedges()
+    updateLedgeStates()
+    updateTriggers(sceneScript: sceneScript, currentAreaName: currentAreaName)
+  }
 
-    let playerPosition = playerController.position
-    let characterController = playerController.getCharacterController()  // Used for trigger detection below
+  // MARK: - Update Functions
+
+  /// Update detected action bodies using shape casting
+  private func updateDetectedActions() {
+    guard let physicsWorld, let playerController else { return }
 
     // Check for action bodies using shape casting (sweep sensor box forward)
     // Reset to nil first - will be set if we find a contact
@@ -94,25 +99,6 @@ public final class InteractionSystem {
       baseOffset: &castBaseOffset
     )
 
-    // // Debug: print all cast results
-    // if !castResults.isEmpty {
-    //   logger.debug("🔍 Shape cast found \(castResults.count) bodies:")
-    //   let bodyInterface = physicsWorld.bodyInterface()
-    //   for (index, result) in castResults.enumerated() {
-    //     let bodyID = result.bodyID2
-    //     let bodyName = physicsWorld.getBodyName(bodyID)
-    //     let isAction = physicsWorld.actionBodyNames[bodyID] != nil
-    //     let body = bodyInterface.body(bodyID, in: physicsWorld.getPhysicsSystem())
-    //     let objectLayer = body.objectLayer
-    //     let bodyPos = body.position
-    //     logger.debug(
-    //       "  [\(index)] BodyID: \(bodyID), name: \(bodyName), layer: \(objectLayer), isAction: \(isAction), pos: (\(bodyPos.x), \(bodyPos.y), \(bodyPos.z)), fraction: \(result.fraction)"
-    //     )
-    //   }
-    // } else {
-    //   logger.debug("🔍 Shape cast found 0 bodies")
-    // }
-
     // Check cast results for action bodies
     detectedActionName = nil
     for result in castResults {
@@ -124,6 +110,11 @@ public final class InteractionSystem {
         break  // Just show first detected action
       }
     }
+  }
+
+  /// Update detected ledge bodies using shape casting
+  private func updateDetectedLedges() {
+    guard let physicsWorld, let playerController else { return }
 
     // Check cast results for ledge bodies (after action bodies)
     // Use separate ledge sensor box for ledge detection
@@ -132,7 +123,10 @@ public final class InteractionSystem {
     let ledgeSensorShape = BoxShape(halfExtent: ledgeSensorBox.halfExtents)
 
     // Cast from back edge of ledge sensor box forward through the full sensor box depth
-    // Reuse playerRotation, forwardX, forwardZ, and forward from above
+    let playerRotation = playerController.rotation
+    let forwardX = GLMath.sin(playerRotation)
+    let forwardZ = GLMath.cos(playerRotation)
+    let forward = vec3(forwardX, 0, forwardZ)
 
     // Start from the back edge of the ledge sensor box (center - half depth in forward direction)
     let ledgeBackEdgeOffset = forward * ledgeSensorBox.halfExtents.z
@@ -167,120 +161,100 @@ public final class InteractionSystem {
         break  // Just show first detected ledge
       }
     }
+  }
 
-    // OLD APPROACH: Sensor body contacts (keeping commented for reference)
-    /*
-    if let sensorBodyID = playerController.getSensorBodyID() {
-      let contacts = physicsWorld.getSensorBodyContacts(sensorBodyID: sensorBodyID)
-    
-      // Debug: print all sensor contacts with front-facing info
-      if !contacts.isEmpty {
-        logger.debug("🔍 Sensor body contacts: \(contacts.count) bodies")
-        let bodyInterface = physicsWorld.bodyInterface()
-        let playerRotation = playerController.rotation
-          let forwardX = GLMath.sin(playerRotation)
-          let forwardZ = GLMath.cos(playerRotation)
-        let playerForward = vec3(forwardX, 0, forwardZ)
-        let sensorBox = playerController.getSensorBoxTransform()
-        let sensorBoxCenter = sensorBox.position
-    
-        for (index, contactBodyID) in contacts.enumerated() {
-          let bodyName = physicsWorld.getBodyName(contactBodyID)
-          let isAction = physicsWorld.actionBodyNames[contactBodyID] != nil
-          var body = bodyInterface.body(contactBodyID, in: physicsWorld.getPhysicsSystem())
-          let objectLayer = body.objectLayer
-          let bodyPos = body.position
-    
-          // Calculate dot product for debug
-          let toAction = vec3(
-            bodyPos.x - sensorBoxCenter.x,
-            bodyPos.y - sensorBoxCenter.y,
-            bodyPos.z - sensorBoxCenter.z
-          )
-          let distance = length(toAction)
-          let dotProduct = distance > 0.001 ? dot(playerForward, normalize(toAction)) : 0
-          let isInFront = dotProduct > -0.5
-    
-          logger.debug(
-            "  [\(index)] BodyID: \(contactBodyID), name: \(bodyName), layer: \(objectLayer), isAction: \(isAction), pos: (\(bodyPos.x), \(bodyPos.y), \(bodyPos.z)), dot: \(dotProduct), inFront: \(isInFront)"
-          )
-        }
-      }
-    
-      // Check contacts for action bodies, but only if they're in front of the player
-      let playerRotation = playerController.rotation
-      let forwardX = GLMath.sin(playerRotation)
-      let forwardZ = GLMath.cos(playerRotation)
-      let playerForward = vec3(forwardX, 0, forwardZ)
-    
-      // Get sensor box center for more accurate front-facing check
-      let sensorBox = playerController.getSensorBoxTransform()
-      let sensorBoxCenter = sensorBox.position
-    
-      for contactBodyID in contacts {
-        if let actionName = physicsWorld.actionBodyNames[contactBodyID] {
-          // Check if action body is in front of player (not behind)
-          let bodyInterface = physicsWorld.bodyInterface()
-          var actionBody = bodyInterface.body(contactBodyID, in: physicsWorld.getPhysicsSystem())
-          let actionBodyPos = actionBody.position
-    
-          // Calculate direction from sensor box center to action body center
-          // This is more accurate since the sensor box is in front of the player
-          let toAction = vec3(
-            actionBodyPos.x - sensorBoxCenter.x,
-            actionBodyPos.y - sensorBoxCenter.y,
-            actionBodyPos.z - sensorBoxCenter.z
-          )
-          let distanceToAction = length(toAction)
-    
-          // Skip if too far (sanity check)
-          guard distanceToAction > 0.001 else { continue }
-    
-          let toActionNormalized = toAction / distanceToAction
-    
-          // Dot product: positive means in front, negative means behind
-          // Use a lenient threshold (-0.5) to allow actions that are mostly in front
-          // This means we allow up to ~120 degrees in front (cos(120°) = -0.5)
-          // But we still reject things directly behind (cos(180°) = -1.0)
-          let dotProduct = dot(playerForward, toActionNormalized)
-    
-          // Only detect if action is in front (dot product > -0.5 means roughly in front 120-degree cone)
-          // This allows actions that are mostly in front, but rejects things directly behind
-          // TEMP: Disable front-facing check to test if sensor contacts work
-          // if dotProduct > -0.5 {
-          if true {  // TEMP: Always detect to test sensor body contacts
-            // Extract base name from action body name using Scene's extractBaseName
-            detectedActionName = Scene.extractBaseName(from: actionName)
-            logger.debug(
-              "✅ Detected action via sensor body (front-facing): \(detectedActionName ?? "nil"), dot: \(dotProduct), dist: \(distanceToAction)"
-            )
-            break  // Just show first detected action
-          } else {
-            logger.debug("🚫 Action body \(actionName) is behind player (dot: \(dotProduct) <= -0.5), ignoring")
+  /// Update ledge states each frame based on player's current Y position
+  private func updateLedgeStates() {
+    guard let playerController,
+      let scene = MainLoop.shared?.scene
+    else { return }
+
+    // Player position is capsule center, but high/low nodes are at floor level
+    // Convert capsule center to feet position for comparison
+    let playerPosition = playerController.position
+    let capsuleHalfHeight: Float = 0.8
+    let capsuleRadius: Float = 0.4
+    let playerFeetY = playerPosition.y - (capsuleHalfHeight + capsuleRadius)
+
+    for ledgeNode in scene.ledgeNodes {
+      let ledgeBaseName = Scene.extractBaseName(from: ledgeNode.name)
+
+      // Find high and low child nodes
+      var highNode: Node? = nil
+      var lowNode: Node? = nil
+
+      func searchChildren(_ node: Node) {
+        for child in node.children {
+          if scene.hasHint(child, hint: ImportHint.ledgeHigh) {
+            highNode = child
+          } else if scene.hasHint(child, hint: ImportHint.ledgeLow) {
+            lowNode = child
           }
+          searchChildren(child)
         }
       }
-    }
-    */
+      searchChildren(ledgeNode)
 
-    // FALLBACK COMMENTED OUT: Character controller contacts (only using sensor body contacts now)
-    // if detectedActionName == nil, let characterController {
-    //   let contacts = characterController.activeContacts()
-    //   for contact in contacts {
-    //     // Action bodies are sensors again, so check isSensorB for them
-    //     // Trigger bodies are also sensors
-    //     if contact.isSensorB, let actionName = physicsWorld.actionBodyNames[contact.bodyID] {
-    //       // Extract base name from action body name using scene's extractBaseName
-    //       if let scene = MainLoop.shared?.scene {
-    //         detectedActionName = scene.extractBaseName(from: actionName)
-    //       } else {
-    //         // Fallback: remove -action suffix if scene not available
-    //         detectedActionName = actionName.replacing(/-action$/, with: "")
-    //       }
-    //       break  // Just show first detected action
-    //     }
-    //   }
-    // }
+      // Get high and low Y positions (these are at floor level)
+      var highY: Float? = nil
+      var lowY: Float? = nil
+
+      if let highNode {
+        let highWorldTransform = highNode.calculateWorldTransform()
+        highY = highWorldTransform[3].y
+      }
+
+      if let lowNode {
+        let lowWorldTransform = lowNode.calculateWorldTransform()
+        lowY = lowWorldTransform[3].y
+      }
+
+      // Determine which state player is closer to (compare feet position to floor positions)
+      let calculatedState: LedgeState
+      if let highY, let lowY {
+        let distanceToHigh = abs(playerFeetY - highY)
+        let distanceToLow = abs(playerFeetY - lowY)
+        calculatedState = distanceToHigh < distanceToLow ? .high : .low
+      } else if highY != nil {
+        calculatedState = .high
+      } else if lowY != nil {
+        calculatedState = .low
+      } else {
+        // No high/low children found, skip this ledge
+        continue
+      }
+
+      // Update state in InteractionSystem and physics bodies in PhysicsWorld
+      setLedgeState(calculatedState, for: ledgeBaseName)
+    }
+  }
+
+  /// Get current ledge state
+  public func ledgeState(for ledgeName: String) -> LedgeState? {
+    return ledgeStates[ledgeName]
+  }
+
+  /// Clear all ledge states (called when loading a new scene)
+  func clearLedgeStates() {
+    ledgeStates.removeAll()
+  }
+
+  /// Set ledge state and update physics collision bodies
+  private func setLedgeState(_ state: LedgeState, for ledgeName: String) {
+    guard let physicsWorld else { return }
+
+    // Store state in InteractionSystem
+    ledgeStates[ledgeName] = state
+
+    // Update physics collision bodies
+    physicsWorld.updateLedgeCollisionBodies(state: state, for: ledgeName)
+  }
+
+  /// Update trigger detection and handling
+  private func updateTriggers(sceneScript: Script?, currentAreaName: String?) {
+    guard let physicsWorld, let playerController else { return }
+
+    let playerPosition = playerController.position
 
     // Check for trigger body contacts
     // Triggers fire immediately when player enters them
@@ -288,52 +262,6 @@ public final class InteractionSystem {
     currentCameraTriggers.removeAll()
     currentFootstepsTriggers.removeAll()
     var newTriggers: Set<String> = []
-
-    // // Check character controller contacts for triggers (always check these, they're fast)
-    // if let characterController {
-    //   let contacts = characterController.activeContacts()
-    //   for contact in contacts {
-    //     if contact.isSensorB, let triggerName = physicsWorld.triggerBodyNames[contact.bodyID] {
-    //       // Extract base name from trigger body name using Scene's extractBaseName
-    //       guard let scene = MainLoop.shared?.scene,
-    //         let triggerNode = scene.rootNode.findNode(named: triggerName)
-    //       else { continue }
-    //       let baseName = Scene.extractBaseName(from: triggerName)
-
-    //       // Check if this is a camera trigger by checking for .cameraTrigger hint
-    //       if scene.hasHint(triggerNode, hint: .cameraTrigger) {
-    //         currentCameraTriggers.append(baseName)
-    //         // Check if we're not already on this camera - switch if needed
-    //         if let cameraSystem = cameraSystem {
-    //           let currentCamera = cameraSystem.selectedCamera
-    //           let needsInitialSync = MainLoop.shared?.shouldForceCameraTriggerSync() ?? false
-    //           let shouldHandleTrigger = currentCamera != baseName || needsInitialSync
-    //           if shouldHandleTrigger {
-    //             cameraSystem.handleCameraTrigger(
-    //               cameraName: baseName,
-    //               currentAreaName: currentAreaName
-    //             )
-    //           }
-    //         }
-    //       } else if scene.hasHint(triggerNode, hint: .footsteps) {
-    //         // Track footsteps trigger
-    //         currentFootstepsTriggers.append(baseName)
-    //         // Handle footsteps trigger - set footstep sound on player controller
-    //         // Base name should match a FootstepSound enum case (e.g., "Metal" -> .metal, "ConcreteEcho" -> .concreteEcho)
-    //         // Convert to camelCase: first letter lowercase, rest as-is
-    //         let camelCaseName = baseName.prefix(1).lowercased() + baseName.dropFirst()
-    //         if let footstepSound = FootstepSound(rawValue: camelCaseName) {
-    //           playerController.setFootstepSound(footstepSound)
-    //         } else if baseName.lowercased() == "default" {
-    //           playerController.setFootstepSound(.default)
-    //         }
-    //       } else {
-    //         currentTriggers.append(baseName)
-    //         newTriggers.insert(baseName)
-    //       }
-    //     }
-    //   }
-    // }
 
     // Update trigger collision query every frame
     // Use a point at player position (at player height) instead of a sphere
@@ -441,13 +369,11 @@ public final class InteractionSystem {
 
   /// Handle interaction with detected ledge
   public func handleLedgeInteraction() {
-    guard let detectedLedgeName = detectedLedgeName else { return }
-    guard let physicsWorld = physicsWorld,
-      let playerController = playerController
-    else { return }
+    guard let detectedLedgeName else { return }
+    guard let playerController else { return }
 
     // Get current ledge state
-    guard let currentState = physicsWorld.ledgeState(for: detectedLedgeName) else {
+    guard let currentState = ledgeState(for: detectedLedgeName) else {
       logger.warning("⚠️ Cannot interact with ledge '\(detectedLedgeName)': state not found")
       return
     }
@@ -528,9 +454,41 @@ public final class InteractionSystem {
     // Teleport player to final position (keep current rotation)
     playerController.setPosition(finalPosition, rotation: playerRotation)
 
-    // Toggle ledge state
-    let newState: LedgeState = currentState == .high ? .low : .high
-    physicsWorld.setLedgeState(newState, for: detectedLedgeName)
+    // Calculate new state based on player's new position and update immediately
+    // Player is now at targetY, so calculate which state they're closer to
+    let playerFeetY = finalY - (capsuleHalfHeight + capsuleRadius)
+    
+    // Get high and low Y positions for comparison
+    var highY: Float? = nil
+    var lowY: Float? = nil
+    
+    if let highNode {
+      let highWorldTransform = highNode.calculateWorldTransform()
+      highY = highWorldTransform[3].y
+    }
+    
+    if let lowNode {
+      let lowWorldTransform = lowNode.calculateWorldTransform()
+      lowY = lowWorldTransform[3].y
+    }
+    
+    // Determine new state based on player's new position
+    let newState: LedgeState
+    if let highY, let lowY {
+      let distanceToHigh = abs(playerFeetY - highY)
+      let distanceToLow = abs(playerFeetY - lowY)
+      newState = distanceToHigh < distanceToLow ? .high : .low
+    } else if highY != nil {
+      newState = .high
+    } else if lowY != nil {
+      newState = .low
+    } else {
+      // Fallback: toggle state
+      newState = currentState == .high ? .low : .high
+    }
+    
+    // Update state and collision bodies immediately
+    setLedgeState(newState, for: detectedLedgeName)
 
     // Schedule footstep sound to play next frame (after footsteps trigger area updates)
     pendingLedgeFootstep = true
@@ -569,9 +527,7 @@ public final class InteractionSystem {
     projection: mat4,
     view: mat4
   ) {
-    guard let debugRenderer = debugRenderer,
-      let physicsWorld = physicsWorld
-    else { return }
+    guard let debugRenderer, let physicsWorld else { return }
 
     // Draw a vertical line at the trigger check point (from slightly below to slightly above player height)
     // This helps visualize where the point collision check is happening

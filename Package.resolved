@@ -1,5 +1,5 @@
 {
-  "originHash" : "9d71abfa3916fa3835d38473a844bca4e65879174c35593dbf7707ed21f426e2",
+  "originHash" : "94b83a69966af42880b5655e8e79b7629bbe195d9a5f4ea62fcdce42386e0d6e",
   "pins" : [
     {
       "identity" : "glfw",
@@ -38,21 +38,21 @@
       }
     },
     {
+      "identity" : "ogg",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/cosmicrhea-game/ogg",
+      "state" : {
+        "branch" : "main",
+        "revision" : "79018aaade2447c2b885173cad6ea3251c20beef"
+      }
+    },
+    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser",
       "state" : {
         "revision" : "309a47b2b1d9b5e991f36961c983ecec72275be3",
         "version" : "1.6.1"
-      }
-    },
-    {
-      "identity" : "swift-cmark",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-cmark.git",
-      "state" : {
-        "branch" : "gfm",
-        "revision" : "e02dcabc65781626a7e46b22fa275923bbe6c2f6"
       }
     },
     {
@@ -71,15 +71,6 @@
       "state" : {
         "revision" : "3d8596ed08bd13520157f0355e35caed215ffbfa",
         "version" : "1.6.3"
-      }
-    },
-    {
-      "identity" : "swift-markdown",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-markdown",
-      "state" : {
-        "branch" : "main",
-        "revision" : "0186e808140db5eb5ba9b052e86fbe15b88f7975"
       }
     },
     {

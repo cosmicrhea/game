@@ -305,12 +305,6 @@ class MapView: RenderLoop {
       debugCamera = camera
     }
 
-    // Use scene.floorNodes instead of manual traversal
-    let floorNodes = scene.floorNodes
-
-    // Use all door nodes (doors are treated the same as actions for interaction)
-    let doorActionNodes = scene.doorNodes
-
     // Find actual area nodes: use scene.areaNodes
     let areaNodes = scene.areaNodes
 

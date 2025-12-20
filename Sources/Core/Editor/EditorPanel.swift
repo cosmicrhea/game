@@ -95,7 +95,7 @@ public final class EditorPanel: OptionsPanel {
       }
 
       // Slightly reduce right padding for switches to visually align with panel edge
-      let rightPadding = isSwitch ? max(0, sidePadding - 6) : sidePadding
+      let rightPadding = isSwitch ? max(0, sidePadding - 16) : sidePadding
       let x = r.origin.x + r.size.width - rightReserve - rightPadding - controlWidth
       let y = r.origin.y + (r.size.height - controlHeight) * 0.5
       rows[i].control.frame = Rect(x: x, y: y, width: controlWidth, height: controlHeight)

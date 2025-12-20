@@ -17,6 +17,8 @@ let VIEWPORT_SCALING = false
 
 let TWO_PLAYER_MODE = false
 
+let STARTED_FROM_XCODE = ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS")
+
 struct CLIOptions: ParsableArguments {
   @Option(help: "Select demo by name, e.g. fonts, physics.")
   var demo: String?
@@ -85,6 +87,7 @@ public final class Engine {
   private var lastTitleUpdateTime: Double = 0.0
   private var targetFrameTime: Double = 1.0 / 60.0  // Target 60 FPS
   private var lastFrameTime: Double = 0.0
+  private var smoothedFPS: Float = 60.0  // Exponential moving average of FPS
 
   //private init() {}
 
@@ -104,7 +107,9 @@ public final class Engine {
     //    print("Bundle.module: \(Bundle.module)")
     //    print("#bundle: \(#bundle)")
 
-    //LoggingSystem.bootstrap { OSLogHandler(label: $0) }
+    if STARTED_FROM_XCODE {
+      LoggingSystem.bootstrap { OSLogHandler(label: $0) }
+    }
 
     //print(ProcessInfo.processInfo.environment)
 
@@ -406,8 +411,8 @@ public final class Engine {
         return
       }
 
-      // Handle other keys for editor panel (on key press only to avoid double handling on release)
-      if config.editorEnabled && state == .pressed {
+      // Handle other keys for editor panel
+      if config.editorEnabled && (state == .pressed || state == .repeated) {
         _ = self.editorPanel.handleKey(key)
       }
     }
@@ -545,7 +550,8 @@ public final class Engine {
 
   private func updateWindowTitle() {
     var title = String(
-      format: "GL textures: %d | GL buffers: %d | Memory: %.1f MB",
+      format: "FPS: %.1f | GL textures: %d | GL buffers: %d | Memory: %.1f MB",
+      smoothedFPS,
       GLStats.textureCount,
       GLStats.bufferCount,
       Double(reportResidentMemoryBytes()) / (1024.0 * 1024.0)
@@ -629,6 +635,12 @@ public final class Engine {
     let currentFrame = Float(GLFWSession.currentTime)
     deltaTime = currentFrame - lastFrame
     lastFrame = currentFrame
+
+    // Update FPS (EMA)
+    if deltaTime > 0 {
+      let instantFPS = 1.0 / deltaTime
+      smoothedFPS = smoothedFPS * 0.9 + instantFPS * 0.1
+    }
 
     // Check for gamepad input activity and update InputSource accordingly
     // This runs every frame to detect gamepad usage (gamepad is polled, not event-based)

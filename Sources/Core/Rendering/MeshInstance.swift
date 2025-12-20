@@ -63,6 +63,76 @@ class MeshInstance: @unchecked Sendable {
   let transformMatrix: mat4
   private let sceneIdentifier: String
 
+  // Helper to get bundle-relative path for logging
+  private var bundleRelativeScenePath: String {
+    guard let resourceURL = Bundle.game.resourceURL else {
+      return sceneIdentifier
+    }
+    let sceneURL = URL(fileURLWithPath: sceneIdentifier)
+    let resourcePath = resourceURL.path
+    if sceneURL.path.hasPrefix(resourcePath) {
+      let relativePath = String(sceneURL.path.dropFirst(resourcePath.count + 1))
+      return relativePath
+    }
+    return sceneIdentifier
+  }
+
+  // Helper to get context string for texture logging (node name, material name, mesh name)
+  private func getTextureContext(material: Material? = nil) -> String {
+    var parts: [String] = []
+    
+    // Add material name if available
+    let materialName = material?.name ?? self.material?.name
+    if let materialName, !materialName.isEmpty {
+      parts.append(materialName)
+    }
+    
+    // Prioritize node name
+    if let nodeName = node?.name, !nodeName.isEmpty {
+      parts.append(nodeName)
+    }
+    
+    // Add mesh name if available and different from node name
+    if let meshName = mesh.name, !meshName.isEmpty {
+      if node?.name != meshName {
+        parts.append(meshName)
+      }
+    }
+    
+    if parts.isEmpty {
+      return ""
+    }
+    return " (\(parts.joined(separator: ", ")))"
+  }
+
+  // Helper to format bytes nicely (e.g., "1 MB", "419 KB", "4.2 MB")
+  private func formatBytes(_ bytes: Int) -> String {
+    let kb = 1024
+    let mb = kb * 1024
+    let gb = mb * 1024
+    
+    if bytes >= gb {
+      let value = Double(bytes) / Double(gb)
+      return String(format: "%.1f GB", value)
+    } else if bytes >= mb {
+      let value = Double(bytes) / Double(mb)
+      if value >= 10 {
+        return String(format: "%.0f MB", value)
+      } else {
+        return String(format: "%.1f MB", value)
+      }
+    } else if bytes >= kb {
+      let value = Double(bytes) / Double(kb)
+      if value >= 10 {
+        return String(format: "%.0f KB", value)
+      } else {
+        return String(format: "%.1f KB", value)
+      }
+    } else {
+      return "\(bytes) B"
+    }
+  }
+
   // Rendering program
   private let program: GLProgram
 
@@ -582,21 +652,23 @@ class MeshInstance: @unchecked Sendable {
     // Load material properties
     loadMaterialProperties(material: material)
 
+    let context = getTextureContext(material: material)
+
     // Load all PBR texture types
     if let path = material.diffuseTexturePath {
-      loadTextureFromPath(path: path, textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture)
+      loadTextureFromPath(path: path, textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture, context: context)
     }
     if let path = material.normalTexturePath {
-      loadTextureFromPath(path: path, textureID: &normalTexture, hasTexture: &hasNormalTexture)
+      loadTextureFromPath(path: path, textureID: &normalTexture, hasTexture: &hasNormalTexture, context: context)
     }
     if let path = material.roughnessTexturePath {
-      loadTextureFromPath(path: path, textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture)
+      loadTextureFromPath(path: path, textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture, context: context)
     }
     if let path = material.metallicTexturePath {
-      loadTextureFromPath(path: path, textureID: &metallicTexture, hasTexture: &hasMetallicTexture)
+      loadTextureFromPath(path: path, textureID: &metallicTexture, hasTexture: &hasMetallicTexture, context: context)
     }
     if let path = material.aoTexturePath {
-      loadTextureFromPath(path: path, textureID: &aoTexture, hasTexture: &hasAoTexture)
+      loadTextureFromPath(path: path, textureID: &aoTexture, hasTexture: &hasAoTexture, context: context)
     }
   }
 
@@ -608,7 +680,7 @@ class MeshInstance: @unchecked Sendable {
     opacity = material.opacity
   }
 
-  private func loadTextureFromPath(path: String, textureID: inout GLuint, hasTexture: inout Bool) {
+  private func loadTextureFromPath(path: String, textureID: inout GLuint, hasTexture: inout Bool, context: String) {
     // Create stable cache key across loads for embedded textures by using scene file path
     let cacheKey = path.hasPrefix("*") ? "\(sceneIdentifier)#\(path)" : path
 
@@ -622,16 +694,15 @@ class MeshInstance: @unchecked Sendable {
 
     // Check if it's an embedded texture (starts with "*")
     if path.hasPrefix("*") {
-      logger.debug("Loading embedded texture: \(path)")
-      loadEmbeddedTexture(texturePath: path, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+      loadEmbeddedTexture(texturePath: path, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture, context: context)
     } else {
       logger.debug("Loading external texture: \(path)")
-      loadExternalTexture(texturePath: path, textureID: &textureID, hasTexture: &hasTexture)
+      loadExternalTexture(texturePath: path, textureID: &textureID, hasTexture: &hasTexture, context: context)
     }
   }
 
   private func loadEmbeddedTexture(
-    texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool
+    texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool, context: String
   ) {
     // Extract texture index from "*0", "*1", "*10", etc.
     // Drop the "*" prefix and parse the remaining string as an integer
@@ -661,10 +732,10 @@ class MeshInstance: @unchecked Sendable {
     )
     createOpenGLTexture(
       from: embeddedTexture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID,
-      hasTexture: &hasTexture)
+      hasTexture: &hasTexture, context: context)
   }
 
-  private func loadExternalTexture(texturePath: String, textureID: inout GLuint, hasTexture: inout Bool) {
+  private func loadExternalTexture(texturePath: String, textureID: inout GLuint, hasTexture: inout Bool, context: String) {
     // Create cache key for external textures
     let cacheKey = texturePath
 
@@ -684,7 +755,7 @@ class MeshInstance: @unchecked Sendable {
     // Try to load from the resolved path
     if let textureData = try? Data(contentsOf: textureURL) {
       loadTextureFromData(
-        textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+        textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture, context: context)
       return
     }
 
@@ -699,7 +770,7 @@ class MeshInstance: @unchecked Sendable {
       let bundleURL = URL(fileURLWithPath: bundlePath)
       if let textureData = try? Data(contentsOf: bundleURL) {
         loadTextureFromData(
-          textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture)
+          textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture, context: context)
         return
       }
     }
@@ -708,7 +779,7 @@ class MeshInstance: @unchecked Sendable {
   }
 
   private func loadTextureFromData(
-    _ data: Data, texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool
+    _ data: Data, texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool, context: String
   ) {
     // Create a temporary EmbeddedTexture-like structure
     let dataArray = Array(data)
@@ -719,9 +790,15 @@ class MeshInstance: @unchecked Sendable {
     let isWebP = formatHint == "webp"
     let isJPEG = formatHint == "jpg" || formatHint == "jpeg"
 
+    let displayPath = "\(bundleRelativeScenePath)\(texturePath)\(context)"
+    let formattedBytes = formatBytes(data.count)
+    logger.debug("loading \(formattedBytes) \(displayPath)")
+
     do {
       if isPNG {
-        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { _ in }
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { _ in }
+        }
         image.bytes.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
@@ -729,14 +806,18 @@ class MeshInstance: @unchecked Sendable {
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
           hasTexture = true
         }
       } else if isWebP {
-        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
+        }
         image.bytes.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
@@ -744,14 +825,18 @@ class MeshInstance: @unchecked Sendable {
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
           hasTexture = true
         }
       } else if isJPEG {
-        let image = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
+        }
         image.bytes.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
@@ -759,15 +844,19 @@ class MeshInstance: @unchecked Sendable {
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGB,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGB,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
           hasTexture = true
         }
       } else {
         // Try generic loader
-        let image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
+        }
         image.bytes.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
@@ -775,10 +864,12 @@ class MeshInstance: @unchecked Sendable {
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
           hasTexture = true
         }
       }
@@ -798,7 +889,8 @@ class MeshInstance: @unchecked Sendable {
     texturePath: String,
     cacheKey: String,
     textureID: inout GLuint,
-    hasTexture: inout Bool
+    hasTexture: inout Bool,
+    context: String
   ) {
     glGenTextures(1, &textureID)
     glBindTexture(GL_TEXTURE_2D, textureID)
@@ -812,45 +904,82 @@ class MeshInstance: @unchecked Sendable {
     let data = embeddedTexture.data
     let dataArray = Array(data)
     let formatHint = embeddedTexture.formatHint?.lowercased() ?? ""
+    
+    // Determine file extension from hint
+    let fileExtension: String
+    if formatHint.contains("png") {
+      fileExtension = "png"
+    } else if formatHint.contains("webp") {
+      fileExtension = "webp"
+    } else if formatHint.contains("jpg") || formatHint.contains("jpeg") {
+      fileExtension = "jpg"
+    } else {
+      fileExtension = "unknown"
+    }
 
-    logger.debug("Creating OpenGL texture from embedded data: formatHint=\(formatHint), data size=\(data.count) bytes")
+    // Build display path with identifier if available
+    let displayPath: String
+    if let identifier = embeddedTexture.identifier {
+      displayPath = "\(bundleRelativeScenePath)/\(identifier).\(fileExtension)\(context)"
+    } else {
+      displayPath = "\(bundleRelativeScenePath)\(texturePath)\(context)"
+    }
+    
+    let formattedBytes = formatBytes(data.count)
+    logger.debug("loading \(formattedBytes) \(displayPath)")
 
     do {
       // Try to determine format from hint
       if formatHint.contains("png") {
-        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { progress in
-          //print("Loading PNG texture: \(progress * 100)%")
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { progress in
+            logger.debug("Loading PNG texture: \(progress * 100)%")
+          }
         }
         image.bytes.withUnsafeBytes { bytes in
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         }
       } else if formatHint.contains("webp") {
-        let image = try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
+        }
         image.bytes.withUnsafeBytes { bytes in
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         }
       } else if formatHint.contains("jpg") || formatHint.contains("jpeg") {
-        let image = try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
+        }
         image.bytes.withUnsafeBytes { bytes in
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGB,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGB,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         }
       } else {
         // Try generic loader
-        let image = try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
+        let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+          try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
+        }
         image.bytes.withUnsafeBytes { bytes in
-          glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA,
-            GLsizei(image.width), GLsizei(image.height),
-            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+            glTexImage2D(
+              GL_TEXTURE_2D, 0, GL_RGBA,
+              GLsizei(image.width), GLsizei(image.height),
+              0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+          }
         }
       }
     } catch {
@@ -872,7 +1001,7 @@ class MeshInstance: @unchecked Sendable {
 
     // Cache the texture for future use
     TextureCache.shared.cacheTexture(textureID, for: cacheKey)
-    logger.debug("Cached texture for key \(cacheKey), textureID=\(textureID), hasTexture=\(hasTexture)")
+    logger.trace("Cached texture for key \(cacheKey), textureID=\(textureID), hasTexture=\(hasTexture)")
   }
 
   /// Load HDRI environment map from EXR file

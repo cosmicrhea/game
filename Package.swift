@@ -6,7 +6,7 @@ import PackageDescription
 import class Foundation.ProcessInfo
 
 let env = ProcessInfo.processInfo.environment
-let useLocalDependencies = env["USER"] == "fa"
+let useLocalDependencies = env["USER"] == "freya"
 
 print("useLocalDependencies: \(useLocalDependencies)")
 
@@ -46,7 +46,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-collections", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log", from: "1.0.0"),
-    .package(url: "https://github.com/swiftlang/swift-markdown", branch: "main"),
+    //.package(url: "https://github.com/swiftlang/swift-markdown", branch: "main"),
     //    .package(url: "https://github.com/stackotter/swift-image-formats", from: "0.3.3"),
     .package(url: "https://github.com/apple/swift-syntax", from: "509.0.0"),
 
@@ -64,7 +64,7 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "Collections", package: "swift-collections"),
         .product(name: "Logging", package: "swift-log"),
-        .product(name: "Markdown", package: "swift-markdown"),
+        //.product(name: "Markdown", package: "swift-markdown"),
         .product(name: "ImageFormats", package: "swift-image-formats"),
 
         // .product(name: "MSDFAtlasGen", package: "msdf-atlas-gen"),

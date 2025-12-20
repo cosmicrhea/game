@@ -374,12 +374,14 @@ public struct EmbeddedTexture {
   public let width: Int
   public let height: Int
   public let formatHint: String?  // e.g., "png", "jpg", "webp"
+  public let identifier: String?  // Name or URI from GLTF (e.g., "concrete_cat_statue_nor_gl")
 
-  public init(index: Int, data: Data, width: Int, height: Int, formatHint: String? = nil) {
+  public init(index: Int, data: Data, width: Int, height: Int, formatHint: String? = nil, identifier: String? = nil) {
     self.index = index
     self.data = data
     self.width = width
     self.height = height
     self.formatHint = formatHint
+    self.identifier = identifier
   }
 }

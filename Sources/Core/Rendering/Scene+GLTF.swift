@@ -1044,14 +1044,14 @@ extension Scene {
       // Also map by name and URI separately for fallback matching during material lookup
       if hasName {
         imageToEmbeddedIndex[image.name] = embeddedTextureIndex
-        logger.debug("Mapped embedded texture [\(embeddedTextureIndex)]: name='\(image.name)'")
+        logger.trace("Mapped embedded texture [\(embeddedTextureIndex)]: name='\(image.name)'")
       }
       if hasUri {
         imageToEmbeddedIndex[image.uri] = embeddedTextureIndex
-        logger.debug("Mapped embedded texture [\(embeddedTextureIndex)]: uri='\(image.uri)'")
+        logger.trace("Mapped embedded texture [\(embeddedTextureIndex)]: uri='\(image.uri)'")
       }
       if !hasName && !hasUri {
-        logger.debug("Mapped embedded texture [\(embeddedTextureIndex)]: documentIndex=\(documentIndex)")
+        logger.trace("Mapped embedded texture [\(embeddedTextureIndex)]: documentIndex=\(documentIndex)")
       }
 
       let data = Data(bytes: dataPtr, count: bufferView.size)
@@ -1060,9 +1060,10 @@ extension Scene {
         data: data,
         width: 0,  // Would need to decode to get actual dimensions
         height: 0,
-        formatHint: image.mimeType.isEmpty ? nil : image.mimeType
+        formatHint: image.mimeType.isEmpty ? nil : image.mimeType,
+        identifier: imageIdentifier
       )
-      logger.debug(
+      logger.trace(
         "Created embedded texture [\(embeddedTextureIndex)]: size=\(data.count) bytes, mimeType='\(image.mimeType)', identifier='\(imageIdentifier)'"
       )
       embeddedTextureIndex += 1

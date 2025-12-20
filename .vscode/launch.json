@@ -1,21 +1,21 @@
 {
   "configurations": [
     {
-      "type": "swift",
+      "type": "lldb",
       "request": "launch",
       "args": [],
-      "cwd": "${workspaceFolder:glass}",
+      "cwd": "${workspaceFolder:Game}",
       "name": "Debug Game",
-      "program": "${workspaceFolder:glass}/.build/debug/Game",
+      "program": "${workspaceFolder:Game}/.build/debug/Game",
       "preLaunchTask": "swift: Build Debug Game"
     },
     {
-      "type": "swift",
+      "type": "lldb",
       "request": "launch",
       "args": [],
-      "cwd": "${workspaceFolder:glass}",
+      "cwd": "${workspaceFolder:Game}",
       "name": "Release Game",
-      "program": "${workspaceFolder:glass}/.build/release/Game",
+      "program": "${workspaceFolder:Game}/.build/release/Game",
       "preLaunchTask": "swift: Build Release Game"
     }
   ]

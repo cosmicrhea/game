@@ -281,7 +281,7 @@
       keyboard.state(of: .f) == .pressed || keyboard.state(of: .space) == .pressed
       || keyboard.state(of: .enter) == .pressed || keyboard.state(of: .numpadEnter) == .pressed
     // Also check gamepad A button
-    let isGamepadActionPressed = (Gamepad.allGamepads.first?.state(of: .a) == .pressed) ?? false
+    let isGamepadActionPressed = Gamepad.allGamepads.first?.state(of: .a) == .pressed
     let isAnyActionPressed = isActionKeyPressed || isGamepadActionPressed
 
     // Only trigger selection on key press (not while held)

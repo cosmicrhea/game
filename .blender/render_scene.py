@@ -4,8 +4,8 @@ from os import getenv
 
 
 #SAMPLES = 1
-#SAMPLES = 128
-SAMPLES = 512
+SAMPLES = 128
+#SAMPLES = 512
 #SAMPLES = 1024
 #SAMPLES = 4096
 #SAMPLES = 8192
@@ -40,9 +40,10 @@ scene.cycles.use_denoising = True
 
 # TODO: make these not show up??
 scene.render.filepath = "/tmp/" + name + "_"
-# scene.render.image_settings.file_format = "PNG"
-scene.render.image_settings.file_format = "OPEN_EXR"
+scene.render.image_settings.file_format = "PNG"
+#scene.render.image_settings.file_format = "OPEN_EXR"
 scene.render.image_settings.color_mode = "RGBA"
+scene.render.image_settings.color_depth = "8"
 
 world = bpy.data.worlds["World"]
 world.mist_settings.falloff = "LINEAR"

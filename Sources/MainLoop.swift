@@ -41,7 +41,7 @@ private let startingEntry = "1"
   private var foregroundMeshInstances: [MeshInstance] = []
 
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
-  @Editor(0.0...2.0) var capsuleHeightOffset: Float = 1.2
+  @Editor(0.0...2.0) var playerYOffset: Float = 1.2
 
   // Systems
   private var physicsWorld: PhysicsWorld!
@@ -63,22 +63,18 @@ private let startingEntry = "1"
   var currentView: mat4 = mat4(1)  // Accessible by debug renderer implementation
 
   @Editor var visualizePhysics: Bool = false
-  @Editor var visualizeEntries: Bool = false
+  @Editor @ConfigValue var visualizeEntries: Bool = false
   @Editor var disableDepth: Bool = false
   @Editor @ConfigValue var disableEnemies: Bool = false
   private var showDebugText: Bool = true
-  @Editor var showEnemyDebugOverlay: Bool = false
+  @Editor @ConfigValue var showEnemyDebugOverlay: Bool = false
 
-  @Editor(-1.0...100.0) var mistDepthOverride: Float = -1.0 {
-    didSet {
-      prerenderedEnvironment?.debugMistDepthOverride = mistDepthOverride
-    }
+  @Editor(-1.0...10.0, displayName: "Mist Start") var mistStartOverride: Float = -1.0 {
+    didSet { prerenderedEnvironment?.debugMistStartOverride = mistStartOverride }
   }
 
-  @Editor(-1.0...10.0) var mistStartOverride: Float = -1.0 {
-    didSet {
-      prerenderedEnvironment?.debugMistStartOverride = mistStartOverride
-    }
+  @Editor(-1.0...100.0, displayName: "Mist Depth") var mistDepthOverride: Float = -1.0 {
+    didSet { prerenderedEnvironment?.debugMistDepthOverride = mistDepthOverride }
   }
 
   @Editor func shakeScreen() { ScreenShake.shared.shake(.subtle) }
@@ -1693,7 +1689,7 @@ private let startingEntry = "1"
         // Create model matrix: translate to player position, then rotate around Y axis
         // Offset Y downward so capsule sits on floor (assuming origin is at center)
         var adjustedPosition = playerPosition
-        adjustedPosition.y -= capsuleHeightOffset
+        adjustedPosition.y -= playerYOffset
         var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
         modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
 
@@ -1738,7 +1734,7 @@ private let startingEntry = "1"
             // Create model matrix: translate to enemy position, then rotate around Y axis
             // Offset Y downward so capsule sits on floor (assuming origin is at center)
             var adjustedPosition = enemy.position
-            adjustedPosition.y -= capsuleHeightOffset
+            adjustedPosition.y -= playerYOffset
             var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
             modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
 

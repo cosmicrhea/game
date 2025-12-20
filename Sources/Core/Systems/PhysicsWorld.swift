@@ -399,7 +399,7 @@ public final class PhysicsWorld {
 
     // Use scene.actionNodes and scene.doorNodes (treat doors as actions for interaction)
     let allActionNodes = scene.actionNodes + scene.doorNodes
-    logger.debug(
+    logger.trace(
       "📋 Loading action bodies from \(allActionNodes.count) nodes (\(scene.actionNodes.count) actions, \(scene.doorNodes.count) doors)"
     )
     for node in allActionNodes {
@@ -468,7 +468,7 @@ public final class PhysicsWorld {
           if bodyID != 0 {
             // Store mapping from body ID to node name
             actionBodyNames[bodyID] = name
-            logger.debug("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
+            logger.trace("✅ Created action trigger body ID: \(bodyID) for node '\(name)'")
           } else {
             logger.error("❌ Failed to create action trigger body for node '\(name)'")
           }
@@ -479,7 +479,7 @@ public final class PhysicsWorld {
         logger.debug("⚠️ Action node '\(name)' has no meshes")
       }
     }
-    logger.debug("📋 Total action bodies created: \(actionBodyNames.count)")
+    logger.trace("📋 Total action bodies created: \(actionBodyNames.count)")
   }
 
   /// Load trigger bodies from scene
@@ -547,7 +547,7 @@ public final class PhysicsWorld {
     // Object layer 0 for collision bodies (same as regular collision bodies)
     let collisionLayer: ObjectLayer = 0
 
-    logger.debug("📋 Loading ledge bodies from \(scene.ledgeNodes.count) ledge nodes")
+    logger.trace("📋 Loading ledge bodies from \(scene.ledgeNodes.count) ledge nodes")
 
     for ledgeNode in scene.ledgeNodes {
       let ledgeName = ledgeNode.name
@@ -645,7 +645,7 @@ public final class PhysicsWorld {
       }
     }
 
-    logger.debug(
+    logger.trace(
       "📋 Total ledge bodies created: \(ledgeBodyNames.count) action, \(ledgeHighBodyNames.count) high, \(ledgeLowBodyNames.count) low"
     )
   }

@@ -48,6 +48,9 @@ final class ModelViewer: RenderLoop {
 
   // UI visibility toggle
   private var showControls: Bool = true
+  
+  // Debug state
+  private var showDebugInfo: Bool = false
 
   // Layout tuning
   @Editor(200...500) var controlsPanelWidth: Float = 320
@@ -184,6 +187,9 @@ final class ModelViewer: RenderLoop {
       previousAnimation()
     case .num3:
       nextAnimation()
+    case .backspace:
+      UISound.select()
+      showDebugInfo.toggle()
     default:
       break
     }
@@ -354,7 +360,6 @@ final class ModelViewer: RenderLoop {
         let originX = Float(Engine.viewportSize.width) - controlsPanelWidth
 
         // Calculate prompt list size and header height
-        let promptListSize = secondaryPromptList.size(for: prompts, inputSource: .player1)
         let headerStyle = TextStyle(
           fontName: "CreatoDisplay-Bold",
           fontSize: controlsHeaderFontSize,
@@ -398,6 +403,11 @@ final class ModelViewer: RenderLoop {
           anchor: .topLeft
         )
       }
+    }
+    
+    // Draw debug info if enabled
+    if showDebugInfo {
+      camera.drawDebugInfo()
     }
   }
 
@@ -451,7 +461,6 @@ final class ModelViewer: RenderLoop {
     ).titleCased
 
     let centerX = Float(Engine.viewportSize.width) / 2
-    let viewportHeight = Float(Engine.viewportSize.height)
 
     // In OpenGL, Y=0 is at bottom, so we calculate from bottom
     // Position model name and animation name near bottom of screen
@@ -577,11 +586,60 @@ final class ModelViewer: RenderLoop {
 class ModelViewerCamera: ItemInspectionCamera {
   private let modelViewerMaxDistance: Float = 10000.0
   private let modelViewerMinDistance: Float = 0.01
+  
+  /// Initialize with defaults optimized for character viewing
+  override init(
+    target: vec3 = vec3(0.0, 0.85, 0.0),  // Target at character's torso/center height
+    distance: Float = 2.0,  // Good viewing distance for characters
+    modelYaw: Float = 45.0,  // Start with model facing diagonally
+    modelPitch: Float = 0.0  // Start with model level
+  ) {
+    super.init(target: target, distance: distance, modelYaw: modelYaw, modelPitch: modelPitch)
+  }
 
   override func processMouseScroll(_ yOffset: Float) {
     let scrollSensitivity: Float = 0.1
     let scrollDelta = yOffset * scrollSensitivity
     zoomVelocity += scrollDelta
+  }
+  
+  /// Override keyboard processing to skip Q and E (used for model navigation in ModelViewer)
+  @MainActor override func processKeyboardState(_ keyboard: Keyboard, _ deltaTime: Float) {
+    // Don't process keyboard input during reset animation
+    guard !isResetting else { return }
+
+    // Speed modifiers
+    var speed: Float = 1
+    if keyboard.state(of: .leftShift) == .pressed || keyboard.state(of: .rightShift) == .pressed { speed = 3 }
+    if keyboard.state(of: .leftAlt) == .pressed || keyboard.state(of: .rightAlt) == .pressed { speed = 1 / 3 }
+
+    // WASD and Arrow keys for model rotation
+    let rotationSpeed = keyboardSensitivity * deltaTime * speed
+
+    if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed {
+      modelPitch += rotationSpeed
+      if modelPitch > 89.0 { modelPitch = 89.0 }
+      updateCameraPosition()  // Update camera when pitch changes
+    }
+    if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed {
+      modelPitch -= rotationSpeed
+      if modelPitch < -89.0 { modelPitch = -89.0 }
+      updateCameraPosition()  // Update camera when pitch changes
+    }
+    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed {
+      modelYaw -= rotationSpeed
+    }
+    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed {
+      modelYaw += rotationSpeed
+    }
+
+    // NOTE: Q and E are intentionally skipped here - they're used for model navigation in ModelViewer
+    // Use scroll wheel or +/- keys for zoom instead
+
+    // R for reset
+    if keyboard.state(of: .r) == .pressed {
+      resetToInitialPosition()
+    }
   }
 
   override func update(deltaTime: Float) {

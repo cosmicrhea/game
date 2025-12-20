@@ -3,7 +3,7 @@ import Logging
 
 let logger = {
   var logger = Logger(label: "local.cosmicrhea.Game")
-  logger.logLevel = .info
+  logger.logLevel = .debug
   return logger
 }()
 
