@@ -1,4 +1,3 @@
-/// Demo showcasing SVG loading and rendering capabilities
 @Editable final class SVGDemo: RenderLoop {
   private var svgData: [(image: Image, name: String)] = []
   @Editor(16...128) var iconSize: Float = 64.0

@@ -30,7 +30,7 @@ public enum ImportHint: String, CaseIterable {
 
 /// Scene type for GLTF scenes
 /// This represents the loaded scene data with all game logic
-public final class Scene {
+public final class Scene: @unchecked Sendable {
   public let filePath: String
   public let meshes: [Mesh]
   public let materials: [Material]

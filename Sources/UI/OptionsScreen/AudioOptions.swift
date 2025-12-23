@@ -15,23 +15,8 @@ final class AudioOptionsPanel: OptionsPanel {
 
     super.init()
 
-    // Load output devices
-    do {
-      outputDevices = try AudioDevice.outputDevices
-      let deviceNames = ["System Default"] + outputDevices.map { $0.name }
-      outputDevicePicker.options = deviceNames
-
-      // Find default device index
-      if let defaultIndex = outputDevices.firstIndex(where: { $0.isDefault }) {
-        outputDevicePicker.selectedIndex = defaultIndex + 1  // +1 for "System Default"
-      } else {
-        outputDevicePicker.selectedIndex = 0  // Default to "System Default"
-      }
-    } catch {
-      logger.error("Failed to load audio devices: \(error)")
-      outputDevicePicker.options = ["System Default"]
-      outputDevicePicker.selectedIndex = 0
-    }
+    // Don't load devices immediately - defer until panel is shown
+    // This prevents microphone permission requests when OptionsScreen is created
 
     voiceVolumeSlider.onValueChanged = { value in
       Config.current.voiceVolume = value
@@ -51,7 +36,7 @@ final class AudioOptionsPanel: OptionsPanel {
     }
 
     outputDevicePicker.onSelectionChanged = { [weak self] index in
-      guard let self = self else { return }
+      guard let self = self, self.devicesLoaded else { return }
       do {
         if index == 0 {
           // System Default
@@ -75,5 +60,35 @@ final class AudioOptionsPanel: OptionsPanel {
       Row(label: "UI Volume", control: uiVolumeSlider),
       Row(label: "Output Device", control: outputDevicePicker),
     ])
+  }
+
+  private var devicesLoaded = false
+
+  func ensureDevicesLoaded() {
+    guard !devicesLoaded else { return }
+    loadOutputDevices()
+  }
+
+  private func loadOutputDevices() {
+    guard !devicesLoaded else { return }
+    devicesLoaded = true
+
+    // Load output devices
+    do {
+      outputDevices = try AudioDevice.outputDevices
+      let deviceNames = ["System Default"] + outputDevices.map { $0.name }
+      outputDevicePicker.options = deviceNames
+
+      // Find default device index
+      if let defaultIndex = outputDevices.firstIndex(where: { $0.isDefault }) {
+        outputDevicePicker.selectedIndex = defaultIndex + 1  // +1 for "System Default"
+      } else {
+        outputDevicePicker.selectedIndex = 0  // Default to "System Default"
+      }
+    } catch {
+      logger.error("Failed to load audio devices: \(error)")
+      outputDevicePicker.options = ["System Default"]
+      outputDevicePicker.selectedIndex = 0
+    }
   }
 }

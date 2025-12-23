@@ -1123,7 +1123,7 @@
       // tint: .gray400,
       // scale: 0.75,
       deltaTime: deltaTime,
-      strokeWidth: TextStyle.dialog.strokeWidth,  // / 2,
+      strokeWidth: TextStyle.dialog.strokeWidth * 2 / 3,
       strokeColor: TextStyle.dialog.strokeColor
     )
   }

@@ -1,5 +1,4 @@
-/// Demo showing the dialog view with typewriter animation
-@MainActor final class DialogDemo: RenderLoop {
+final class DialogDemo: RenderLoop {
   private let dialogView = DialogView()
   private var demoTask: Task<Void, Never>?
 

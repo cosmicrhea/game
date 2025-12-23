@@ -43,7 +43,10 @@ final class PickupView: RenderLoop {
   private var camera: ItemInspectionCamera
   private let light = Light.itemInspection
   private let fillLight = Light.itemInspectionFill
-  private let loadingProgress = LoadingProgress()
+  private var isLoading: Bool = false
+  private var isLoadingTextures: Bool = false
+  private let loadingSpinner = ProgressIndicator()
+  private var textureLoadingTask: Task<Void, Never>?
 
   // Framebuffer for 3D item rendering
   private var itemFramebufferID: UInt64? = nil
@@ -122,6 +125,10 @@ final class PickupView: RenderLoop {
       itemFramebufferID = renderer.createFramebuffer(size: itemFramebufferSize, scale: itemFramebufferScale)
       gridFramebufferID = renderer.createFramebuffer(size: gridFramebufferSize, scale: gridFramebufferScale)
     }
+    
+    // Configure spinner with stroke
+    loadingSpinner.strokeWidth = 1.0
+    loadingSpinner.strokeColor = .black.withAlphaComponent(0.5)
 
     // Start async loading if model is available
     if let modelPath = item.modelPath {
@@ -139,6 +146,10 @@ final class PickupView: RenderLoop {
       // Start on-screen
       itemSlideOffset = 0.0
     }
+  }
+  
+  deinit {
+    textureLoadingTask?.cancel()
   }
 
   /// Start the slide-in animation (called after fade from black completes)
@@ -181,30 +192,61 @@ final class PickupView: RenderLoop {
     slotGrid.setSelected(0)
   }
 
-  /// Load 3D model asynchronously with progress updates
+  /// Load 3D model asynchronously
   private func loadModelAsync(path: String) async {
+    // Cancel any previous texture loading
+    textureLoadingTask?.cancel()
+    textureLoadingTask = nil
+    
+    await MainActor.run {
+      isLoading = true
+    }
+    
     do {
       meshInstances = try await MeshInstance.loadAsync(
         path: path,
-        onSceneProgress: { progress in
-          Task { @MainActor in
-            self.loadingProgress.updateSceneProgress(progress)
+        onSceneProgress: { _ in },
+        onTextureProgress: { _, _, _, _ in },
+        loadTextures: WAIT_FOR_ALL_TEXTURES
+      )
+      
+      // Load textures based on WAIT_FOR_ALL_TEXTURES setting
+      if !meshInstances.isEmpty {
+        await MainActor.run {
+          isLoadingTextures = true
+        }
+        
+        if WAIT_FOR_ALL_TEXTURES {
+          // Wait for all textures before showing model
+          await meshInstances.loadTexturesConcurrently()
+          await MainActor.run {
+            isLoading = false
+            isLoadingTextures = false
           }
-        },
-        onTextureProgress: { current, total, progress in
-          Task { @MainActor in
-            self.loadingProgress.updateTextureProgress(current: current, total: total, progress: progress)
+        } else {
+          // Show meshes immediately, load textures in background
+          await MainActor.run {
+            isLoading = false
+          }
+          let instances = meshInstances
+          textureLoadingTask = Task.detached(priority: .userInitiated) { [weak self] in
+            await instances.loadTexturesConcurrently()
+            guard let self else { return }
+            await MainActor.run {
+              logger.trace("✅ PickupView textures loaded (background)")
+              self.isLoadingTextures = false
+            }
           }
         }
-      )
-
-      await MainActor.run {
-        self.loadingProgress.markCompleted()
+      } else {
+        await MainActor.run {
+          isLoading = false
+        }
       }
     } catch {
       logger.error("Failed to load model: \(error)")
       await MainActor.run {
-        self.loadingProgress.markCompleted()
+        isLoading = false
       }
     }
   }
@@ -233,6 +275,11 @@ final class PickupView: RenderLoop {
     if viewState == .showingItem {
       camera.update(deltaTime: deltaTime)
       // No input handling - static view only
+    }
+    
+    // Update loading spinner
+    if isLoading || isLoadingTextures {
+      loadingSpinner.update(deltaTime: deltaTime)
     }
 
     // Handle slide-in animation (item slides up from bottom after fade)
@@ -601,6 +648,18 @@ final class PickupView: RenderLoop {
             diffuseOnly: false
           )
         }
+        
+        // Show loading spinner in bottom-left corner when textures loading
+        if isLoadingTextures {
+          let spinnerSize: Float = 32
+          let margin: Float = 20
+          let spinnerCenter = Point(margin + spinnerSize / 2, margin + spinnerSize / 2)
+          loadingSpinner.size = spinnerSize
+          loadingSpinner.draw(centeredAt: spinnerCenter)
+        }
+      } else if isLoading {
+        // Show loading spinner in center (waiting for mesh creation)
+        loadingSpinner.draw()
       }
     }
   }

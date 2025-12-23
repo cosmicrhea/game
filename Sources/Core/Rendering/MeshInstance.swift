@@ -5,11 +5,40 @@ import GLTF
 // Flag to disable HDRI loading for now
 private let enableHDRI = false
 
+/// Errors that can occur during texture loading
+enum TextureLoadError: Error {
+  case invalidPath(String)
+  case fileNotFound(String)
+  case uploadFailed
+  case decodeFailed(String)
+}
+
+/// Decoded image data ready for GPU upload
+enum DecodedImage {
+  case rgba(image: ImageFormats.Image<ImageFormats.RGBA>)
+  case rgb(image: ImageFormats.Image<ImageFormats.RGB>)
+  
+  var width: Int {
+    switch self {
+    case .rgba(let image): return image.width
+    case .rgb(let image): return image.width
+    }
+  }
+  
+  var height: Int {
+    switch self {
+    case .rgba(let image): return image.height
+    case .rgb(let image): return image.height
+    }
+  }
+}
+
 /// Global texture cache to avoid loading duplicate textures
 final class TextureCache: @unchecked Sendable {
   static let shared = TextureCache()
 
   private var cache: [String: GLuint] = [:]
+  private var inflightLoads: [String: Task<GLuint, Error>] = [:]
   private let lock = NSLock()
 
   private init() {}
@@ -19,6 +48,27 @@ final class TextureCache: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return cache[path]
+  }
+  
+  /// Get an in-flight load task if one exists
+  nonisolated func getInflightLoad(for path: String) -> Task<GLuint, Error>? {
+    lock.lock()
+    defer { lock.unlock() }
+    return inflightLoads[path]
+  }
+  
+  /// Register an in-flight load task
+  nonisolated func registerInflightLoad(_ task: Task<GLuint, Error>, for path: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    inflightLoads[path] = task
+  }
+  
+  /// Remove an in-flight load task
+  nonisolated func removeInflightLoad(for path: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    inflightLoads.removeValue(forKey: path)
   }
 
   /// Store a texture in the cache
@@ -31,18 +81,36 @@ final class TextureCache: @unchecked Sendable {
   /// Clear all cached textures (useful for cleanup)
   nonisolated func clearCache() {
     lock.lock()
-    defer { lock.unlock() }
-    for (_, texture) in cache {
-      var tex = texture
-      glDeleteTextures(1, &tex)
-    }
+    let texturesToDelete = Array(cache.values)
     cache.removeAll()
+    inflightLoads.removeAll()
+    lock.unlock()
+    
+    // Delete textures on main thread (OpenGL requirement)
+    if !texturesToDelete.isEmpty {
+      if Thread.isMainThread {
+        for texture in texturesToDelete {
+          var tex = texture
+          glDeleteTextures(1, &tex)
+        }
+      } else {
+        DispatchQueue.main.async {
+          for texture in texturesToDelete {
+            var tex = texture
+            glDeleteTextures(1, &tex)
+          }
+        }
+      }
+    }
   }
 
   deinit {
     clearCache()
   }
 }
+
+/// Global lock to serialize OpenGL texture uploads (prevents GL_INVALID_OPERATION from concurrent uploads)
+private let textureUploadLock = NSLock()
 
 struct MeshVertex {
   var position: (Float, Float, Float)
@@ -56,7 +124,8 @@ struct MeshVertex {
   var boneWeights: (Float, Float, Float, Float)  // Corresponding weights
 }
 
-class MeshInstance: @unchecked Sendable {
+@MainActor
+class MeshInstance {
 
   let sceneData: Scene
   let mesh: Mesh
@@ -105,33 +174,6 @@ class MeshInstance: @unchecked Sendable {
     return " (\(parts.joined(separator: ", ")))"
   }
 
-  // Helper to format bytes nicely (e.g., "1 MB", "419 KB", "4.2 MB")
-  private func formatBytes(_ bytes: Int) -> String {
-    let kb = 1024
-    let mb = kb * 1024
-    let gb = mb * 1024
-    
-    if bytes >= gb {
-      let value = Double(bytes) / Double(gb)
-      return String(format: "%.1f GB", value)
-    } else if bytes >= mb {
-      let value = Double(bytes) / Double(mb)
-      if value >= 10 {
-        return String(format: "%.0f MB", value)
-      } else {
-        return String(format: "%.1f MB", value)
-      }
-    } else if bytes >= kb {
-      let value = Double(bytes) / Double(kb)
-      if value >= 10 {
-        return String(format: "%.0f KB", value)
-      } else {
-        return String(format: "%.1f KB", value)
-      }
-    } else {
-      return "\(bytes) B"
-    }
-  }
 
   // Rendering program
   private let program: GLProgram
@@ -262,8 +304,11 @@ class MeshInstance: @unchecked Sendable {
 
     glBindVertexArray(0)
 
-    // Load texture if available
-    loadTexture()
+    // Load material properties so baseColor is available for rendering
+    // (textures will be loaded asynchronously later via loadTextures())
+    if let material {
+      loadMaterialProperties(material: material)
+    }
 
     // Load HDRI environment map
     loadHDRIEnvironmentMap()
@@ -397,26 +442,60 @@ class MeshInstance: @unchecked Sendable {
   }
 
   deinit {
-    if VAO != 0 {
-      glDeleteVertexArrays(1, &VAO)
-      GLStats.decrementBuffers()
-      VAO = 0
-    }
-    if VBO != 0 {
-      glDeleteBuffers(1, &VBO)
-      GLStats.decrementBuffers()
-      VBO = 0
-    }
-    if EBO != 0 {
-      glDeleteBuffers(1, &EBO)
-      GLStats.decrementBuffers()
-      EBO = 0
-    }
-    // Do NOT delete cached 2D textures; cache owns them. But delete environmentMap created per instance.
-    if environmentMap != 0 {
-      var t = environmentMap
-      glDeleteTextures(1, &t)
-      environmentMap = 0
+    // OpenGL calls MUST happen on the main thread
+    // If we're being deallocated on a background thread, dispatch to main
+    let vao = VAO
+    let vbo = VBO
+    let ebo = EBO
+    let envMap = environmentMap
+    
+    if vao != 0 || vbo != 0 || ebo != 0 || envMap != 0 {
+      // Check if we're on the main thread
+      if Thread.isMainThread {
+        // Safe to delete immediately
+        if vao != 0 {
+          var v = vao
+          glDeleteVertexArrays(1, &v)
+          GLStats.decrementBuffers()
+        }
+        if vbo != 0 {
+          var v = vbo
+          glDeleteBuffers(1, &v)
+          GLStats.decrementBuffers()
+        }
+        if ebo != 0 {
+          var v = ebo
+          glDeleteBuffers(1, &v)
+          GLStats.decrementBuffers()
+        }
+        if envMap != 0 {
+          var t = envMap
+          glDeleteTextures(1, &t)
+        }
+      } else {
+        // Schedule deletion on main thread
+        DispatchQueue.main.async {
+          if vao != 0 {
+            var v = vao
+            glDeleteVertexArrays(1, &v)
+            GLStats.decrementBuffers()
+          }
+          if vbo != 0 {
+            var v = vbo
+            glDeleteBuffers(1, &v)
+            GLStats.decrementBuffers()
+          }
+          if ebo != 0 {
+            var v = ebo
+            glDeleteBuffers(1, &v)
+            GLStats.decrementBuffers()
+          }
+          if envMap != 0 {
+            var t = envMap
+            glDeleteTextures(1, &t)
+          }
+        }
+      }
     }
   }
 
@@ -433,112 +512,150 @@ class MeshInstance: @unchecked Sendable {
   static func loadAsync(
     path: String,
     onSceneProgress: @escaping @Sendable (Float) -> Void,
-    onTextureProgress: @escaping @Sendable (Int, Int, Float) -> Void
+    onTextureProgress: @escaping @Sendable (Int, Int, Float, String?) -> Void,
+    loadTextures: Bool = true
   ) async throws -> [MeshInstance] {
 
-    // Load GLTF document with progress
-    let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
-    let url = URL(fileURLWithPath: scenePath)
+    // Load GLTF document on background thread with progress
+    let sceneData = try await Task.detached {
+      let scenePath = Bundle.game.path(forResource: path, ofType: "glb")!
+      let url = URL(fileURLWithPath: scenePath)
 
-    let gltfDocument = try await GLTFDocument(contentsOf: url) { progress in
-      Task { @MainActor in
-        onSceneProgress(Float(progress))
+      // Use nonisolated callback to avoid Sendable issues
+      let gltfDocument = try await GLTFDocument(contentsOf: url) { @Sendable progress in
+        Task { @MainActor in
+          onSceneProgress(Float(progress))
+        }
       }
-    }
 
-    // Convert to our Scene
-    let sceneData = Scene(gltfDocument, filePath: scenePath)
+      // Convert to our Scene (also on background thread)
+      return Scene(gltfDocument, filePath: scenePath)
+    }.value
 
     // Create mesh instances on main thread (OpenGL operations must be on main thread)
     let meshInstances = await MainActor.run {
       // Build a map from mesh index to node for proper transform lookup
       var meshToNodeMap: [Int: Node] = [:]
       func buildMeshToNodeMap(node: Node) {
-        for meshIndex in node.meshes {
-          // If multiple nodes reference the same mesh, use the first one found
-          if meshToNodeMap[meshIndex] == nil {
-            meshToNodeMap[meshIndex] = node
-          }
-        }
-        for child in node.children {
-          buildMeshToNodeMap(node: child)
+      for meshIndex in node.meshes {
+        // If multiple nodes reference the same mesh, use the first one found
+        if meshToNodeMap[meshIndex] == nil {
+          meshToNodeMap[meshIndex] = node
         }
       }
-      buildMeshToNodeMap(node: sceneData.rootNode)
-
-      // Debug: Print root node structure
-      logger.debug(
-        "Root node: '\(sceneData.rootNode.name)', children: \(sceneData.rootNode.children.count), meshes: \(sceneData.rootNode.meshes.count)"
-      )
-      logger.debug(
-        "Root node transform translation: (\(sceneData.rootNode.transformation[3].x), \(sceneData.rootNode.transformation[3].y), \(sceneData.rootNode.transformation[3].z))"
-      )
-
-      // Debug: Print mesh-to-node mapping
-      logger.debug("Mesh-to-node mapping:")
-      for (meshIndex, node) in meshToNodeMap.sorted(by: { $0.key < $1.key }) {
-        logger.debug("  Mesh \(meshIndex) -> Node '\(node.name)' (has \(node.meshes.count) meshes)")
+      for child in node.children {
+        buildMeshToNodeMap(node: child)
       }
+    }
+    buildMeshToNodeMap(node: sceneData.rootNode)
+
+    // Debug: Print root node structure
+    logger.debug(
+      "Root node: '\(sceneData.rootNode.name)', children: \(sceneData.rootNode.children.count), meshes: \(sceneData.rootNode.meshes.count)"
+    )
+    logger.debug(
+      "Root node transform translation: (\(sceneData.rootNode.transformation[3].x), \(sceneData.rootNode.transformation[3].y), \(sceneData.rootNode.transformation[3].z))"
+    )
+
+    // Debug: Print mesh-to-node mapping
+    logger.debug("Mesh-to-node mapping:")
+    for (meshIndex, node) in meshToNodeMap.sorted(by: { $0.key < $1.key }) {
+      logger.debug("  Mesh \(meshIndex) -> Node '\(node.name)' (has \(node.meshes.count) meshes)")
+    }
       logger.debug("Total meshes: \(sceneData.meshes.count), Mapped: \(meshToNodeMap.count)")
 
       return sceneData.meshes
-        .enumerated()
-        .filter { $0.element.numberOfVertices > 0 }
-        .map { (index, mesh) in
-          // Get transform from the node that owns this mesh
-          let node = meshToNodeMap[index]
-          let transformMatrix = node?.calculateWorldTransform() ?? mat4(1)
+      .enumerated()
+      .filter { $0.element.numberOfVertices > 0 }
+      .map { (index, mesh) in
+        // Get transform from the node that owns this mesh
+        let node = meshToNodeMap[index]
+        let transformMatrix = node?.calculateWorldTransform() ?? mat4(1)
 
-          if node == nil {
-            logger.warning("Mesh at index \(index) has no associated node, using identity transform")
-          } else {
-            // Debug: Print transform for first few meshes
-            if index < 3 {
-              let m = transformMatrix
-              let translation = vec3(m[3].x, m[3].y, m[3].z)
-              let localTranslation = vec3(
-                node!.transformation[3].x, node!.transformation[3].y, node!.transformation[3].z)
-              logger.debug("Mesh \(index) ('\(mesh.name ?? "unnamed")') transform from node '\(node!.name)':")
-              logger.debug("  World translation: (\(translation.x), \(translation.y), \(translation.z))")
-              logger.debug("  Local translation: (\(localTranslation.x), \(localTranslation.y), \(localTranslation.z))")
-              if let parent = node!.parent {
-                let parentTranslation = vec3(
-                  parent.transformation[3].x, parent.transformation[3].y, parent.transformation[3].z)
-                // Calculate scale from parent transform (length of first 3 columns)
-                let parentScaleX = length(
-                  vec3(parent.transformation[0].x, parent.transformation[0].y, parent.transformation[0].z))
-                let parentScaleY = length(
-                  vec3(parent.transformation[1].x, parent.transformation[1].y, parent.transformation[1].z))
-                let parentScaleZ = length(
-                  vec3(parent.transformation[2].x, parent.transformation[2].y, parent.transformation[2].z))
-                logger.debug(
-                  "  Parent '\(parent.name)' translation: (\(parentTranslation.x), \(parentTranslation.y), \(parentTranslation.z))"
-                )
-                logger.debug("  Parent scale: (\(parentScaleX), \(parentScaleY), \(parentScaleZ))")
-                logger.debug("  Parent has parent: \(parent.parent != nil)")
-              } else {
-                logger.debug("  Has parent: false")
-              }
+        if node == nil {
+          logger.warning("Mesh at index \(index) has no associated node, using identity transform")
+        } else {
+          // Debug: Print transform for first few meshes
+          if index < 3 {
+            let m = transformMatrix
+            let translation = vec3(m[3].x, m[3].y, m[3].z)
+            let localTranslation = vec3(
+              node!.transformation[3].x, node!.transformation[3].y, node!.transformation[3].z)
+            logger.debug("Mesh \(index) ('\(mesh.name ?? "unnamed")') transform from node '\(node!.name)':")
+            logger.debug("  World translation: (\(translation.x), \(translation.y), \(translation.z))")
+            logger.debug("  Local translation: (\(localTranslation.x), \(localTranslation.y), \(localTranslation.z))")
+            if let parent = node!.parent {
+              let parentTranslation = vec3(
+                parent.transformation[3].x, parent.transformation[3].y, parent.transformation[3].z)
+              // Calculate scale from parent transform (length of first 3 columns)
+              let parentScaleX = length(
+                vec3(parent.transformation[0].x, parent.transformation[0].y, parent.transformation[0].z))
+              let parentScaleY = length(
+                vec3(parent.transformation[1].x, parent.transformation[1].y, parent.transformation[1].z))
+              let parentScaleZ = length(
+                vec3(parent.transformation[2].x, parent.transformation[2].y, parent.transformation[2].z))
+              logger.debug(
+                "  Parent '\(parent.name)' translation: (\(parentTranslation.x), \(parentTranslation.y), \(parentTranslation.z))"
+              )
+              logger.debug("  Parent scale: (\(parentScaleX), \(parentScaleY), \(parentScaleZ))")
+              logger.debug("  Parent has parent: \(parent.parent != nil)")
+            } else {
+              logger.debug("  Has parent: false")
             }
           }
-
-          let instance = MeshInstance(
-            sceneData: sceneData, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: sceneData.filePath)
-          // Store node reference for visibility checking
-          instance.node = node
-          return instance
         }
+
+        let instance = MeshInstance(
+          sceneData: sceneData, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: sceneData.filePath)
+        // Store node reference for visibility checking
+        instance.node = node
+        return instance
+      }
     }
 
-    // Load textures with progress on main thread
-    let totalTextures = meshInstances.count
-    for (index, meshInstance) in meshInstances.enumerated() {
-      // Simulate texture loading progress
-      onTextureProgress(index + 1, totalTextures, 0.0)
-
-      await MainActor.run {
-        meshInstance.loadTexture()
-        onTextureProgress(index + 1, totalTextures, 1.0)
+    // Load textures with progress using TaskGroup with concurrency limit (if requested)
+    if loadTextures {
+      let totalTextures = meshInstances.count
+      let maxConcurrentLoads = 3
+      
+      await withTaskGroup(of: (Int, String?).self) { group in
+        var activeLoads = 0
+        var nextIndex = 0
+        
+        // Process all mesh instances
+        while nextIndex < meshInstances.count || activeLoads > 0 {
+          // Start new tasks if we're below the limit
+          while activeLoads < maxConcurrentLoads && nextIndex < meshInstances.count {
+            let index = nextIndex
+            let meshInstance = meshInstances[index]
+            let nodeName = meshInstance.node?.name
+            
+            group.addTask {
+              // Report starting
+              await MainActor.run {
+                onTextureProgress(index + 1, totalTextures, 0.0, nodeName)
+              }
+              
+              // Load textures for this mesh
+              await meshInstance.loadTextures()
+              
+              // Report completion
+              await MainActor.run {
+                onTextureProgress(index + 1, totalTextures, 1.0, nodeName)
+              }
+              
+              return (index, nodeName)
+            }
+            
+            activeLoads += 1
+            nextIndex += 1
+          }
+          
+          // Wait for one task to complete
+          if let _ = await group.next() {
+            activeLoads -= 1
+          }
+        }
       }
     }
 
@@ -645,6 +762,276 @@ class MeshInstance: @unchecked Sendable {
     glBindVertexArray(0)
   }
 
+  // MARK: - Async Texture Loading
+  
+  /// Decode an image on a background thread (CPU-intensive work)
+  private nonisolated func decodeImage(data: [UInt8], formatHint: String, displayPath: String, formattedBytes: String) async throws -> DecodedImage {
+    let isPNG = formatHint.contains("png")
+    let isWebP = formatHint.contains("webp")
+    let isJPEG = formatHint.contains("jpg") || formatHint.contains("jpeg")
+    
+    // Decode on background thread
+    if isPNG {
+      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+        try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { _ in }
+      }
+      return .rgba(image: image)
+    } else if isWebP {
+      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+        try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
+      }
+      return .rgba(image: image)
+    } else if isJPEG {
+      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+        try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: data)
+      }
+      return .rgb(image: image)
+    } else {
+      // Try generic loader
+      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+        try ImageFormats.Image<ImageFormats.RGBA>.load(from: data)
+      }
+      return .rgba(image: image)
+    }
+  }
+  
+  /// Upload decoded image to GPU on main thread (OpenGL requirement)
+  private func uploadToGPU(decodedImage: DecodedImage, displayPath: String, formattedBytes: String) -> GLuint {
+    // Lock to prevent concurrent OpenGL texture uploads from stomping on each other's state
+    textureUploadLock.lock()
+    defer { textureUploadLock.unlock() }
+    
+    // Clear any previous OpenGL errors (errors are sticky!)
+    while glGetError() != GL_NO_ERROR {}
+    
+    var textureID: GLuint = 0
+    glGenTextures(1, &textureID)
+    
+    if glGetError() != GL_NO_ERROR {
+      logger.error("OpenGL error after glGenTextures for \(displayPath)")
+      return 0
+    }
+    
+    glBindTexture(GL_TEXTURE_2D, textureID)
+    
+    if glGetError() != GL_NO_ERROR {
+      logger.error("OpenGL error after glBindTexture for \(displayPath)")
+      glDeleteTextures(1, &textureID)
+      return 0
+    }
+    
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    
+    if glGetError() != GL_NO_ERROR {
+      logger.error("OpenGL error after glTexParameteri for \(displayPath)")
+      glDeleteTextures(1, &textureID)
+      return 0
+    }
+    
+    // Upload to GPU
+    switch decodedImage {
+    case .rgba(let image):
+      image.bytes.withUnsafeBytes { bytes in
+        logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        }
+      }
+    case .rgb(let image):
+      image.bytes.withUnsafeBytes { bytes in
+        logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+          glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGB,
+            GLsizei(image.width), GLsizei(image.height),
+            0, GL_RGB, GL_UNSIGNED_BYTE, bytes.baseAddress)
+        }
+      }
+    }
+    
+    // Check for OpenGL errors after upload
+    let error = glGetError()
+    if error != GL_NO_ERROR {
+      logger.error("OpenGL error after glTexImage2D for \(displayPath): \(error)")
+      glDeleteTextures(1, &textureID)
+      return 0
+    }
+    
+    glBindTexture(GL_TEXTURE_2D, 0)
+    return textureID
+  }
+  
+  /// Load a single texture asynchronously (decode on background, upload on main thread)
+  /// Returns (textureID, hasTexture) tuple
+  private func loadTextureAsync(path: String, context: String) async -> (GLuint, Bool) {
+    // Create stable cache key
+    let cacheKey = path.hasPrefix("*") ? "\(sceneIdentifier)#\(path)" : path
+    
+    // Check cache first
+    if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
+      logger.trace("Using cached texture for key \(cacheKey)")
+      return (cachedTexture, true)
+    }
+    
+    // Check if already loading
+    if let inflightTask = TextureCache.shared.getInflightLoad(for: cacheKey) {
+      logger.trace("Waiting for in-flight texture load: \(cacheKey)")
+      do {
+        let textureID = try await inflightTask.value
+        return (textureID, true)
+      } catch {
+        logger.error("In-flight texture load failed for \(cacheKey): \(error)")
+        return (0, false)
+      }
+    }
+    
+    // Start new load
+    let loadTask = Task<GLuint, Error> {
+      // Get texture data
+      let (data, formatHint, displayPath, formattedBytes): ([UInt8], String, String, String)
+      
+      if path.hasPrefix("*") {
+        // Embedded texture
+        guard let textureIndex = Int(String(path.dropFirst())),
+              textureIndex < sceneData.embeddedTextures.count else {
+          throw TextureLoadError.invalidPath(path)
+        }
+        
+        let embeddedTexture = sceneData.embeddedTextures[textureIndex]
+        let hint = embeddedTexture.formatHint?.lowercased() ?? ""
+        let fileExt: String
+        if hint.contains("png") {
+          fileExt = "png"
+        } else if hint.contains("webp") {
+          fileExt = "webp"
+        } else if hint.contains("jpg") || hint.contains("jpeg") {
+          fileExt = "jpg"
+        } else {
+          fileExt = "unknown"
+        }
+        
+        let display: String
+        if let identifier = embeddedTexture.identifier {
+          display = "\(bundleRelativeScenePath)/\(identifier).\(fileExt)\(context)"
+        } else {
+          display = "\(bundleRelativeScenePath)\(path)\(context)"
+        }
+        
+        data = Array(embeddedTexture.data)
+        formatHint = hint
+        displayPath = display
+        formattedBytes = embeddedTexture.data.count.formatBytes()
+      } else {
+        // External texture
+        let sceneURL = URL(fileURLWithPath: sceneIdentifier)
+        let sceneDirectory = sceneURL.deletingLastPathComponent()
+        let textureURL = sceneDirectory.appendingPathComponent(path)
+        
+        // Try to load from resolved path or bundle
+        var textureData: Data?
+        if let loadedData = try? Data(contentsOf: textureURL) {
+          textureData = loadedData
+        } else {
+          // Try bundle
+          let cleanPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+          let pathExtension = URL(fileURLWithPath: cleanPath).pathExtension
+          let pathWithoutExtension = URL(fileURLWithPath: cleanPath).deletingPathExtension().lastPathComponent
+          if let bundlePath = Bundle.game.path(forResource: cleanPath, ofType: nil)
+              ?? (pathExtension.isEmpty ? nil : Bundle.game.path(forResource: pathWithoutExtension, ofType: pathExtension)) {
+            textureData = try? Data(contentsOf: URL(fileURLWithPath: bundlePath))
+          }
+        }
+        
+        guard let textureData else {
+          throw TextureLoadError.fileNotFound(path)
+        }
+        
+        data = Array(textureData)
+        formatHint = URL(fileURLWithPath: path).pathExtension.lowercased()
+        displayPath = "\(bundleRelativeScenePath)\(path)\(context)"
+        formattedBytes = textureData.count.formatBytes()
+      }
+      
+      logger.debug("loading \(formattedBytes) \(displayPath)")
+      
+      // Decode on background thread
+      let decodedImage = try await decodeImage(data: data, formatHint: formatHint, displayPath: displayPath, formattedBytes: formattedBytes)
+      
+      // Upload to GPU on main thread (explicitly hop to MainActor)
+      let uploadedTextureID = await MainActor.run {
+        uploadToGPU(decodedImage: decodedImage, displayPath: displayPath, formattedBytes: formattedBytes)
+      }
+      
+      guard uploadedTextureID != 0 else {
+        throw TextureLoadError.uploadFailed
+      }
+      
+      // Cache the result
+      TextureCache.shared.cacheTexture(uploadedTextureID, for: cacheKey)
+      TextureCache.shared.removeInflightLoad(for: cacheKey)
+      
+      return uploadedTextureID
+    }
+    
+    // Register in-flight load
+    TextureCache.shared.registerInflightLoad(loadTask, for: cacheKey)
+    
+    // Wait for result
+    do {
+      let loadedTextureID = try await loadTask.value
+      return (loadedTextureID, true)
+    } catch {
+      logger.error("Failed to load texture \(path): \(error)")
+      TextureCache.shared.removeInflightLoad(for: cacheKey)
+      return (0, false)
+    }
+  }
+  
+  /// Load all textures for this mesh instance (async version)
+  func loadTextures() async {
+    // Get material for this mesh
+    guard let material else { return }
+
+    // Load material properties
+    loadMaterialProperties(material: material)
+
+    let context = getTextureContext(material: material)
+
+    // Load all PBR texture types
+    if let path = material.diffuseTexturePath {
+      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+      diffuseTexture = textureID
+      hasDiffuseTexture = hasTexture
+    }
+    if let path = material.normalTexturePath {
+      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+      normalTexture = textureID
+      hasNormalTexture = hasTexture
+    }
+    if let path = material.roughnessTexturePath {
+      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+      roughnessTexture = textureID
+      hasRoughnessTexture = hasTexture
+    }
+    if let path = material.metallicTexturePath {
+      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+      metallicTexture = textureID
+      hasMetallicTexture = hasTexture
+    }
+    if let path = material.aoTexturePath {
+      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+      aoTexture = textureID
+      hasAoTexture = hasTexture
+    }
+  }
+
+  // MARK: - Synchronous Texture Loading (Legacy)
+  
   private func loadTexture() {
     // Get material for this mesh
     guard let material = material else { return }
@@ -791,7 +1178,7 @@ class MeshInstance: @unchecked Sendable {
     let isJPEG = formatHint == "jpg" || formatHint == "jpeg"
 
     let displayPath = "\(bundleRelativeScenePath)\(texturePath)\(context)"
-    let formattedBytes = formatBytes(data.count)
+    let formattedBytes = data.count.formatBytes()
     logger.debug("loading \(formattedBytes) \(displayPath)")
 
     do {
@@ -925,7 +1312,7 @@ class MeshInstance: @unchecked Sendable {
       displayPath = "\(bundleRelativeScenePath)\(texturePath)\(context)"
     }
     
-    let formattedBytes = formatBytes(data.count)
+    let formattedBytes = data.count.formatBytes()
     logger.debug("loading \(formattedBytes) \(displayPath)")
 
     do {
@@ -1278,5 +1665,40 @@ extension Mesh {
 
   func makeIndices32() -> [UInt32] {
     faces.flatMap { face in face.indices.map { UInt32($0) } }
+  }
+}
+
+// MARK: - Async Loading Helpers
+
+extension Collection where Element == MeshInstance {
+  /// Load textures for all mesh instances concurrently with a concurrency limit
+  /// - Parameter maxConcurrent: Maximum number of textures to decode simultaneously (default: 3)
+  func loadTexturesConcurrently(maxConcurrent: Int = 3) async {
+    guard !isEmpty else { return }
+    
+    let instances = Array(self)
+    await withTaskGroup(of: Void.self) { group in
+      var activeLoads = 0
+      var nextIndex = 0
+      
+      while nextIndex < instances.count || activeLoads > 0 {
+        // Start new tasks if we're below the limit
+        while activeLoads < maxConcurrent && nextIndex < instances.count {
+          let meshInstance = instances[nextIndex]
+          
+          group.addTask {
+            await meshInstance.loadTextures()
+          }
+          
+          activeLoads += 1
+          nextIndex += 1
+        }
+        
+        // Wait for one task to complete
+        if let _ = await group.next() {
+          activeLoads -= 1
+        }
+      }
+    }
   }
 }

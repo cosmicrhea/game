@@ -11,7 +11,10 @@
   @Editor var fillLight = Light.itemInspectionFill
 
   // Loading state
-  private let loadingProgress = LoadingProgress()
+  private var isLoading: Bool = false
+  private var isLoadingTextures: Bool = false
+  private let loadingSpinner = ProgressIndicator()
+  private var textureLoadingTask: Task<Void, Never>?
 
   // Mouse tracking for camera control
   private var lastMouseX: Double = 0
@@ -23,6 +26,10 @@
 
   /// Completion callback for when item inspection is finished.
   var onItemFinished: (() -> Void)?
+  
+  deinit {
+    textureLoadingTask?.cancel()
+  }
 
   init(item: Item) {
     self.item = item
@@ -33,6 +40,10 @@
     )
     self.itemDescriptionView.title = item.name
     self.itemDescriptionView.descriptionText = item.description ?? ""
+    
+    // Configure spinner with stroke
+    loadingSpinner.strokeWidth = 1.0
+    loadingSpinner.strokeColor = .black.withAlphaComponent(0.5)
 
     // Start async loading if model is available
     if let modelPath = item.modelPath {
@@ -40,32 +51,59 @@
     }
   }
 
-  /// Load 3D model asynchronously with progress updates
+  /// Load 3D model asynchronously
   private func loadModelAsync(path: String) async {
+    // Cancel any previous texture loading
+    textureLoadingTask?.cancel()
+    textureLoadingTask = nil
+    
+    // Don't show spinner during GLTF loading - only show when textures are loading
+    
     do {
       meshInstances = try await MeshInstance.loadAsync(
         path: path,
-        onSceneProgress: { progress in
-          Task { @MainActor in
-            //            print("Scene progress: \(progress)")
-            self.loadingProgress.updateSceneProgress(progress)
+        onSceneProgress: { _ in },
+        onTextureProgress: { _, _, _, _ in },
+        loadTextures: WAIT_FOR_ALL_TEXTURES
+      )
+      
+      // Load textures based on WAIT_FOR_ALL_TEXTURES setting
+      if !meshInstances.isEmpty {
+        await MainActor.run {
+          isLoadingTextures = true
+          loadingSpinner.isVisible = true
+        }
+        
+        if WAIT_FOR_ALL_TEXTURES {
+          // Wait for all textures before showing model
+          await meshInstances.loadTexturesConcurrently()
+          await MainActor.run {
+            isLoadingTextures = false
+            loadingSpinner.isVisible = false
           }
-        },
-        onTextureProgress: { current, total, progress in
-          Task { @MainActor in
-            //            print("Texture progress: \(current)/\(total) - \(progress)")
-            self.loadingProgress.updateTextureProgress(current: current, total: total, progress: progress)
+        } else {
+          // Show meshes immediately, load textures in background
+          // Keep spinner visible for texture loading
+          let instances = meshInstances
+          textureLoadingTask = Task.detached(priority: .userInitiated) { [weak self] in
+            await instances.loadTexturesConcurrently()
+            guard let self else { return }
+            await MainActor.run {
+              logger.trace("✅ ItemView textures loaded (background)")
+              self.isLoadingTextures = false
+              self.loadingSpinner.isVisible = false
+            }
           }
         }
-      )
-
-      await MainActor.run {
-        self.loadingProgress.markCompleted()
+      } else {
+        await MainActor.run {
+          loadingSpinner.isVisible = false
+        }
       }
     } catch {
       logger.error("Failed to load model: \(error)")
       await MainActor.run {
-        self.loadingProgress.markCompleted()
+        loadingSpinner.isVisible = false
       }
     }
   }
@@ -82,6 +120,9 @@
     if let gamepad = Gamepad.allGamepads.first {
       camera.processGamepadState(gamepad, deltaTime)
     }
+    
+    // Always update loading spinner (handles fade animation)
+    loadingSpinner.update(deltaTime: deltaTime)
   }
 
   func onKeyPressed(window: Window, key: Keyboard.Key, scancode: Int32, mods: Keyboard.Modifier) {
@@ -184,9 +225,15 @@
     // Draw 3D model if available
     if !meshInstances.isEmpty {
       draw3DModel()
-    } else if loadingProgress.isLoading {
-      // Show loading progress
-      drawLoadingProgress()
+      
+      // Show loading spinner in bottom-left corner (with fade animation) when textures are loading
+      if !WAIT_FOR_ALL_TEXTURES && isLoadingTextures {
+        let spinnerSize: Float = 32
+        let margin: Float = 20
+        let spinnerCenter = Point(margin + spinnerSize / 2, margin + spinnerSize / 2)
+        loadingSpinner.size = spinnerSize
+        loadingSpinner.draw(centeredAt: spinnerCenter)
+      }
     }
 
     // Draw item information
@@ -226,28 +273,6 @@
         fillLightColor: fillLight.color,
         fillLightIntensity: fillLight.intensity,
         diffuseOnly: useDiffuseOnly
-      )
-    }
-  }
-
-  private func drawLoadingProgress() {
-    let progressStyle = TextStyle(
-      fontName: "CreatoDisplay-Medium",
-      fontSize: 16,
-      color: .white,
-      strokeWidth: 1,
-      strokeColor: .gray900
-    )
-
-    let startY = Float(Engine.viewportSize.height) - 40
-    let lineHeight: Float = 24
-
-    for (index, message) in loadingProgress.progressMessages.enumerated() {
-      let y = startY - Float(index) * lineHeight
-      message.draw(
-        at: Point(40, y),
-        style: progressStyle,
-        anchor: .topLeft
       )
     }
   }

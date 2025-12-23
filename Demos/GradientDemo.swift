@@ -1,4 +1,3 @@
-/// Demo showcasing the Gradient drawing system
 public final class GradientDemo: RenderLoop {
   private var time: Float = 0
 

@@ -93,7 +93,7 @@ public final class PhysicsWorld {
   public func registerSensorBody(_ sensorBodyID: BodyID) {
     if sensorBodyContactListener == nil {
       sensorBodyContactListener = SensorBodyContactListener()
-      physicsSystem.setContactListener(sensorBodyContactListener)
+      //physicsSystem.setContactListener(sensorBodyContactListener)
     }
     sensorBodyContactListener?.registerSensorBody(sensorBodyID)
   }
@@ -977,6 +977,11 @@ private class SensorBodyContactListener: ContactListener {
   func onContactAdded(body1: Body, body2: Body, manifold: ContactManifold, settings: inout ContactSettings) {
     let body1ID = body1.id
     let body2ID = body2.id
+    
+    print(body1, body2)
+    
+    settings.combinedFriction = 0.1;
+    settings.combinedRestitution = 0.9;
 
     lock.lock()
     defer { lock.unlock() }

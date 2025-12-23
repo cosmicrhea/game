@@ -1,5 +1,3 @@
-/// Demo for testing the slot grid component with context menu support
-@MainActor
 final class SlotGridDemo: RenderLoop {
   private let promptList = PromptList(.menu)
   private var slotGrid: ItemSlotGrid

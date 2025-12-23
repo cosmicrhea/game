@@ -1,5 +1,4 @@
 /// A demo that renders a triangle and a key.
-@MainActor
 final class KeyAndTriangleDemo: RenderLoop {
 
   // Scene and camera

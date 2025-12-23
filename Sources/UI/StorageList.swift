@@ -387,19 +387,57 @@ final class StorageList {
     // Index 0 at bottom, highest index at top
     let contentHeight = Float(itemCount) * rowHeight
     let startY = origin.y + contentHeight - rowHeight
-
+    
+    // Calculate visible rows based on scroll offset
+    // ScrollView uses Y-flipped coordinates: contentOffset.y = 0 means bottom, maxOffsetY means top
+    // When scrolled to bottom (contentOffset.y = 0), we see rows with high indices (top of list)
+    // When scrolled to top (contentOffset.y = maxOffsetY), we see rows with low indices (bottom of list)
+    let viewportHeight = scrollView.frame.size.height
+    let maxOffsetY = max(0, contentHeight - viewportHeight)
+    let currentOffset = scrollView.contentOffset.y
+    
+    // Calculate which row range is visible
+    // Add padding to ensure we don't miss rows
+    let padding = rowHeight
+    let visibleTop = currentOffset - padding  // In content coordinates (from bottom)
+    let visibleBottom = currentOffset + viewportHeight + padding
+    
+    // Convert to row indices
+    // Row i is at content position: contentHeight - (i + 1) * rowHeight (from bottom)
+    // So row i's bottom edge is at: contentHeight - (i + 1) * rowHeight
+    // And row i's top edge is at: contentHeight - i * rowHeight
+    // We want rows where: row bottom <= visibleBottom && row top >= visibleTop
+    
+    var firstVisibleRow: Int? = nil
+    var lastVisibleRow: Int? = nil
+    
     for i in 0..<itemCount {
-      // Draw items from bottom to top (index 0 at bottom, highest index at top)
-      let rowY = startY - Float(i) * rowHeight
-      let isSelected = (i == selectedIndex) && isFocused
-      let displayItem = displayList[i]
+      let rowBottom = contentHeight - Float(i + 1) * rowHeight  // Position from bottom of content
+      let rowTop = contentHeight - Float(i) * rowHeight
+      
+      // Row is visible if it intersects the visible range
+      if rowTop >= visibleTop && rowBottom <= visibleBottom {
+        if firstVisibleRow == nil {
+          firstVisibleRow = i
+        }
+        lastVisibleRow = i
+      }
+    }
+    
+    // Only draw visible rows
+    if let first = firstVisibleRow, let last = lastVisibleRow {
+      for i in first...last {
+        let rowY = startY - Float(i) * rowHeight
+        let isSelected = (i == selectedIndex) && isFocused
+        let displayItem = displayList[i]
 
-      drawItemRow(
-        at: Point(origin.x, rowY),
-        slotData: displayItem.slotData,
-        index: i,
-        isSelected: isSelected
-      )
+        drawItemRow(
+          at: Point(origin.x, rowY),
+          slotData: displayItem.slotData,
+          index: i,
+          isSelected: isSelected
+        )
+      }
     }
   }
 

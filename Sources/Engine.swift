@@ -17,6 +17,8 @@ let VIEWPORT_SCALING = false
 
 let TWO_PLAYER_MODE = false
 
+let WAIT_FOR_ALL_TEXTURES = false
+
 let STARTED_FROM_XCODE = ProcessInfo.processInfo.environment.keys.contains("__XCODE_BUILT_PRODUCTS_DIR_PATHS")
 
 struct CLIOptions: ParsableArguments {

@@ -1,6 +1,5 @@
 import STBRectPack
 
-@MainActor
 final class TextEffectsDemo: RenderLoop {
   private let titleStyle = TextStyle(fontName: "CreatoDisplay-Bold", fontSize: 16, color: .white)
   private let sampleText = "The quick brown fox jumps over the lazy dog"

@@ -1,4 +1,3 @@
-@MainActor
 final class CalloutDemo: RenderLoop {
   private var objectiveCallouts: [Callout] = []
   private var tutorialCallout: Callout?

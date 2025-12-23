@@ -321,6 +321,7 @@ final class StorageView: RenderLoop {
       // Close any open menus
       if focusedGrid == .player && playerGrid.slotMenu.isVisible {
         playerGrid.slotMenu.hide()
+        UISound.cancel()
         return
       }
       if focusedGrid == .storage {
@@ -328,11 +329,13 @@ final class StorageView: RenderLoop {
         case .grid:
           if storageGrid?.slotMenu.isVisible == true {
             storageGrid?.slotMenu.hide()
+            UISound.cancel()
             return
           }
         case .list:
           if storageListView?.isSlotMenuVisible == true {
             storageListView?.hideSlotMenu()
+            UISound.cancel()
             return
           }
         }

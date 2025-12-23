@@ -1,5 +1,3 @@
-/// Demo for testing the slot shader with textured border
-@MainActor
 final class SlotDemo: RenderLoop {
   private let promptList = PromptList(.menu)
   private var slotEffect = GLScreenEffect("Common/Slot")

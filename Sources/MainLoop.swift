@@ -39,6 +39,10 @@ private let startingEntry = "1"
 
   // Foreground meshes from scene (nodes with -fg suffix)
   private var foregroundMeshInstances: [MeshInstance] = []
+  
+  // Loading state for foreground textures
+  private var isLoadingForegroundTextures: Bool = false
+  private let foregroundLoadingSpinner = ProgressIndicator()
 
   // Capsule height offset - adjust if capsule origin is at center instead of bottom
   @Editor(0.0...2.0) var playerYOffset: Float = 1.2
@@ -164,6 +168,10 @@ private let startingEntry = "1"
 
     // Initialize title screen (not shown by default)
     titleScreenStack = TitleScreenStack()
+    
+    // Configure foreground loading spinner with stroke
+    foregroundLoadingSpinner.strokeWidth = 1.0
+    foregroundLoadingSpinner.strokeColor = .black.withAlphaComponent(0.5)
 
     // Initialize systems (order matters - physicsWorld must be first)
     physicsWorld = PhysicsWorld(renderLoop: self)
@@ -229,7 +237,7 @@ private let startingEntry = "1"
   }
 
   /// Load foreground meshes from nodes with @Foreground hint
-  private func loadForegroundMeshes(scene: Scene) {
+  private func loadForegroundMeshes(scene: Scene) async {
     foregroundMeshInstances.removeAll()
 
     // Use scene.foregroundNodes instead of manual traversal
@@ -267,6 +275,31 @@ private let startingEntry = "1"
     }
 
     logger.trace("✅ Loaded \(foregroundMeshInstances.count) foreground mesh instances")
+    
+    // Load textures asynchronously for all foreground meshes
+    if !foregroundMeshInstances.isEmpty {
+      logger.trace("🎨 Loading textures for \(foregroundMeshInstances.count) foreground meshes...")
+      isLoadingForegroundTextures = true
+      foregroundLoadingSpinner.isVisible = true
+      
+      if WAIT_FOR_ALL_TEXTURES {
+        await foregroundMeshInstances.loadTexturesConcurrently()
+        logger.trace("✅ Foreground textures loaded")
+        isLoadingForegroundTextures = false
+        foregroundLoadingSpinner.isVisible = false
+      } else {
+        let instances = foregroundMeshInstances
+        Task.detached(priority: .userInitiated) {
+          await instances.loadTexturesConcurrently()
+          await MainActor.run {
+            logger.trace("✅ Foreground textures loaded (background)")
+            self.isLoadingForegroundTextures = false
+            self.foregroundLoadingSpinner.isVisible = false
+          }
+        }
+        logger.trace("🎨 Foreground textures loading in background...")
+      }
+    }
   }
 
   /// Extract enemy spawn points from @Enemy nodes in the scene
@@ -383,7 +416,7 @@ private let startingEntry = "1"
         let loaded = try await MeshInstance.loadAsync(
           path: "Actors/capsule",
           onSceneProgress: { _ in },
-          onTextureProgress: { _, _, _ in }
+          onTextureProgress: { _, _, _, _ in }
         )
         await MainActor.run {
           self.capsuleMeshInstances = loaded
@@ -1225,14 +1258,15 @@ private let startingEntry = "1"
       // Load the scene file with GLTF
       let scenePath = Bundle.game.path(forResource: "Scenes/\(sceneName)", ofType: "glb")!
       let url = URL(fileURLWithPath: scenePath)
-      let gltfDocument = try await GLTFDocument(contentsOf: url)
+      let gltfDocument = //try await logger.measure("loaded \(sceneName).glb", level: .debug) {
+        try await GLTFDocument(contentsOf: url)
+      //}
 
       // Convert to our Scene
       let scene = Scene(gltfDocument, filePath: scenePath)
 
       // Print debug description of all game-related nodes
       logger.trace("📋 Scene loaded: \(sceneName)")
-      // Print each line separately for better readability
       print(scene.debugDescription)
 
       // Set the scene
@@ -1252,12 +1286,6 @@ private let startingEntry = "1"
           )
         }
       }
-
-      //      // Clear old physics bodies if physics system is ready
-      //      guard let physicsSystem = physicsSystem else {
-      //        logger.error("⚠️ Physics system not ready, cannot load physics for scene '\(sceneName)'")
-      //        return
-      //      }
 
       logger.trace("🔄 Loading physics for scene '\(sceneName)'...")
 
@@ -1304,7 +1332,7 @@ private let startingEntry = "1"
       }
 
       // Load foreground meshes (nodes with -fg suffix)
-      loadForegroundMeshes(scene: scene)
+      await loadForegroundMeshes(scene: scene)
 
       // Spawn enemies from Enemy_* nodes
       let enemySpawnPoints = extractEnemySpawnPoints(from: scene)
@@ -1551,6 +1579,9 @@ private let startingEntry = "1"
 
     // Update dialog view
     dialogView.update(deltaTime: deltaTime)
+    
+    // Update foreground loading spinner (always update for fade animation)
+    foregroundLoadingSpinner.update(deltaTime: deltaTime)
 
     // Update FPS (EMA)
     if deltaTime > 0 {
@@ -2045,6 +2076,15 @@ private let startingEntry = "1"
         // Enemy debug overlay (health bars and state labels)
         if showEnemyDebugOverlay && !disableEnemies {
           drawEnemyDebugOverlay(projection: projection, view: view)
+        }
+        
+        // Foreground loading spinner (bottom-left, with fade animation)
+        if isLoadingForegroundTextures {
+          let spinnerSize: Float = 32
+          let margin: Float = 20
+          let spinnerCenter = Point(margin + spinnerSize / 2, margin + spinnerSize / 2)
+          foregroundLoadingSpinner.size = spinnerSize
+          foregroundLoadingSpinner.draw(centeredAt: spinnerCenter)
         }
 
         // Draw dialog view (on top of everything)

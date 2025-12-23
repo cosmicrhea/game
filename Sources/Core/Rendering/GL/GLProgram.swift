@@ -587,7 +587,17 @@ public final class GLProgram: @unchecked Sendable {
     #endif
 
     if programID != 0 {
-      glDeleteProgram(programID)
+      let pid = programID
+      // OpenGL calls must happen on main thread
+      if Thread.isMainThread {
+        // Safe to delete immediately
+        glDeleteProgram(pid)
+      } else {
+        // Schedule deletion on main thread
+        DispatchQueue.main.async {
+          glDeleteProgram(pid)
+        }
+      }
     }
   }
 

@@ -47,21 +47,23 @@ class AnimationController {
 
   /// Update animation with delta time
   func update(deltaTime: Float) {
-    guard let animation = currentAnimation, isPlaying else {
+    guard let animation = currentAnimation else {
       animatedNodeTransforms.removeAll()
       return
     }
 
-    // Update time
-    let tps = animation.ticksPerSecond > 0 ? animation.ticksPerSecond : 1.0
-    animationTime += Double(deltaTime) * tps
+    // Update time only when playing
+    if isPlaying {
+      let tps = animation.ticksPerSecond > 0 ? animation.ticksPerSecond : 1.0
+      animationTime += Double(deltaTime) * tps
 
-    // Loop
-    if animationTime >= animation.duration {
-      animationTime = animationTime.truncatingRemainder(dividingBy: animation.duration)
+      // Loop
+      if animationTime >= animation.duration {
+        animationTime = animationTime.truncatingRemainder(dividingBy: animation.duration)
+      }
     }
 
-    // Calculate animated node transforms
+    // Calculate animated node transforms at current time (even when paused)
     animatedNodeTransforms.removeAll()
     for channel in animation.channels {
       let nodeName = channel.nodeName

@@ -128,7 +128,8 @@ extension Item {
     id: "metro_key",
     name: "Metro Key",
     description: "A rusty key attached to a Metro logo keychain.",
-    inspectionDistance: 0.4
+    inspectionDistance: 0.4,
+    inspectionYaw: 70
   )
 
   static let tagKey = Item(

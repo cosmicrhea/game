@@ -53,6 +53,17 @@ extension Logger {
     return result
   }
 
+  /// Measures execution time and logs it with the specified level (defaults to .info), returning the closure's result
+  func measure<T>(_ message: String, level: Logger.Level = .info, _ closure: () async throws -> T) async rethrows -> T {
+    let startTime = ProcessInfo.processInfo.systemUptime
+    let result = try await closure()
+    let elapsedTime = ProcessInfo.processInfo.systemUptime - startTime
+
+    let formattedTime = formatElapsedTime(elapsedTime)
+    self.log(level: level, "\(formattedTime) \(message)")
+    return result
+  }
+
   private func formatElapsedTime(_ seconds: Double) -> String {
     if seconds < 1.0 {
       let milliseconds = Int(seconds * 1000)

@@ -1,4 +1,3 @@
-/// Demo showing how to use the Prompt struct to render individual icons
 final class PromptDemo: RenderLoop {
   func draw() {
     // Create a prompt with the same structure as PromptGroup

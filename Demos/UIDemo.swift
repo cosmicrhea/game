@@ -87,7 +87,9 @@
     return g
   }()
 
-  init() {}
+  init() {
+    indicator.isVisible = true
+  }
 
   func update(deltaTime: Float) {
     indicator.update(deltaTime: deltaTime)

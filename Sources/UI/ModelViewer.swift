@@ -23,7 +23,10 @@ final class ModelViewer: RenderLoop {
   ]
   private var currentModelIndex: Int = 0
   private var meshInstances: [MeshInstance] = []
-  private let loadingProgress = LoadingProgress()
+  private var isLoading: Bool = false
+  private var isLoadingTextures: Bool = false
+  private let loadingSpinner = ProgressIndicator()
+  private var textureLoadingTask: Task<Void, Never>?
 
   // Scene/Animations
   private var currentAnimationNames: [String] = []
@@ -69,19 +72,31 @@ final class ModelViewer: RenderLoop {
   @Editor(256...1024) var modelNameDividerWidth: Float = 512
   @Editor(1...5) var modelNameDividerHeight: Float = 2
 
-  @Editor(20...100) var loadingProgressTopMargin: Float = 40
-  @Editor(16...32) var loadingProgressLineHeight: Float = 24
-  @Editor(20...100) var loadingProgressLeftMargin: Float = 40
-
   init() {
+    // Configure spinner with stroke
+    loadingSpinner.strokeWidth = 1.0
+    loadingSpinner.strokeColor = .black.withAlphaComponent(0.5)
+    
     Task { await loadCurrentModel() }
+  }
+  
+  deinit {
+    textureLoadingTask?.cancel()
   }
 
   // MARK: - Loading
   private func loadCurrentModel() async {
-    loadingProgress.reset()
-    meshInstances.removeAll()
-    currentAnimationNames.removeAll()
+    // Cancel any previous texture loading
+    textureLoadingTask?.cancel()
+    textureLoadingTask = nil
+    
+    await MainActor.run {
+      isLoading = true
+      isLoadingTextures = false
+      loadingSpinner.isVisible = true
+      meshInstances.removeAll()
+      currentAnimationNames.removeAll()
+    }
 
     let path = modelPaths[safe: currentModelIndex] ?? modelPaths[0]
     do {
@@ -119,9 +134,49 @@ final class ModelViewer: RenderLoop {
             let transformMatrix = node?.calculateWorldTransform() ?? mat4(1)
             return MeshInstance(sceneData: scene, mesh: mesh, transformMatrix: transformMatrix, sceneIdentifier: path)
           }
-
-        self.loadingProgress.markCompleted()
-
+      }
+      
+      // Load textures asynchronously for all mesh instances
+      if !meshInstances.isEmpty {
+        logger.trace("🎨 Loading textures for \(meshInstances.count) meshes in ModelViewer...")
+        await MainActor.run {
+          isLoadingTextures = true
+        }
+        
+        if WAIT_FOR_ALL_TEXTURES {
+          // Wait for all textures before showing model
+          await meshInstances.loadTexturesConcurrently()
+          logger.trace("✅ ModelViewer textures loaded")
+          await MainActor.run {
+            isLoading = false
+            isLoadingTextures = false
+            loadingSpinner.isVisible = false
+          }
+        } else {
+          // Show meshes immediately, load textures in background
+          await MainActor.run {
+            isLoading = false
+          }
+          let instances = meshInstances
+          textureLoadingTask = Task.detached(priority: .userInitiated) { [weak self] in
+            await instances.loadTexturesConcurrently()
+            guard let self else { return }
+            await MainActor.run {
+              logger.trace("✅ ModelViewer textures loaded (background)")
+              self.isLoadingTextures = false
+              self.loadingSpinner.isVisible = false
+            }
+          }
+          logger.trace("🎨 ModelViewer textures loading in background...")
+        }
+      } else {
+        await MainActor.run {
+          isLoading = false
+          loadingSpinner.isVisible = false
+        }
+      }
+      
+      await MainActor.run {
         // Setup animations with preferred ordering and humanized names
         let rawAnimationNames = scene.animations.enumerated().map { idx, animation in
           if let name = animation.name, !name.isEmpty { return name }
@@ -137,10 +192,14 @@ final class ModelViewer: RenderLoop {
         self.playCurrentAnimation()
       }
     } catch {
-      self.meshInstances = []
-      self.currentAnimationNames = []
-      self.animationOrder = []
-      self.loadingProgress.progressMessages.append("Failed to load: \(path)")
+      await MainActor.run {
+        self.meshInstances = []
+        self.currentAnimationNames = []
+        self.animationOrder = []
+        self.isLoading = false
+        self.loadingSpinner.isVisible = false
+      }
+      logger.error("Failed to load: \(path)")
     }
   }
 
@@ -315,6 +374,10 @@ final class ModelViewer: RenderLoop {
       camera.processGamepadState(gamepad, deltaTime)
     }
 
+    // Update loading spinner
+    // Always update (handles fade animation)
+    loadingSpinner.update(deltaTime: deltaTime)
+
     // Update shared animation controller
     animationController.update(deltaTime: deltaTime)
 
@@ -344,8 +407,18 @@ final class ModelViewer: RenderLoop {
 
     if !meshInstances.isEmpty {
       draw3DModel()
-    } else if loadingProgress.isLoading {
-      drawLoadingProgress()
+      
+      // Show loading spinner in bottom-left corner (with fade animation)
+      if !WAIT_FOR_ALL_TEXTURES {
+        let spinnerSize: Float = 32
+        let margin: Float = 20
+        let spinnerCenter = Point(margin + spinnerSize / 2, margin + spinnerSize / 2)
+        loadingSpinner.size = spinnerSize
+        loadingSpinner.draw(centeredAt: spinnerCenter)
+      }
+    } else if isLoading {
+      // Show loading spinner in center (waiting for mesh creation)
+      loadingSpinner.draw()
     }
 
     if showControls {
@@ -435,22 +508,6 @@ final class ModelViewer: RenderLoop {
         fillLightIntensity: fillLight.intensity,
         diffuseOnly: false
       )
-    }
-  }
-
-  private func drawLoadingProgress() {
-    let progressStyle = TextStyle(
-      fontName: "CreatoDisplay-Medium",
-      fontSize: 16,
-      color: .white,
-      strokeWidth: 1,
-      strokeColor: .gray900
-    )
-    let startY = Float(Engine.viewportSize.height) - loadingProgressTopMargin
-    let lineHeight = loadingProgressLineHeight
-    for (index, message) in loadingProgress.progressMessages.enumerated() {
-      let y = startY - Float(index) * lineHeight
-      message.draw(at: Point(loadingProgressLeftMargin, y), style: progressStyle, anchor: .topLeft)
     }
   }
 

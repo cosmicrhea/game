@@ -1,5 +1,4 @@
-/// Demo showcasing bezier path drawing capabilities
-public class PathDemo: RenderLoop {
+final class PathDemo: RenderLoop {
   private var time: Float = 0
 
   public init() {}
