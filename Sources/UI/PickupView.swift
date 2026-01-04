@@ -77,11 +77,22 @@ final class PickupView: RenderLoop {
   private var isFadingInGrid: Bool = false
   private let gridFadeDuration: Float = 0.25  // Half of slide-out duration (fades in from 50% to 100%)
 
+  // Constrained inspection input (small offsets that snap back)
+  private let inspectionMaxOffset: Float = 22.0
+  private let inspectionInputSpeed: Float = 100.0
+  private let inspectionReturnSpeed: Float = 90.0
+  private let inspectionBaseYaw: Float
+  private let inspectionBasePitch: Float
+  private var inspectionYawOffset: Float = 0.0
+  private var inspectionPitchOffset: Float = 0.0
+
   init(item: Item, quantity: Int = 1, slidingBehavior: SlidingBehavior = .slideInAndOut) {
     self.slidingBehavior = slidingBehavior
     self.pickedUpItem = item
     self.pickedUpQuantity = quantity
     self.camera = ItemInspectionCamera(distance: item.inspectionDistance)
+    self.inspectionBaseYaw = self.camera.modelYaw
+    self.inspectionBasePitch = self.camera.modelPitch
 
     slotGrid = ItemSlotGrid(
       columns: 4,
@@ -274,7 +285,14 @@ final class PickupView: RenderLoop {
     // Update camera (for smooth rotation) - but no input, just static view
     if viewState == .showingItem {
       camera.update(deltaTime: deltaTime)
-      // No input handling - static view only
+      if !isDismissing && !isSlidingIn && !isSlidingOut {
+        updateConstrainedInspectionInput(window: window, deltaTime: deltaTime)
+      } else {
+        // Keep offsets gently returning when input is disabled
+        inspectionYawOffset = approach(inspectionYawOffset, 0.0, inspectionReturnSpeed * deltaTime)
+        inspectionPitchOffset = approach(inspectionPitchOffset, 0.0, inspectionReturnSpeed * deltaTime)
+        applyInspectionOffsets()
+      }
     }
     
     // Update loading spinner
@@ -761,5 +779,54 @@ final class PickupView: RenderLoop {
         gridFramebufferID = nil
       }
     }
+  }
+
+  private func updateConstrainedInspectionInput(window: Window, deltaTime: Float) {
+    var inputYaw: Float = 0.0
+    var inputPitch: Float = 0.0
+
+    let keyboard = window.keyboard
+    if keyboard.state(of: .a) == .pressed || keyboard.state(of: .left) == .pressed { inputYaw -= 1.0 }
+    if keyboard.state(of: .d) == .pressed || keyboard.state(of: .right) == .pressed { inputYaw += 1.0 }
+    if keyboard.state(of: .w) == .pressed || keyboard.state(of: .up) == .pressed { inputPitch += 1.0 }
+    if keyboard.state(of: .s) == .pressed || keyboard.state(of: .down) == .pressed { inputPitch -= 1.0 }
+
+    if let gamepad = Gamepad.allGamepads.first {
+      let deadzone: Float = 0.2
+      let stickX = gamepad.state(of: .rightX)
+      let stickY = gamepad.state(of: .rightY)
+      if abs(stickX) > deadzone { inputYaw += stickX }
+      if abs(stickY) > deadzone { inputPitch += -stickY }
+    }
+
+    let hasInput = abs(inputYaw) > 0.001 || abs(inputPitch) > 0.001
+    if hasInput {
+      inspectionYawOffset += inputYaw * inspectionInputSpeed * deltaTime
+      inspectionPitchOffset += inputPitch * inspectionInputSpeed * deltaTime
+    } else {
+      inspectionYawOffset = approach(inspectionYawOffset, 0.0, inspectionReturnSpeed * deltaTime)
+      inspectionPitchOffset = approach(inspectionPitchOffset, 0.0, inspectionReturnSpeed * deltaTime)
+    }
+
+    inspectionYawOffset = clampOffset(inspectionYawOffset)
+    inspectionPitchOffset = clampOffset(inspectionPitchOffset)
+    applyInspectionOffsets()
+  }
+
+  private func applyInspectionOffsets() {
+    camera.modelYaw = inspectionBaseYaw + inspectionYawOffset
+    camera.modelPitch = max(-89.0, min(89.0, inspectionBasePitch + inspectionPitchOffset))
+    camera.updateCameraPosition()
+  }
+
+  private func clampOffset(_ value: Float) -> Float {
+    return max(-inspectionMaxOffset, min(inspectionMaxOffset, value))
+  }
+
+  private func approach(_ value: Float, _ target: Float, _ delta: Float) -> Float {
+    if value < target {
+      return min(value + delta, target)
+    }
+    return max(value - delta, target)
   }
 }

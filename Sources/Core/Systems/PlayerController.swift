@@ -7,8 +7,15 @@ import Jolt
 public final class PlayerController {
   // MARK: - State
 
+  public enum MovementState {
+    case idle
+    case walk
+    case run
+  }
+
   var position: vec3 = vec3(0, 0, 0)
   var rotation: Float = 0.0
+  public private(set) var movementState: MovementState = .idle
 
   private var spawnPosition: vec3 = vec3(0, 0, 0)
   private var spawnRotation: Float = 0.0
@@ -292,7 +299,10 @@ public final class PlayerController {
     }
 
     // Don't allow forward/backward movement while aiming
-    if isAiming { return }
+    if isAiming {
+      movementState = .idle
+      return
+    }
 
     // Calculate forward direction from rotation
     let forwardX = GLMath.sin(rotation)
@@ -445,6 +455,11 @@ public final class PlayerController {
     }
 
     let finalIsMoving = isMoving || gamepadMoving
+    if finalIsMoving {
+      movementState = speedMultiplier > 1.0 ? .run : .walk
+    } else {
+      movementState = .idle
+    }
 
     // Only accumulate distance and play footsteps if moving
     // RE-like game: no jumping/falling, so footsteps always play when moving

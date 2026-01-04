@@ -218,6 +218,22 @@ public final class Scene: @unchecked Sendable {
 
   // MARK: - Convenience Methods
 
+  /// Find any node by base name
+  public func node(named baseName: String) -> Node? {
+    func search(_ node: Node) -> Node? {
+      if node.baseName == baseName {
+        return node
+      }
+      for child in node.children {
+        if let found = search(child) {
+          return found
+        }
+      }
+      return nil
+    }
+    return search(rootNode)
+  }
+
   /// Find an action node by base name
   public func actionNode(named baseName: String) -> Node? {
     actionNodes.first { $0.baseName == baseName }

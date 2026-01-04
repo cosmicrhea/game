@@ -14,9 +14,36 @@ public macro Ref(_ nodeName: String? = nil) = #externalMacro(module: "GameMacros
 @attached(accessor)
 public macro Flag(_ name: String? = nil) = #externalMacro(module: "GameMacros", type: "FlagMacro")
 
-class Character {
+final class ScriptableCharacter {
+  private weak var mainLoop: MainLoop?
+
+  init(mainLoop: MainLoop) {
+    self.mainLoop = mainLoop
+  }
 
   func play(animation animationName: String) {}
+
+  @MainActor
+  func lookAt(target: Node) {
+    let worldTransform = target.calculateWorldTransform()
+    let worldPosition = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
+    lookAt(worldPosition: worldPosition)
+  }
+
+  @MainActor
+  func lookAt(_ target: Node) {
+    lookAt(target: target)
+  }
+
+  @MainActor
+  func lookAt(worldPosition: vec3) {
+    mainLoop?.setPlayerHeadLookAt(targetWorldPosition: worldPosition)
+  }
+
+  @MainActor
+  func resetGaze() {
+    mainLoop?.clearPlayerHeadLookAt()
+  }
 
   @MainActor
   func teleport(to waypointName: String) {
@@ -70,6 +97,13 @@ public class Script {
       fatalError("MainLoop.shared.scene is nil - ensure loadScene() has been called")
     }
     return scene
+  }
+
+  var player: ScriptableCharacter {
+    guard let mainLoop = MainLoop.shared else {
+      fatalError("MainLoop.shared is nil - ensure MainLoop.init() has been called")
+    }
+    return mainLoop.scriptPlayerCharacter
   }
 
   var dialogView: DialogView {
@@ -156,19 +190,7 @@ public class Script {
   /// Find a node by name, searching from the root node
   /// Matches base names (e.g., "CatStatue" matches "@Foreground CatStatue")
   func findNode(_ name: String) -> Node? {
-    // Use node's baseName property to match base names
-    func search(_ node: Node) -> Node? {
-      if node.baseName == name {
-        return node
-      }
-      for child in node.children {
-        if let found = search(child) {
-          return found
-        }
-      }
-      return nil
-    }
-    return search(scene.rootNode)
+    return scene.node(named: name)
   }
 
   /// Find a camera by name
@@ -236,6 +258,11 @@ public class Script {
     goTo(scene: scene.rawValue, entry: entry)
   }
 
+  /// Transition to a different scene (type-safe version with numeric entry)
+  @MainActor func goTo(scene: Scene.Name, entry: Int) {
+    goTo(scene: scene.rawValue, entry: String(entry))
+  }
+
   /// Transition to a different scene (async type-safe version that waits for completion)
   /// - Parameters:
   ///   - scene: The scene to load (from auto-generated Scene.Name enum)
@@ -244,13 +271,14 @@ public class Script {
     await goTo(scene: scene.rawValue, entry: entry)
   }
 
+  /// Transition to a different scene (async type-safe version with numeric entry)
+  @MainActor func goTo(scene: Scene.Name, entry: Int) async {
+    await goTo(scene: scene.rawValue, entry: String(entry))
+  }
+
   /// Runs work while forcing the camera to a specific closeup.
-  /// Camera triggers are temporarily ignored until the closure finishes.
-  /// - Parameters:
-  ///   - cameraName: Name of the camera trigger/cut (e.g., "stove.001" or "@Entry 1").
-  ///   - perform: The work to execute during the closeup.
   @discardableResult
-  func withCloseup<T>(on cameraName: String, perform: () throws -> T) rethrows -> T {
+  func withCloseupOn<T>(_ cameraName: String, perform: () throws -> T) rethrows -> T {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot activate closeup '\(cameraName)': MainLoop.shared is nil")
       return try perform()
@@ -259,22 +287,18 @@ public class Script {
   }
 
   /// Runs work while forcing the camera to a specific closeup.
-  /// Camera triggers are temporarily ignored until the closure finishes.
-  /// - Parameters:
-  ///   - camera: The camera object to use for the closeup.
-  ///   - perform: The work to execute during the closeup.
   @discardableResult
-  func withCloseup<T>(on camera: Camera, perform: () throws -> T) rethrows -> T {
+  func withCloseupOn<T>(_ camera: Camera, perform: () throws -> T) rethrows -> T {
     guard let cameraName = camera.name else {
       logger.warning("⚠️ Cannot activate closeup: camera has no name")
       return try perform()
     }
-    return try withCloseup(on: cameraName, perform: perform)
+    return try withCloseupOn(cameraName, perform: perform)
   }
 
-  /// Async variant of `withCloseup(on:perform:)`.
+  /// Runs work while forcing the camera to a specific closeup.
   @discardableResult
-  func withCloseup<T>(on cameraName: String, perform: () async throws -> T) async rethrows -> T {
+  func withCloseupOn<T>(_ cameraName: String, perform: () async throws -> T) async rethrows -> T {
     guard let mainLoop = MainLoop.shared else {
       logger.warning("⚠️ Cannot activate closeup '\(cameraName)': MainLoop.shared is nil")
       return try await perform()
@@ -282,14 +306,30 @@ public class Script {
     return try await mainLoop.withScriptedCameraOverride(on: cameraName, perform: perform)
   }
 
-  /// Async variant of `withCloseup(on:perform:)`.
+  /// Runs work while forcing the camera to a specific closeup.
   @discardableResult
-  func withCloseup<T>(on camera: Camera, perform: () async throws -> T) async rethrows -> T {
+  func withCloseupOn<T>(_ camera: Camera, perform: () async throws -> T) async rethrows -> T {
     guard let cameraName = camera.name else {
       logger.warning("⚠️ Cannot activate closeup: camera has no name")
       return try await perform()
     }
-    return try await withCloseup(on: cameraName, perform: perform)
+    return try await withCloseupOn(cameraName, perform: perform)
+  }
+
+  /// Runs work while forcing the player to look at a node.
+  @discardableResult
+  func withPlayerLookingAt<T>(_ target: Node, perform: () async throws -> T) async rethrows -> T {
+    player.lookAt(target: target)
+    defer { player.resetGaze() }
+    return try await perform()
+  }
+
+  /// Runs work while forcing the player to look at a world-space position.
+  @discardableResult
+  func withPlayerLookingAt<T>(_ worldPosition: vec3, perform: () async throws -> T) async rethrows -> T {
+    player.lookAt(worldPosition: worldPosition)
+    defer { player.resetGaze() }
+    return try await perform()
   }
 
   @MainActor func say(_ string: LocalizedStringResource, more: Bool = false) {

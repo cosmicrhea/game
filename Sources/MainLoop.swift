@@ -2,6 +2,7 @@ import CJolt
 import Foundation
 import GLTF
 import Jolt
+import struct GLMath.Quaternion
 
 private let startingScene = "tunnels"
 private let startingEntry = "1"
@@ -34,8 +35,48 @@ private let startingEntry = "1"
   // Gameplay state
   private var smoothedFPS: Float = 60.0
 
+  private enum PlayerCharacter {
+    case woman
+    case debugCapsule
+  }
+
+  private var playerCharacter: PlayerCharacter = .woman  // Switch to .debugCapsule to use the capsule
+
+  private var playerCharacterYOffset: Float {
+    switch playerCharacter {
+    case .woman:
+      return 1.15
+    case .debugCapsule:
+      return 1.2
+    }
+  }
+
+  private let enemyCapsuleYOffset: Float = 1.2
+  private var playerAnimationBlendDuration: Float = 0.2  // Set to 0 to disable blending
+
   // Capsule mesh from GLB file
   private var capsuleMeshInstances: [MeshInstance] = []
+
+  // Player mesh/animation (used when not using debug capsule)
+  private var playerMeshInstances: [MeshInstance] = []
+  private var playerScene: Scene?
+  private var playerAnimationController = AnimationController()
+  private var playerAnimationBlendFromTransforms: [String: mat4] = [:]
+  private var playerAnimationBlendTimeRemaining: Float = 0.0
+  private var playerAnimationIndices: [PlayerController.MovementState: Int] = [:]
+  private var currentPlayerAnimationState: PlayerController.MovementState = .idle
+  private var isLoadingPlayerModel: Bool = false
+  private let playerHeadLookAtBoneBaseName = "mixamorig:Head"
+  private let playerHeadLookAtMaxYawDegrees: Float = 40.0
+  private let playerHeadLookAtMaxPitchUpDegrees: Float = 25.0
+  private let playerHeadLookAtMaxPitchDownDegrees: Float = 30.0
+  private let playerHeadLookAtWeight: Float = 1.0
+  private let playerHeadLookAtSmoothTime: Float = 0.2
+  private var playerHeadLookAtTarget: vec3?
+  private var playerHeadNode: Node?
+  private var playerHeadLookAtSmoothedRotation = Quaternion<Float>(0, 0, 0, 1)
+  private var playerHeadLookAtHasRotation = false
+  private var playerHeadLookAtLoggedMissingBone = false
 
   // Foreground meshes from scene (nodes with -fg suffix)
   private var foregroundMeshInstances: [MeshInstance] = []
@@ -43,9 +84,6 @@ private let startingEntry = "1"
   // Loading state for foreground textures
   private var isLoadingForegroundTextures: Bool = false
   private let foregroundLoadingSpinner = ProgressIndicator()
-
-  // Capsule height offset - adjust if capsule origin is at center instead of bottom
-  @Editor(0.0...2.0) var playerYOffset: Float = 1.2
 
   // Systems
   private var physicsWorld: PhysicsWorld!
@@ -137,6 +175,8 @@ private let startingEntry = "1"
   let flagStore = ScriptFlagStore()
   // Scene script instance
   private var sceneScript: Script?
+  // Script-facing player character proxy
+  lazy var scriptPlayerCharacter = ScriptableCharacter(mainLoop: self)
 
   // Gamepad support
   private var activeGamepad: Gamepad? {
@@ -202,6 +242,7 @@ private let startingEntry = "1"
 
     // Load capsule mesh
     loadCapsuleMesh()
+    loadPlayerCharacterModel()
 
     // Set shared instance (after all properties are initialized)
     // Used by @SceneScript macro to access scene and dialogView
@@ -425,6 +466,445 @@ private let startingEntry = "1"
         logger.error("Failed to load capsule mesh: \(error)")
       }
     }
+  }
+
+  private func loadPlayerCharacterModel() {
+    guard playerCharacter == .woman else { return }
+    Task {
+      do {
+        isLoadingPlayerModel = true
+        let loaded = try await MeshInstance.loadAsync(
+          path: "Actors/woman01",
+          onSceneProgress: { _ in },
+          onTextureProgress: { _, _, _, _ in }
+        )
+        await MainActor.run {
+          self.playerMeshInstances = loaded
+          self.playerScene = loaded.first?.sceneData
+          self.playerHeadLookAtLoggedMissingBone = false
+          if let scene = self.playerScene {
+            self.playerHeadNode = scene.node(named: self.playerHeadLookAtBoneBaseName)
+          } else {
+            self.playerHeadNode = nil
+          }
+          self.playerHeadLookAtHasRotation = false
+          self.logMissingHeadLookAtBoneIfNeeded()
+          self.isLoadingPlayerModel = false
+          self.configurePlayerAnimations()
+        }
+      } catch {
+        await MainActor.run {
+          self.playerMeshInstances = []
+          self.playerScene = nil
+          self.playerHeadNode = nil
+          self.playerHeadLookAtHasRotation = false
+          self.playerHeadLookAtLoggedMissingBone = false
+          self.isLoadingPlayerModel = false
+        }
+        logger.error("Failed to load player model: \(error)")
+      }
+    }
+  }
+
+  private func configurePlayerAnimations() {
+    guard let scene = playerScene else { return }
+    guard !scene.animations.isEmpty else {
+      playerAnimationIndices.removeAll()
+      playerAnimationController.stop()
+      playerAnimationBlendFromTransforms.removeAll()
+      playerAnimationBlendTimeRemaining = 0.0
+      return
+    }
+
+    let rawAnimationNames = scene.animations.enumerated().map { idx, animation in
+      if let name = animation.name, !name.isEmpty { return name }
+      return "Animation \(idx + 1)"
+    }
+    let humanizedNames = rawAnimationNames.map { humanizeAnimationName($0) }
+
+    let idleIndex = findAnimationIndex(in: humanizedNames, matching: "idle") ?? 0
+    let walkIndex = findAnimationIndex(in: humanizedNames, matching: "walk") ?? idleIndex
+    let runIndex = findAnimationIndex(in: humanizedNames, matching: "run") ?? walkIndex
+
+    playerAnimationIndices = [
+      .idle: idleIndex,
+      .walk: walkIndex,
+      .run: runIndex,
+    ]
+
+    playPlayerAnimation(for: .idle)
+  }
+
+  private func playPlayerAnimation(for state: PlayerController.MovementState) {
+    guard let scene = playerScene, let index = playerAnimationIndices[state] else { return }
+    guard index < scene.animations.count else { return }
+    if playerAnimationBlendDuration > 0 {
+      let previousTransforms = playerAnimationController.getAnimatedNodeTransforms()
+      if !previousTransforms.isEmpty {
+        playerAnimationBlendFromTransforms = previousTransforms
+        playerAnimationBlendTimeRemaining = playerAnimationBlendDuration
+      } else {
+        playerAnimationBlendFromTransforms.removeAll()
+        playerAnimationBlendTimeRemaining = 0.0
+      }
+    } else {
+      playerAnimationBlendFromTransforms.removeAll()
+      playerAnimationBlendTimeRemaining = 0.0
+    }
+    let animation = scene.animations[index]
+    playerAnimationController.play(animation: animation)
+    currentPlayerAnimationState = state
+  }
+
+  private func updatePlayerAnimation(deltaTime: Float) {
+    guard playerCharacter == .woman else { return }
+    guard !playerMeshInstances.isEmpty else { return }
+    let desiredState = playerController.movementState
+    if desiredState != currentPlayerAnimationState {
+      playPlayerAnimation(for: desiredState)
+    }
+    playerAnimationController.update(deltaTime: deltaTime)
+    let animatedTransforms = playerAnimationController.getAnimatedNodeTransforms()
+    let blendedTransforms: [String: mat4]
+    if playerAnimationBlendTimeRemaining > 0 && playerAnimationBlendDuration > 0 {
+      playerAnimationBlendTimeRemaining = max(0.0, playerAnimationBlendTimeRemaining - deltaTime)
+      let progress = 1.0 - (playerAnimationBlendTimeRemaining / playerAnimationBlendDuration)
+      blendedTransforms = blendAnimatedTransforms(
+        from: playerAnimationBlendFromTransforms,
+        to: animatedTransforms,
+        t: progress
+      )
+      if playerAnimationBlendTimeRemaining == 0 {
+        playerAnimationBlendFromTransforms.removeAll()
+      }
+    } else {
+      blendedTransforms = animatedTransforms
+    }
+    let finalTransforms = applyPlayerHeadLookAt(to: blendedTransforms, deltaTime: deltaTime)
+    playerMeshInstances.forEach { $0.updateBoneTransforms(animatedNodeTransforms: finalTransforms) }
+  }
+
+  private func applyPlayerHeadLookAt(to animatedTransforms: [String: mat4], deltaTime: Float) -> [String: mat4] {
+    guard let targetWorldPosition = playerHeadLookAtTarget else { return animatedTransforms }
+    guard let headNode = playerHeadNode else { return animatedTransforms }
+
+    let headNodeName = headNode.name
+    if !playerBoneNamesContain(headNodeName) {
+      return animatedTransforms
+    }
+    let localTransform = animatedTransforms[headNodeName] ?? headNode.transformation
+    let (localTranslation, localRotation, localScale) = decomposeTransform(localTransform)
+
+    let parentWorldTransform: mat4
+    if let parentNode = headNode.parent {
+      parentWorldTransform = calculateWorldTransform(for: parentNode, animatedNodeTransforms: animatedTransforms)
+    } else {
+      parentWorldTransform = mat4(1)
+    }
+
+    let parentInverse = inverse(parentWorldTransform)
+    let targetInParent = parentInverse * vec4(
+      targetWorldPosition.x,
+      targetWorldPosition.y,
+      targetWorldPosition.z,
+      1.0
+    )
+    let targetParentPos = vec3(targetInParent.x, targetInParent.y, targetInParent.z)
+    let dir = targetParentPos - localTranslation
+    if length(dir) < 0.0001 {
+      return animatedTransforms
+    }
+    let direction = normalize(dir)
+
+    let yaw = atan2(direction.x, direction.z)
+    let pitch = atan2(-direction.y, sqrt(direction.x * direction.x + direction.z * direction.z))
+
+    let maxYaw = radians(playerHeadLookAtMaxYawDegrees)
+    let maxPitchUp = radians(playerHeadLookAtMaxPitchUpDegrees)
+    let maxPitchDown = radians(playerHeadLookAtMaxPitchDownDegrees)
+
+    let clampedYaw = clamp(yaw, -maxYaw, maxYaw)
+    let clampedPitch = clamp(pitch, -maxPitchDown, maxPitchUp)
+
+    let lookAtRotation = quaternionFromYawPitch(yaw: clampedYaw, pitch: clampedPitch)
+    let smoothedRotation = smoothLookAtRotation(target: lookAtRotation, deltaTime: deltaTime)
+    let finalRotation = slerp(localRotation, smoothedRotation, playerHeadLookAtWeight)
+
+    let tMat = GLMath.translate(mat4(1), localTranslation)
+    let rMat = quatToMatrix(finalRotation)
+    let sMat = GLMath.scale(mat4(1), localScale)
+
+    var updated = animatedTransforms
+    updated[headNodeName] = tMat * rMat * sMat
+    return updated
+  }
+
+  private func smoothLookAtRotation(target: Quaternion<Float>, deltaTime: Float) -> Quaternion<Float> {
+    if !playerHeadLookAtHasRotation || playerHeadLookAtSmoothTime <= 0 {
+      playerHeadLookAtHasRotation = true
+      playerHeadLookAtSmoothedRotation = target
+      return target
+    }
+
+    let t = 1.0 - exp(-Double(deltaTime) / Double(playerHeadLookAtSmoothTime))
+    let smoothed = slerp(playerHeadLookAtSmoothedRotation, target, Float(t))
+    playerHeadLookAtSmoothedRotation = smoothed
+    return smoothed
+  }
+
+  private func calculateWorldTransform(
+    for node: Node,
+    animatedNodeTransforms: [String: mat4]
+  ) -> mat4 {
+    var stack: [Node] = []
+    var current: Node? = node
+    while let node = current {
+      stack.append(node)
+      current = node.parent
+    }
+
+    var transform = mat4(1)
+    for node in stack.reversed() {
+      let local = animatedNodeTransforms[node.name] ?? node.transformation
+      transform = transform * local
+    }
+    return transform
+  }
+
+  private func quaternionFromYawPitch(yaw: Float, pitch: Float) -> Quaternion<Float> {
+    let yawAxis = vec3(0, 1, 0)
+    let pitchAxis = vec3(1, 0, 0)
+    let yawQuat = quaternionFromAxisAngle(axis: yawAxis, angle: yaw)
+    let pitchQuat = quaternionFromAxisAngle(axis: pitchAxis, angle: pitch)
+    return normalizeQuaternion(multiply(yawQuat, pitchQuat))
+  }
+
+  private func quaternionFromAxisAngle(axis: vec3, angle: Float) -> Quaternion<Float> {
+    let half = angle * 0.5
+    let s = sin(half)
+    return Quaternion<Float>(axis.x * s, axis.y * s, axis.z * s, cos(half))
+  }
+
+  private func multiply(_ a: Quaternion<Float>, _ b: Quaternion<Float>) -> Quaternion<Float> {
+    return Quaternion<Float>(
+      a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+      a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+    )
+  }
+
+  private func clamp(_ value: Float, _ minValue: Float, _ maxValue: Float) -> Float {
+    return max(minValue, min(maxValue, value))
+  }
+
+  private func logMissingHeadLookAtBoneIfNeeded() {
+    guard !playerHeadLookAtLoggedMissingBone else { return }
+    let boneNames = collectPlayerBoneNames()
+    let headNodeName = playerHeadNode?.name ?? playerHeadLookAtBoneBaseName
+    guard !boneNames.isEmpty, !boneNames.contains(headNodeName) else { return }
+    playerHeadLookAtLoggedMissingBone = true
+    logger.warning(
+      "⚠️ Head look-at failed: could not find bone '\(headNodeName)'. Available bones: \(boneNames.joined(separator: ", "))"
+    )
+  }
+
+  private func playerBoneNamesContain(_ name: String) -> Bool {
+    return collectPlayerBoneNames().contains(name)
+  }
+
+  private func collectPlayerBoneNames() -> [String] {
+    var names: [String] = []
+    for instance in playerMeshInstances {
+      for bone in instance.mesh.bones {
+        if let name = bone.name, !name.isEmpty {
+          names.append(name)
+        }
+      }
+    }
+    let unique = Set(names)
+    return unique.sorted()
+  }
+
+  private func findAnimationIndex(in names: [String], matching keyword: String) -> Int? {
+    let target = keyword.lowercased()
+    return names.enumerated().first(where: { $0.element.lowercased().contains(target) })?.offset
+  }
+
+  private func blendAnimatedTransforms(from: [String: mat4], to: [String: mat4], t: Float) -> [String: mat4] {
+    if from.isEmpty { return to }
+    if to.isEmpty { return from }
+    let clampedT = max(0.0, min(1.0, t))
+    var blended: [String: mat4] = [:]
+    let keys = Set(from.keys).union(to.keys)
+    for key in keys {
+      guard let toTransform = to[key] else {
+        blended[key] = from[key]
+        continue
+      }
+      guard let fromTransform = from[key] else {
+        blended[key] = toTransform
+        continue
+      }
+      blended[key] = blendTransform(from: fromTransform, to: toTransform, t: clampedT)
+    }
+    return blended
+  }
+
+  private func blendTransform(from: mat4, to: mat4, t: Float) -> mat4 {
+    let (fromTranslation, fromRotation, fromScale) = decomposeTransform(from)
+    let (toTranslation, toRotation, toScale) = decomposeTransform(to)
+
+    let blendedTranslation = fromTranslation + (toTranslation - fromTranslation) * t
+    let blendedScale = fromScale + (toScale - fromScale) * t
+    let blendedRotation = slerp(fromRotation, toRotation, t)
+
+    let tMat = GLMath.translate(mat4(1), blendedTranslation)
+    let rMat = quatToMatrix(blendedRotation)
+    let sMat = GLMath.scale(mat4(1), blendedScale)
+    return tMat * rMat * sMat
+  }
+
+  private func decomposeTransform(_ matrix: mat4) -> (vec3, Quaternion<Float>, vec3) {
+    let translation = vec3(matrix[3].x, matrix[3].y, matrix[3].z)
+
+    var col0 = vec3(matrix[0].x, matrix[0].y, matrix[0].z)
+    var col1 = vec3(matrix[1].x, matrix[1].y, matrix[1].z)
+    var col2 = vec3(matrix[2].x, matrix[2].y, matrix[2].z)
+
+    let scale = vec3(length(col0), length(col1), length(col2))
+    if scale.x > 0.0001 { col0 /= scale.x }
+    if scale.y > 0.0001 { col1 /= scale.y }
+    if scale.z > 0.0001 { col2 /= scale.z }
+
+    let rotation = rotationFromColumns(col0: col0, col1: col1, col2: col2)
+    return (translation, rotation, scale)
+  }
+
+  private func rotationFromColumns(col0: vec3, col1: vec3, col2: vec3) -> Quaternion<Float> {
+    let cross01 = cross(col0, col1)
+    let determinant = dot(cross01, col2)
+    let r0 = col0
+    let r1 = col1
+    var r2 = col2
+    if determinant < -0.1 {
+      r2 = -r2
+    }
+
+    // Convert from column vectors to row/column entries
+    let m00 = r0.x
+    let m01 = r1.x
+    let m02 = r2.x
+    let m10 = r0.y
+    let m11 = r1.y
+    let m12 = r2.y
+    let m20 = r0.z
+    let m21 = r1.z
+    let m22 = r2.z
+
+    let trace = m00 + m11 + m22
+    var qw: Float
+    var qx: Float
+    var qy: Float
+    var qz: Float
+
+    if trace > 0 {
+      let s = sqrt(trace + 1.0) * 2
+      qw = 0.25 * s
+      qx = (m21 - m12) / s
+      qy = (m02 - m20) / s
+      qz = (m10 - m01) / s
+    } else if (m00 > m11) && (m00 > m22) {
+      let s = sqrt(1.0 + m00 - m11 - m22) * 2
+      qw = (m21 - m12) / s
+      qx = 0.25 * s
+      qy = (m01 + m10) / s
+      qz = (m02 + m20) / s
+    } else if m11 > m22 {
+      let s = sqrt(1.0 + m11 - m00 - m22) * 2
+      qw = (m02 - m20) / s
+      qx = (m01 + m10) / s
+      qy = 0.25 * s
+      qz = (m12 + m21) / s
+    } else {
+      let s = sqrt(1.0 + m22 - m00 - m11) * 2
+      qw = (m10 - m01) / s
+      qx = (m02 + m20) / s
+      qy = (m12 + m21) / s
+      qz = 0.25 * s
+    }
+
+    return normalizeQuaternion(Quaternion<Float>(qx, qy, qz, qw))
+  }
+
+  private func slerp(_ q1: Quaternion<Float>, _ q2: Quaternion<Float>, _ t: Float) -> Quaternion<Float> {
+    var q2 = q2
+    var dotValue = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w
+
+    if dotValue < 0 {
+      q2 = Quaternion<Float>(-q2.x, -q2.y, -q2.z, -q2.w)
+      dotValue = -dotValue
+    }
+
+    if dotValue > 0.9995 {
+      return normalizeQuaternion(
+        Quaternion<Float>(
+          q1.x + t * (q2.x - q1.x),
+          q1.y + t * (q2.y - q1.y),
+          q1.z + t * (q2.z - q1.z),
+          q1.w + t * (q2.w - q1.w)
+        ))
+    }
+
+    let theta = acos(dotValue)
+    let sinTheta = sin(theta)
+    let w1 = sin((1 - t) * theta) / sinTheta
+    let w2 = sin(t * theta) / sinTheta
+
+    return Quaternion<Float>(
+      w1 * q1.x + w2 * q2.x,
+      w1 * q1.y + w2 * q2.y,
+      w1 * q1.z + w2 * q2.z,
+      w1 * q1.w + w2 * q2.w
+    )
+  }
+
+  private func normalizeQuaternion(_ q: Quaternion<Float>) -> Quaternion<Float> {
+    let len = sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
+    guard len > 0 else { return Quaternion<Float>(0, 0, 0, 1) }
+    return Quaternion<Float>(q.x / len, q.y / len, q.z / len, q.w / len)
+  }
+
+  private func quatToMatrix(_ q: Quaternion<Float>) -> mat4 {
+    let x = q.x, y = q.y, z = q.z, w = q.w
+    let x2 = x + x, y2 = y + y, z2 = z + z
+    let xx = x * x2, xy = x * y2, xz = x * z2
+    let yy = y * y2, yz = y * z2, zz = z * z2
+    let wx = w * x2, wy = w * y2, wz = w * z2
+
+    return mat4(
+      1 - (yy + zz), xy + wz, xz - wy, 0,
+      xy - wz, 1 - (xx + zz), yz + wx, 0,
+      xz + wy, yz - wx, 1 - (xx + yy), 0,
+      0, 0, 0, 1
+    )
+  }
+
+  private func humanizeAnimationName(_ name: String) -> String {
+    let replacedSeparators =
+      name
+      .replacingOccurrences(of: "_", with: " ")
+      .replacingOccurrences(of: "-", with: " ")
+
+    let spacedCamelCase = replacedSeparators.replacingOccurrences(
+      of: #"(?<=[a-z])(?=[A-Z])"#,
+      with: " ",
+      options: .regularExpression
+    )
+
+    let trimmed = spacedCamelCase.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { return "Animation" }
+    return trimmed.titleCased
   }
 
   // MARK: Input
@@ -1405,6 +1885,17 @@ private let startingEntry = "1"
     return try await perform()
   }
 
+  @MainActor
+  func setPlayerHeadLookAt(targetWorldPosition: vec3) {
+    playerHeadLookAtTarget = targetWorldPosition
+  }
+
+  @MainActor
+  func clearPlayerHeadLookAt() {
+    playerHeadLookAtTarget = nil
+    playerHeadLookAtHasRotation = false
+  }
+
   private func drawEntryArrows(scene: Scene, debugRenderer: DebugRenderer) {
     // Use scene.entryNodes instead of manual traversal
     for node in scene.entryNodes {
@@ -1575,9 +2066,18 @@ private let startingEntry = "1"
 
       // Update prerendered environment animation
       prerenderedEnvironment?.update()
-      
+
       // Update particle system
       ParticleSystem.shared.update(deltaTime: deltaTime)
+    }
+
+    let hasAliveEnemies = !disableEnemies && !enemySystem.aliveEnemies.isEmpty
+    let isNonGameplayState =
+      showingTitleScreen || showingPickupView || showingPauseScreen || showingDeathScreen || showingMainMenu
+      || dialogView.isActive || cameraSystem.isInCloseup
+    let shouldPausePlayerAnimation = hasAliveEnemies && isNonGameplayState
+    if !shouldPausePlayerAnimation {
+      updatePlayerAnimation(deltaTime: deltaTime)
     }
 
     // Update dialog view
@@ -1728,29 +2228,22 @@ private let startingEntry = "1"
 
       // Do not clear depth; we rely on PrerenderedEnvironment writing correct depth
 
-      // Draw capsule mesh
-      if !capsuleMeshInstances.isEmpty {
+      // Draw player character
+      let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+      let lighting = getSceneLighting()
+      if playerCharacter == .woman && !playerMeshInstances.isEmpty {
         // Ensure depth testing/writes are enabled for 3D integration
         glEnable(GL_DEPTH_TEST)
         glDepthMask(true)
         glDepthFunc(GL_LEQUAL)
 
-        // Create model matrix: translate to player position, then rotate around Y axis
-        // Offset Y downward so capsule sits on floor (assuming origin is at center)
         var adjustedPosition = playerPosition
-        adjustedPosition.y -= playerYOffset
+        adjustedPosition.y -= playerCharacterYOffset
         var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
         modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
 
-        for meshInstance in capsuleMeshInstances {
-          // Combine the mesh's original transform with player transform
+        for meshInstance in playerMeshInstances {
           let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
-
-          // Extract camera position from world transform (4th column)
-          let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
-
-          // Get lighting from scene lights
-          let lighting = getSceneLighting()
 
           meshInstance.draw(
             projection: projection,
@@ -1760,17 +2253,55 @@ private let startingEntry = "1"
             lightDirection: lighting.mainLight.direction,
             lightColor: lighting.mainLight.color,
             lightIntensity: lighting.mainLight.intensity,
-          fillLightDirection: lighting.fillLight.direction,
-          fillLightColor: lighting.fillLight.color,
-          fillLightIntensity: lighting.fillLight.intensity,
-          diffuseOnly: false,
-          effectiveRenderMode: meshInstance.renderMode,
-          renderPassName: "MainSceneCapsule"
-        )
-      }
-    }
+            fillLightDirection: lighting.fillLight.direction,
+            fillLightColor: lighting.fillLight.color,
+            fillLightIntensity: lighting.fillLight.intensity,
+            diffuseOnly: false,
+            effectiveRenderMode: meshInstance.renderMode,
+            showFinalAlpha: false,
+            showClassification: false,
+            cutoutThreshold: 0.5,
+            renderPassName: "MainScenePlayer",
+            useAlphaHash: meshInstance.useAlphaHash,
+            useAlphaToCoverage: true,
+            usePolygonOffset: false
+          )
+        }
+      } else if !capsuleMeshInstances.isEmpty {
+        // Ensure depth testing/writes are enabled for 3D integration
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(true)
+        glDepthFunc(GL_LEQUAL)
 
-    // Draw enemy capsules
+        // Create model matrix: translate to player position, then rotate around Y axis
+        // Offset Y downward so capsule sits on floor (assuming origin is at center)
+        var adjustedPosition = playerPosition
+        adjustedPosition.y -= playerCharacterYOffset
+        var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
+        modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
+
+        for meshInstance in capsuleMeshInstances {
+          let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
+
+          meshInstance.draw(
+            projection: projection,
+            view: view,
+            modelMatrix: combinedModelMatrix,
+            cameraPosition: cameraPosition,
+            lightDirection: lighting.mainLight.direction,
+            lightColor: lighting.mainLight.color,
+            lightIntensity: lighting.mainLight.intensity,
+            fillLightDirection: lighting.fillLight.direction,
+            fillLightColor: lighting.fillLight.color,
+            fillLightIntensity: lighting.fillLight.intensity,
+            diffuseOnly: false,
+            effectiveRenderMode: meshInstance.renderMode,
+            renderPassName: "MainSceneCapsule"
+          )
+        }
+      }
+
+      // Draw enemy capsules
       if !disableEnemies {
         let aliveEnemies = enemySystem.aliveEnemies
         if !aliveEnemies.isEmpty && !capsuleMeshInstances.isEmpty {
@@ -1785,7 +2316,7 @@ private let startingEntry = "1"
             // Create model matrix: translate to enemy position, then rotate around Y axis
             // Offset Y downward so capsule sits on floor (assuming origin is at center)
             var adjustedPosition = enemy.position
-            adjustedPosition.y -= playerYOffset
+            adjustedPosition.y -= enemyCapsuleYOffset
             var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
             modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
 
@@ -1852,7 +2383,6 @@ private let startingEntry = "1"
     }
 
       // Render particles (after 3D meshes, before UI)
-      let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
       ParticleSystem.shared.render(projection: projection, view: view, cameraPosition: cameraPosition)
 
       // Always call nextFrame to maintain consistent timing (even when not visualizing)

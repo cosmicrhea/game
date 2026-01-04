@@ -26,7 +26,7 @@ class Test: Script {
 
   func cat() async {
     // await say("A cat has appeared.")
-    await withCloseup(on: "stove.001") {
+    await withCloseupOn("stove.001") {
       await say("There's a cat here.", more: true)
       if await acquire(.catStatue) {
         catStatue.isHidden = true
