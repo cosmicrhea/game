@@ -131,4 +131,94 @@ public final class EnemySystem {
       return characterController.getInnerBodyID() == hitBodyID
     }
   }
+
+  // MARK: - Debug Rendering
+
+  /// Projects a 3D world position to screen coordinates
+  private func projectToScreen(position: vec3, projection: mat4, view: mat4, viewportSize: Size) -> Point? {
+    let worldPos = vec4(position.x, position.y, position.z, 1.0)
+    let clipPos = projection * view * worldPos
+    guard abs(clipPos.w) > 0.0001 else { return nil }
+
+    let ndcX = clipPos.x / clipPos.w
+    let ndcY = clipPos.y / clipPos.w
+    guard ndcX.isFinite && ndcY.isFinite else { return nil }
+
+    let halfWidth = viewportSize.width * 0.5
+    let halfHeight = viewportSize.height * 0.5
+    let screenX = halfWidth + ndcX * halfWidth
+    let screenY = halfHeight + ndcY * halfHeight
+    return Point(screenX, screenY)
+  }
+
+  /// Draws debug overlay for all alive enemies (health bars and state labels)
+  func drawDebugOverlay(projection: mat4, view: mat4) {
+    let viewportSize = Engine.viewportSize
+    let aliveEnemies = self.aliveEnemies
+
+    for enemy in aliveEnemies {
+      // Position above enemy (adjust Y offset based on enemy type)
+      let yOffset: Float = enemy is DogEnemy ? 0.6 : 1.2
+      let worldPosition = vec3(enemy.position.x, enemy.position.y + yOffset, enemy.position.z)
+
+      guard
+        let screenPoint = projectToScreen(
+          position: worldPosition,
+          projection: projection,
+          view: view,
+          viewportSize: viewportSize
+        )
+      else { continue }
+
+      // Skip if off-screen
+      guard screenPoint.x >= -50 && screenPoint.x <= viewportSize.width + 50,
+        screenPoint.y >= -50 && screenPoint.y <= viewportSize.height + 50
+      else { continue }
+
+      // Draw health bar
+      let barWidth: Float = 60.0
+      let barHeight: Float = 6.0
+      let healthPercent = enemy.health / enemy.maxHealth
+
+      // Background (red/dark)
+      let bgRect = Rect(
+        x: screenPoint.x - barWidth * 0.5,
+        y: screenPoint.y - 20,
+        width: barWidth,
+        height: barHeight
+      )
+      bgRect.fill(with: Color(red: 0.3, green: 0.0, blue: 0.0, alpha: 0.8))
+
+      // Health (green)
+      let healthWidth = barWidth * healthPercent
+      if healthWidth > 0 {
+        let healthRect = Rect(
+          x: screenPoint.x - barWidth * 0.5,
+          y: screenPoint.y - 20,
+          width: healthWidth,
+          height: barHeight
+        )
+        healthRect.fill(with: Color(red: 0.0, green: 0.8, blue: 0.0, alpha: 0.9))
+      }
+
+      // Border
+      bgRect.frame(with: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.9), lineWidth: 1.0)
+
+      // State label
+      let stateString: String
+      switch enemy.state {
+      case .idle: stateString = "Idle"
+      case .patrolling: stateString = "Patrol"
+      case .chasing: stateString = "Chase"
+      case .attacking: stateString = "Attack"
+      case .dead: stateString = "Dead"
+      }
+
+      stateString.draw(
+        at: Point(screenPoint.x, screenPoint.y - 35),
+        style: .itemDescription.withMonospacedDigits(true),
+        anchor: .center
+      )
+    }
+  }
 }

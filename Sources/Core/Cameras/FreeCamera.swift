@@ -28,6 +28,7 @@ class FreeCamera {
   private var lastMouseX: Float = 0
   private var lastMouseY: Float = 0
   private var isFirstMouseEvent: Bool = true
+  private var isDragging: Bool = false
 
   /// Defines several possible options for camera movement.
   /// Used as abstraction to stay away from window-system specific input methods
@@ -133,6 +134,9 @@ class FreeCamera {
 
   /// Processes absolute mouse position and converts it to offsets internally.
   func processMousePosition(_ x: Float, _ y: Float) {
+    // Only process mouse movement if we're dragging
+    guard isDragging else { return }
+    
     if isFirstMouseEvent {
       lastMouseX = x
       lastMouseY = y
@@ -147,6 +151,17 @@ class FreeCamera {
     lastMouseY = y
 
     processMouseMovement(xOffset, yOffset)
+  }
+  
+  /// Start dragging (call when left mouse button is pressed)
+  func startDragging() {
+    isDragging = true
+    isFirstMouseEvent = true
+  }
+  
+  /// Stop dragging (call when left mouse button is released)
+  func stopDragging() {
+    isDragging = false
   }
 
   /// Processes input received from a mouse scroll-wheel event.

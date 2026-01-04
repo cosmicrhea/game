@@ -1054,7 +1054,7 @@ private let startingEntry = "1"
     }
 
     sceneScript = script
-    logger.trace("✅ Loaded scene script: \(className)")
+    logger.trace("✅  Loaded scene script: \(className)")
 
     // Validate @Ref properties before sceneDidLoad() to catch missing nodes/cameras early
     sceneScript?.validateRefs()
@@ -1575,6 +1575,9 @@ private let startingEntry = "1"
 
       // Update prerendered environment animation
       prerenderedEnvironment?.update()
+      
+      // Update particle system
+      ParticleSystem.shared.update(deltaTime: deltaTime)
     }
 
     // Update dialog view
@@ -1678,6 +1681,21 @@ private let startingEntry = "1"
           glClear(GL_DEPTH_BUFFER_BIT)
         }
       }
+      
+      // Explicitly restore standard scene depth state after prerendered environment
+      // PrerenderedEnvironment uses glDepthFunc(GL_ALWAYS) and writes gl_FragDepth,
+      // so we must reset to standard depth testing before drawing 3D models
+      glEnable(GL_DEPTH_TEST)
+      glDepthFunc(GL_LEQUAL)
+      // Depth mask will be set per-material in MeshInstance.draw() (true for opaque, false for BLEND)
+      // But set a safe default here
+      glDepthMask(true)
+      
+      // Explicitly reset polygon offset and blending/culling states per pass
+      glDisable(GL_POLYGON_OFFSET_FILL)
+      glDisable(GL_BLEND)
+      glEnable(GL_CULL_FACE)
+      glCullFace(GL_BACK)
 
       // Get view matrix from camera node's world transform
       // In glTF/Assimp, the camera node's transform IS the camera-to-world transform
@@ -1742,15 +1760,17 @@ private let startingEntry = "1"
             lightDirection: lighting.mainLight.direction,
             lightColor: lighting.mainLight.color,
             lightIntensity: lighting.mainLight.intensity,
-            fillLightDirection: lighting.fillLight.direction,
-            fillLightColor: lighting.fillLight.color,
-            fillLightIntensity: lighting.fillLight.intensity,
-            diffuseOnly: false
-          )
-        }
+          fillLightDirection: lighting.fillLight.direction,
+          fillLightColor: lighting.fillLight.color,
+          fillLightIntensity: lighting.fillLight.intensity,
+          diffuseOnly: false,
+          effectiveRenderMode: meshInstance.renderMode,
+          renderPassName: "MainSceneCapsule"
+        )
       }
+    }
 
-      // Draw enemy capsules
+    // Draw enemy capsules
       if !disableEnemies {
         let aliveEnemies = enemySystem.aliveEnemies
         if !aliveEnemies.isEmpty && !capsuleMeshInstances.isEmpty {
@@ -1785,7 +1805,15 @@ private let startingEntry = "1"
                 fillLightDirection: lighting.fillLight.direction,
                 fillLightColor: lighting.fillLight.color,
                 fillLightIntensity: lighting.fillLight.intensity,
-                diffuseOnly: false
+                diffuseOnly: false,
+                effectiveRenderMode: meshInstance.renderMode,
+                showFinalAlpha: false,
+                showClassification: false,
+                cutoutThreshold: 0.5,
+                renderPassName: "MainSceneEnemy",
+                useAlphaHash: meshInstance.useAlphaHash,
+                useAlphaToCoverage: true,
+                usePolygonOffset: false
               )
             }
           }
@@ -1813,13 +1841,19 @@ private let startingEntry = "1"
             lightDirection: lighting.mainLight.direction,
             lightColor: lighting.mainLight.color,
             lightIntensity: lighting.mainLight.intensity,
-            fillLightDirection: lighting.fillLight.direction,
-            fillLightColor: lighting.fillLight.color,
-            fillLightIntensity: lighting.fillLight.intensity,
-            diffuseOnly: false
-          )
-        }
+          fillLightDirection: lighting.fillLight.direction,
+          fillLightColor: lighting.fillLight.color,
+          fillLightIntensity: lighting.fillLight.intensity,
+          diffuseOnly: false,
+          effectiveRenderMode: meshInstance.renderMode,
+          renderPassName: "MainSceneForeground"
+        )
       }
+    }
+
+      // Render particles (after 3D meshes, before UI)
+      let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
+      ParticleSystem.shared.render(projection: projection, view: view, cameraPosition: cameraPosition)
 
       // Always call nextFrame to maintain consistent timing (even when not visualizing)
       physicsWorld.nextFrame()
@@ -2075,7 +2109,7 @@ private let startingEntry = "1"
 
         // Enemy debug overlay (health bars and state labels)
         if showEnemyDebugOverlay && !disableEnemies {
-          drawEnemyDebugOverlay(projection: projection, view: view)
+          enemySystem.drawDebugOverlay(projection: projection, view: view)
         }
         
         // Foreground loading spinner (bottom-left, with fade animation)
@@ -2237,92 +2271,6 @@ private let startingEntry = "1"
       style: .itemDescription.withMonospacedDigits(true),
       anchor: .topLeft
     )
-  }
-
-  private func projectToScreen(position: vec3, projection: mat4, view: mat4, viewportSize: Size) -> Point? {
-    let worldPos = vec4(position.x, position.y, position.z, 1.0)
-    let clipPos = projection * view * worldPos
-    guard abs(clipPos.w) > 0.0001 else { return nil }
-
-    let ndcX = clipPos.x / clipPos.w
-    let ndcY = clipPos.y / clipPos.w
-    guard ndcX.isFinite && ndcY.isFinite else { return nil }
-
-    let halfWidth = viewportSize.width * 0.5
-    let halfHeight = viewportSize.height * 0.5
-    let screenX = halfWidth + ndcX * halfWidth
-    let screenY = halfHeight + ndcY * halfHeight
-    return Point(screenX, screenY)
-  }
-
-  private func drawEnemyDebugOverlay(projection: mat4, view: mat4) {
-    let viewportSize = Engine.viewportSize
-    let aliveEnemies = enemySystem.aliveEnemies
-
-    for enemy in aliveEnemies {
-      // Position above enemy (adjust Y offset based on enemy type)
-      let yOffset: Float = enemy is DogEnemy ? 0.6 : 1.2
-      let worldPosition = vec3(enemy.position.x, enemy.position.y + yOffset, enemy.position.z)
-
-      guard
-        let screenPoint = projectToScreen(
-          position: worldPosition,
-          projection: projection,
-          view: view,
-          viewportSize: viewportSize
-        )
-      else { continue }
-
-      // Skip if off-screen
-      guard screenPoint.x >= -50 && screenPoint.x <= viewportSize.width + 50,
-        screenPoint.y >= -50 && screenPoint.y <= viewportSize.height + 50
-      else { continue }
-
-      // Draw health bar
-      let barWidth: Float = 60.0
-      let barHeight: Float = 6.0
-      let healthPercent = enemy.health / enemy.maxHealth
-
-      // Background (red/dark)
-      let bgRect = Rect(
-        x: screenPoint.x - barWidth * 0.5,
-        y: screenPoint.y - 20,
-        width: barWidth,
-        height: barHeight
-      )
-      bgRect.fill(with: Color(red: 0.3, green: 0.0, blue: 0.0, alpha: 0.8))
-
-      // Health (green)
-      let healthWidth = barWidth * healthPercent
-      if healthWidth > 0 {
-        let healthRect = Rect(
-          x: screenPoint.x - barWidth * 0.5,
-          y: screenPoint.y - 20,
-          width: healthWidth,
-          height: barHeight
-        )
-        healthRect.fill(with: Color(red: 0.0, green: 0.8, blue: 0.0, alpha: 0.9))
-      }
-
-      // Border
-      bgRect.frame(with: Color(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.9), lineWidth: 1.0)
-
-      // State label
-      let stateString: String
-      switch enemy.state {
-      case .idle: stateString = "Idle"
-      case .patrolling: stateString = "Patrol"
-      case .chasing: stateString = "Chase"
-      case .attacking: stateString = "Attack"
-      case .dead: stateString = "Dead"
-      }
-
-      stateString.draw(
-        at: Point(screenPoint.x, screenPoint.y - 35),
-        style: .itemDescription.withMonospacedDigits(true),
-        anchor: .center
-      )
-    }
   }
 
 }

@@ -10,8 +10,11 @@ public struct Mesh {
   public let positions: [Float]  // numberOfVertices * 3
   public let normals: [Float]?  // numberOfVertices * 3
   public let uvs: [Float]?  // numberOfVertices * 2 (first UV channel)
+  public let uvs1: [Float]?  // numberOfVertices * 2 (second UV channel)
   public let tangents: [Float]?  // numberOfVertices * 3
   public let bitangents: [Float]?  // numberOfVertices * 3
+  public let uv0AccessorDebug: String?
+  public let uv1AccessorDebug: String?
 
   // Face data
   public let faces: [Face]
@@ -28,8 +31,11 @@ public struct Mesh {
     positions: [Float],
     normals: [Float]? = nil,
     uvs: [Float]? = nil,
+    uvs1: [Float]? = nil,
     tangents: [Float]? = nil,
     bitangents: [Float]? = nil,
+    uv0AccessorDebug: String? = nil,
+    uv1AccessorDebug: String? = nil,
     faces: [Face],
     bones: [Bone] = []
   ) {
@@ -41,8 +47,11 @@ public struct Mesh {
     self.positions = positions
     self.normals = normals
     self.uvs = uvs
+    self.uvs1 = uvs1
     self.tangents = tangents
     self.bitangents = bitangents
+    self.uv0AccessorDebug = uv0AccessorDebug
+    self.uv1AccessorDebug = uv1AccessorDebug
     self.faces = faces
     self.bones = bones
   }

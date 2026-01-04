@@ -51,6 +51,11 @@ public struct Color: Sendable, Equatable, RawRepresentable {
   public var vec4Representation: vec4 {
     return vec4(red, green, blue, alpha)
   }
+  
+  /// Creates a Color from a vec4 (x=red, y=green, z=blue, w=alpha)
+  public init(_ vec4: vec4) {
+    self.init(red: vec4.x, green: vec4.y, blue: vec4.z, alpha: vec4.w)
+  }
 }
 
 // MARK: - RawRepresentable

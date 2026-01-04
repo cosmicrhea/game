@@ -240,7 +240,98 @@ public struct EditableMacro: MemberMacro, ExtensionMacro {
     items.append(
       contentsOf: properties.map { prop in
         let trimmedType = prop.type.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedType == "Light" {
+        if trimmedType == "ParticleEffect" {
+          let base = prop.name
+          func floatProp(_ codeName: String, _ display: String, _ valueExpr: String, _ setExpr: String, _ range: String)
+            -> String
+          {
+            return """
+              AnyEditorProperty(
+                name: \"\(codeName)\",
+                value: \(valueExpr),
+                setValue: { newValue in
+                  \(setExpr)
+                  // Update emitter if it exists
+                  if let emitter = self.currentEmitter {
+                    emitter.setEffect(self.\(base))
+                  }
+                },
+                displayName: \"\(display)\",
+                validRange: \(range)
+              )
+              """
+          }
+          func vec3Prop(_ codeName: String, _ display: String, _ component: String, _ valueExpr: String, _ setExpr: String, _ range: String)
+            -> String
+          {
+            return """
+              AnyEditorProperty(
+                name: \"\(codeName)\",
+                value: \(valueExpr),
+                setValue: { newValue in
+                  \(setExpr)
+                  // Update emitter if it exists
+                  if let emitter = self.currentEmitter {
+                    emitter.setEffect(self.\(base))
+                  }
+                },
+                displayName: \"\(display)\",
+                validRange: \(range)
+              )
+              """
+          }
+          func colorProp(_ codeName: String, _ display: String, _ vec4Expr: String, _ setExpr: String)
+            -> String
+          {
+            return """
+              AnyEditorProperty(
+                name: \"\(codeName)\",
+                value: Color(\(vec4Expr)),
+                setValue: { newValue in
+                  let color = newValue as! Color
+                  \(setExpr)
+                  // Update emitter if it exists
+                  if let emitter = self.currentEmitter {
+                    emitter.setEffect(self.\(base))
+                  }
+                },
+                displayName: \"\(display)\",
+                validRange: nil
+              )
+              """
+          }
+          let pieces = [
+            floatProp("\(base)_emissionRate", "Emission Rate", "\(base).emissionRate", "self.\(base).emissionRate = newValue as! Float", "0.0...100.0"),
+            floatProp("\(base)_burstCount", "Burst Count", "Float(\(base).burstCount)", "self.\(base).burstCount = Int(newValue as! Float)", "1.0...1000.0"),
+            floatProp("\(base)_lifetimeMin", "Lifetime Min", "\(base).lifetimeMin", "self.\(base).lifetimeMin = newValue as! Float", "0.0...10.0"),
+            floatProp("\(base)_lifetimeMax", "Lifetime Max", "\(base).lifetimeMax", "self.\(base).lifetimeMax = newValue as! Float", "0.0...10.0"),
+            vec3Prop("\(base)_velMin_x", "Velocity Min X", "x", "Float(\(base).velocityMin.x)", "self.\(base).velocityMin = vec3(newValue as! Float, self.\(base).velocityMin.y, self.\(base).velocityMin.z)", "-10.0...10.0"),
+            vec3Prop("\(base)_velMin_y", "Velocity Min Y", "y", "Float(\(base).velocityMin.y)", "self.\(base).velocityMin = vec3(self.\(base).velocityMin.x, newValue as! Float, self.\(base).velocityMin.z)", "-10.0...10.0"),
+            vec3Prop("\(base)_velMin_z", "Velocity Min Z", "z", "Float(\(base).velocityMin.z)", "self.\(base).velocityMin = vec3(self.\(base).velocityMin.x, self.\(base).velocityMin.y, newValue as! Float)", "-10.0...10.0"),
+            vec3Prop("\(base)_velMax_x", "Velocity Max X", "x", "Float(\(base).velocityMax.x)", "self.\(base).velocityMax = vec3(newValue as! Float, self.\(base).velocityMax.y, self.\(base).velocityMax.z)", "-10.0...10.0"),
+            vec3Prop("\(base)_velMax_y", "Velocity Max Y", "y", "Float(\(base).velocityMax.y)", "self.\(base).velocityMax = vec3(self.\(base).velocityMax.x, newValue as! Float, self.\(base).velocityMax.z)", "-10.0...10.0"),
+            vec3Prop("\(base)_velMax_z", "Velocity Max Z", "z", "Float(\(base).velocityMax.z)", "self.\(base).velocityMax = vec3(self.\(base).velocityMax.x, self.\(base).velocityMax.y, newValue as! Float)", "-10.0...10.0"),
+            vec3Prop("\(base)_gravity_x", "Gravity X", "x", "Float(\(base).gravity.x)", "self.\(base).gravity = vec3(newValue as! Float, self.\(base).gravity.y, self.\(base).gravity.z)", "-20.0...20.0"),
+            vec3Prop("\(base)_gravity_y", "Gravity Y", "y", "Float(\(base).gravity.y)", "self.\(base).gravity = vec3(self.\(base).gravity.x, newValue as! Float, self.\(base).gravity.z)", "-20.0...20.0"),
+            vec3Prop("\(base)_gravity_z", "Gravity Z", "z", "Float(\(base).gravity.z)", "self.\(base).gravity = vec3(self.\(base).gravity.x, self.\(base).gravity.y, newValue as! Float)", "-20.0...20.0"),
+            floatProp("\(base)_sizeStart", "Size Start", "\(base).sizeStart", "self.\(base).sizeStart = newValue as! Float", "0.0...2.0"),
+            floatProp("\(base)_sizeEnd", "Size End", "\(base).sizeEnd", "self.\(base).sizeEnd = newValue as! Float", "0.0...2.0"),
+            floatProp("\(base)_sizeRandomness", "Size Randomness", "\(base).sizeRandomness", "self.\(base).sizeRandomness = newValue as! Float", "0.0...1.0"),
+            colorProp("\(base)_colorStart", "Color Start", "\(base).colorStart", "self.\(base).colorStart = color.vec4Representation"),
+            colorProp("\(base)_colorEnd", "Color End", "\(base).colorEnd", "self.\(base).colorEnd = color.vec4Representation"),
+            floatProp("\(base)_rotationSpeedMin", "Rotation Speed Min", "\(base).rotationSpeedMin", "self.\(base).rotationSpeedMin = newValue as! Float", "-10.0...10.0"),
+            floatProp("\(base)_rotationSpeedMax", "Rotation Speed Max", "\(base).rotationSpeedMax", "self.\(base).rotationSpeedMax = newValue as! Float", "-10.0...10.0"),
+            floatProp("\(base)_maxParticles", "Max Particles", "Float(\(base).maxParticles)", "self.\(base).maxParticles = Int(newValue as! Float)", "1.0...10000.0"),
+          ].joined(separator: ",\n          ")
+          return """
+            EditorPropertyGroup(
+              name: \"\(prop.displayName)\",
+              properties: [
+                \(pieces)
+              ]
+            )
+            """
+        } else if trimmedType == "Light" {
           let base = prop.name
           func floatProp(_ codeName: String, _ display: String, _ valueExpr: String, _ setExpr: String, _ range: String)
             -> String

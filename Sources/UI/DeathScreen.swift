@@ -14,7 +14,7 @@ final class DeathScreen: Screen {
   }
 
   private func setupMenu() {
-    listMenu.style = .boxed
+    listMenu.style = .boxedCenter
     listMenu.spacing = 52
     listMenu.itemWidth = 280
 

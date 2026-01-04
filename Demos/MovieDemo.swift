@@ -26,7 +26,7 @@ final class MovieDemo: RenderLoop {
     // Track elapsed time for door open sound (200ms delay)
     if currentMovie != nil {
       movieElapsedTime += deltaTime
-      if movieElapsedTime >= 0.2 && !hasPlayedOpenSound {
+      if movieElapsedTime >= 0.6 && !hasPlayedOpenSound {
         UISound.doorOpenA()
         hasPlayedOpenSound = true
       }

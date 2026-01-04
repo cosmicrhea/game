@@ -427,16 +427,38 @@ final class PrerenderedEnvironment {
     }
   }
 
-  /// Cycle to next camera
+  /// Cycle to next camera (excluding camera "0")
   public func cycleToNextCamera() {
-    let nextIndex = (currentCameraIndex + 1) % availableCameras.count
-    switchToCamera(at: nextIndex)
+    var attempts = 0
+    var nextIndex = (currentCameraIndex + 1) % availableCameras.count
+    
+    // Skip camera "0" - keep cycling until we find a non-zero camera or exhaust all options
+    while availableCameras[nextIndex] == "0" && attempts < availableCameras.count {
+      nextIndex = (nextIndex + 1) % availableCameras.count
+      attempts += 1
+    }
+    
+    // Only switch if we found a non-zero camera (or if there's only one camera total)
+    if availableCameras[nextIndex] != "0" || availableCameras.count == 1 {
+      switchToCamera(at: nextIndex)
+    }
   }
 
-  /// Cycle to previous camera
+  /// Cycle to previous camera (excluding camera "0")
   public func cycleToPreviousCamera() {
-    let prevIndex = (currentCameraIndex - 1 + availableCameras.count) % availableCameras.count
-    switchToCamera(at: prevIndex)
+    var attempts = 0
+    var prevIndex = (currentCameraIndex - 1 + availableCameras.count) % availableCameras.count
+    
+    // Skip camera "0" - keep cycling until we find a non-zero camera or exhaust all options
+    while availableCameras[prevIndex] == "0" && attempts < availableCameras.count {
+      prevIndex = (prevIndex - 1 + availableCameras.count) % availableCameras.count
+      attempts += 1
+    }
+    
+    // Only switch if we found a non-zero camera (or if there's only one camera total)
+    if availableCameras[prevIndex] != "0" || availableCameras.count == 1 {
+      switchToCamera(at: prevIndex)
+    }
   }
 
   /// Switch to camera 0 (special debug camera) if it exists
@@ -483,9 +505,21 @@ final class PrerenderedEnvironment {
     }
 
     logger.trace("🎬 Rendering PrerenderedEnvironment frame \(currentFrame)/\(totalFrames)...")
+    
+    // Save OpenGL state before making changes
+    let wasDepthTestEnabled = glIsEnabled(GL_DEPTH_TEST)
+    var savedDepthMask: GLboolean = true
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &savedDepthMask)
+    var savedDepthFunc: Int32 = 0
+    glGetIntegerv(GL_DEPTH_FUNC, &savedDepthFunc)
+    let wasBlendEnabled = glIsEnabled(GL_BLEND)
+    let wasCullFaceEnabled = glIsEnabled(GL_CULL_FACE)
+    let wasPolygonOffsetEnabled = glIsEnabled(GL_POLYGON_OFFSET_FILL)
+    
     shader.use()
 
     // Ensure background writes depth for integration with 3D
+    // Isolate state changes: save before, restore after
     glEnable(GL_DEPTH_TEST)
     glDepthMask(true)
     glDepthFunc(GL_ALWAYS)  // always write our gl_FragDepth
@@ -547,6 +581,33 @@ final class PrerenderedEnvironment {
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nil)
     glBindVertexArray(0)
     logger.trace("✅ Drew fullscreen quad")
+    
+    // Restore OpenGL state after drawing
+    // Note: We restore depth state, but the caller (MainLoop) will set standard scene depth state
+    glDepthMask(savedDepthMask)
+    if savedDepthFunc == GL_LEQUAL {
+      glDepthFunc(GL_LEQUAL)
+    } else if savedDepthFunc == GL_LESS {
+      glDepthFunc(GL_LESS)
+    } else if savedDepthFunc == GL_GEQUAL {
+      glDepthFunc(GL_GEQUAL)
+    } else if savedDepthFunc == GL_GREATER {
+      glDepthFunc(GL_GREATER)
+    } else {
+      glDepthFunc(GL_LEQUAL)  // Default fallback
+    }
+    if !wasDepthTestEnabled {
+      glDisable(GL_DEPTH_TEST)
+    }
+    if !wasBlendEnabled {
+      glDisable(GL_BLEND)
+    }
+    if !wasCullFaceEnabled {
+      glDisable(GL_CULL_FACE)
+    }
+    if !wasPolygonOffsetEnabled {
+      glDisable(GL_POLYGON_OFFSET_FILL)
+    }
   }
 
   private func cleanup() {

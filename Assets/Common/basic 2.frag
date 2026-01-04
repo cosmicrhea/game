@@ -2,6 +2,7 @@
 out vec4 FragColor;
 
 in vec2 TexCoord;
+in vec2 TexCoord1;
 in vec3 Normal;
 in vec3 FragPos;
 in vec3 Tangent;
@@ -20,6 +21,21 @@ uniform bool hasEnvironmentMap;
 
 // Debug controls
 uniform bool diffuseOnly;
+uniform bool showTextureDebug;  // Output baseColorTexture.rgb in opaque pass
+uniform bool showUVDebug;  // Output fract(uv) for UV visualization
+uniform bool showUVRaw;  // Output raw uv for UV visualization
+uniform int baseColorTexCoord;  // Base color texCoord index (0 or 1)
+uniform bool missingTexcoord0;  // True when TEXCOORD_0 is missing but required
+uniform bool useHairCardMode;  // Toggle hair card mode (hair cards default to dither, this allows disabling)
+uniform bool isDoubleSided;  // Material is double-sided (identifies hair cards)
+uniform bool useAlphaHash;  // Use alpha-hashed dither for cutoutCoverage (automatic classification)
+uniform bool isOverlayBlend;  // OverlayBlend mode (makeup/decals/eyebrows) - never discard/dither, just blend
+uniform int renderModeId;  // CPU renderMode: 0=opaque, 1=cutoutCoverage, 2=overlayBlend, 3=translucent
+uniform float cutoutThreshold;  // Cutout threshold for CutoutCoverage mode
+uniform bool showFinalAlpha;  // Output finalAlpha as grayscale
+uniform bool showClassification;  // Flat colors by renderMode: Opaque=gray, OverlayBlend=cyan, CutoutCoverage=magenta, TrueBlend=yellow
+uniform bool useAlphaToCoverage;  // Use GL_SAMPLE_ALPHA_TO_COVERAGE (MSAA) instead of Bayer dither for cutout materials
+uniform bool debugForceTransparentColor;  // Temporary debug: force cyan with 0.5 alpha for transparent pass
 
 uniform bool hasDiffuseTexture;
 uniform bool hasNormalTexture;
@@ -32,7 +48,11 @@ uniform vec3 baseColor;
 uniform float metallic;
 uniform float roughness;
 uniform vec3 emissive;
-uniform float opacity;
+uniform float opacity;  // baseColorFactor.a (from PBR baseColorFactor)
+
+// Alpha mode handling
+uniform int alphaMode;  // 0=OPAQUE, 1=MASK, 2=BLEND
+uniform float alphaCutoff;  // For MASK mode
 
 // Lighting uniforms
 uniform vec3 lightDirection;
@@ -81,8 +101,95 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 void main() {
+  if (missingTexcoord0) {
+    FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    return;
+  }
+  vec2 baseUV = (baseColorTexCoord == 1) ? TexCoord1 : TexCoord;
+  
   // Sample PBR textures with material property fallbacks
-  vec3 albedo = hasDiffuseTexture ? texture(diffuseTexture, TexCoord).rgb : baseColor;
+  // Always sample baseColorTexture as RGBA to preserve alpha channel
+  vec4 baseColorTextureSample = hasDiffuseTexture ? texture(diffuseTexture, baseUV) : vec4(1.0, 1.0, 1.0, 1.0);
+  
+  // Compute albedo: baseColorFactor.rgb * baseColorTexture.rgb
+  // Do NOT multiply RGB by alpha - alpha is only for transparency control
+  vec3 albedo = baseColor * baseColorTextureSample.rgb;
+  
+  // Compute finalAlpha = baseColorFactor.a * baseColorTexture.a
+  // This is used ONLY for transparency control (MASK discard / BLEND blending / OverlayBlend blending)
+  float finalAlpha = opacity * baseColorTextureSample.a;
+  
+  // Debug visualizations (early return)
+  if (showFinalAlpha) {
+    FragColor = vec4(vec3(finalAlpha), 1.0);
+    return;
+  }
+  
+  if (showClassification) {
+    // Flat colors by CPU renderMode (not alphaMode - glTF often marks opaque as BLEND with alpha=1.0)
+    // renderModeId: 0=opaque, 1=cutoutCoverage, 2=overlayBlend, 3=translucent
+    if (renderModeId == 0) {
+      FragColor = vec4(0.5, 0.5, 0.5, 1.0);  // Gray for Opaque
+      return;
+    } else if (renderModeId == 1) {
+      FragColor = vec4(1.0, 0.0, 1.0, 1.0);  // Magenta for CutoutCoverage
+      return;
+    } else if (renderModeId == 2) {
+      FragColor = vec4(0.0, 1.0, 1.0, 1.0);  // Cyan for OverlayBlend
+      return;
+    } else if (renderModeId == 3) {
+      FragColor = vec4(1.0, 1.0, 0.0, 1.0);  // Yellow for Translucent
+      return;
+    } else {
+      FragColor = vec4(0.5, 0.5, 0.5, 1.0);  // Gray fallback
+      return;
+    }
+  }
+
+  if (showUVRaw) {
+    FragColor = vec4(baseUV, 0.0, 1.0);
+    return;
+  }
+
+  if (showUVDebug) {
+    FragColor = vec4(fract(baseUV), 0.0, 1.0);
+    return;
+  }
+  
+  // Handle alpha mode: MASK (discard), BLEND (use alpha), OPAQUE (ignore alpha)
+  // alphaMode: 0=OPAQUE, 1=MASK, 2=BLEND
+  // CRITICAL: OverlayBlend must NEVER discard, never alpha-hash, never suppress specular
+  // A material is either coverage OR blend, never both
+  
+  // MASK mode: discard below cutoff (only for MASK materials, not OverlayBlend)
+  if (alphaMode == 1 && !isOverlayBlend) {  // MASK mode, not OverlayBlend
+    if (finalAlpha < alphaCutoff) {
+      discard;  // Discard fragments below cutoff
+    }
+  }
+  
+  // CutoutCoverage: BLEND mode with alpha-hash enabled (hair cards/foliage)
+  // ONLY for CutoutCoverage (useAlphaHash && !isOverlayBlend)
+  // OverlayBlend must NEVER enter this path
+  if (useAlphaHash && alphaMode == 2 && !isOverlayBlend) {  // CutoutCoverage only
+    // CutoutCoverage mode: use alpha-to-coverage (preferred) or discard-based cutout
+    // When alpha-to-coverage is enabled, OpenGL uses finalAlpha for MSAA coverage automatically
+    if (useAlphaToCoverage) {
+      // Alpha-to-coverage mode: output finalAlpha directly, OpenGL handles MSAA coverage
+      // No discard - coverage is determined by alpha value via MSAA
+    } else {
+      // Fallback: discard-based cutout using threshold (for non-MSAA contexts)
+      if (finalAlpha < cutoutThreshold) {
+        discard;
+      }
+      // Treat as opaque after cutoff (depth write ON, blending OFF)
+      finalAlpha = 1.0;
+    }
+  }
+  
+  // OverlayBlend: NEVER discard, NEVER alpha-hash, NEVER suppress specular
+  // Falls through to normal PBR shading with finalAlpha for blending
+  
   float materialRoughness = hasRoughnessTexture ? texture(roughnessTexture, TexCoord).r : roughness;
   float materialMetallic = hasMetallicTexture ? texture(metallicTexture, TexCoord).r : metallic;
   float ao = hasAoTexture ? texture(aoTexture, TexCoord).r : 1.0;
@@ -90,13 +197,28 @@ void main() {
   
   // Simple diffuse-only rendering for debugging
   if (diffuseOnly) {
-    FragColor = vec4(albedo, opacity);
+    // For OPAQUE mode, output alpha = 1.0 (ignore finalAlpha)
+    // For MASK/BLEND modes, use finalAlpha
+    float outputAlpha = (alphaMode == 0) ? 1.0 : finalAlpha;
+    FragColor = vec4(albedo, outputAlpha);
     return;
   }
   
-  // Calculate normal - either from normal map or vertex normal
+  // Debug mode: output baseColorTexture.rgb directly to verify texture binding
+  if (showTextureDebug) {
+    vec3 textureColor = hasDiffuseTexture ? baseColorTextureSample.rgb : vec3(0.5, 0.5, 0.5);
+    FragColor = vec4(textureColor, 1.0);
+    return;
+  }
+  
+  
+  vec3 V = normalize(cameraPosition - FragPos);
+  
+  // Calculate normal - overlayBlend ignores normal maps and uses a flat view-facing normal
   vec3 N;
-  if (hasNormalTexture) {
+  if (isOverlayBlend) {
+    N = V;
+  } else if (hasNormalTexture) {
     // Sample normal map and transform from tangent space to world space
     vec3 normalMapSample = texture(normalTexture, TexCoord).rgb * 2.0 - 1.0;
     
@@ -111,10 +233,11 @@ void main() {
   } else {
     N = normalize(Normal);
   }
-  vec3 V = normalize(cameraPosition - FragPos);
   
   // Calculate F0 for fresnel
-  vec3 F0 = vec3(0.04);
+  // For CutoutCoverage hair cards, kill specular to avoid bright white streaks
+  // OverlayBlend must NEVER suppress specular (coverage vs blend separation)
+  vec3 F0 = (useAlphaHash && alphaMode == 2 && !isOverlayBlend) ? vec3(0.0) : vec3(0.04);
   F0 = mix(F0, albedo, materialMetallic);
   
   // Main light
@@ -148,6 +271,13 @@ void main() {
   
   // Toned down specular boost for less harsh highlights
   specular2 *= 1.1;
+  
+  // CutoutCoverage: kill specular for hair cards (only CutoutCoverage, not OverlayBlend)
+  if (useAlphaHash && alphaMode == 2 && !isOverlayBlend) {
+    // No specular highlights for CutoutCoverage hair cards
+    specular1 = vec3(0.0);
+    specular2 = vec3(0.0);
+  }
   
   vec3 kS1 = F1;
   vec3 kD1 = vec3(1.0) - kS1;
@@ -195,9 +325,19 @@ void main() {
   vec3 rimLight = vec3(0.2) * rimFactor * (1.0 - materialRoughness);
   
   vec3 environment = environmentReflection * F_env * (1.0 - materialRoughness) * 0.5 + rimLight;
+  // CutoutCoverage: kill environment reflections for hair cards (only CutoutCoverage, not OverlayBlend)
+  if (useAlphaHash && alphaMode == 2 && !isOverlayBlend) {
+    // CutoutCoverage hair cards should not reflect the environment (looks like white paint strokes)
+    environment = vec3(0.0);
+  }
   
   // Add subsurface scattering for more realistic materials
   vec3 subsurface = albedo * 0.05 * max(0.0, -dot(N, L1)) * lightColor * lightIntensity;
+  // CutoutCoverage: kill subsurface for hair cards (only CutoutCoverage, not OverlayBlend)
+  if (useAlphaHash && alphaMode == 2 && !isOverlayBlend) {
+    // No subsurface for CutoutCoverage hair cards
+    subsurface = vec3(0.0);
+  }
   
   // Enhanced material response - make metals more metallic
   vec3 enhancedSpecular1 = specular1;
@@ -234,5 +374,23 @@ void main() {
   float luminance = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(vec3(luminance), color, 0.9);
   
-  FragColor = vec4(color, 1.0);
+  // Output alpha: 
+  // - OPAQUE mode: always 1.0 (ignore finalAlpha) - critical for depth testing
+  // - OverlayBlend: use finalAlpha for coverage-mask blending (alpha is coverage, not true transparency)
+  // - CutoutCoverage: use finalAlpha for alpha-to-coverage or discard (already handled above)
+  // - TrueBlend/Translucent: use finalAlpha for normal alpha blending
+  // - MASK: use finalAlpha (discard already handled above)
+  float outputAlpha;
+  if (alphaMode == 0) {
+    // OPAQUE: always output alpha = 1.0 for proper depth testing (eyes need this)
+    outputAlpha = 1.0;
+  } else if (isOverlayBlend) {
+    // OverlayBlend: use finalAlpha as coverage mask for blending
+    outputAlpha = finalAlpha;
+  } else {
+    // MASK, CutoutCoverage, TrueBlend: use finalAlpha
+    outputAlpha = finalAlpha;
+  }
+  
+  FragColor = vec4(color, outputAlpha);
 }

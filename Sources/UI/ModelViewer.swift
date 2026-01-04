@@ -15,6 +15,7 @@ final class ModelViewer: RenderLoop {
 
   // Models
   private let modelPaths: [String] = [
+    "Actors/woman01",
     "Actors/alex",
     //"Actors/goth_girl",
     //"Actors/guard",
@@ -54,6 +55,21 @@ final class ModelViewer: RenderLoop {
   
   // Debug state
   private var showDebugInfo: Bool = false
+  @Editor private var useDiffuseOnly: Bool = false
+  @Editor private var showTextureDebug: Bool = false  // Output baseColorTexture.rgb in opaque pass
+  @Editor private var showUVDebug: Bool = false  // Output fract(uv) for UV visualization
+  @Editor private var showUVRaw: Bool = false  // Output raw uv for UV visualization
+  
+  // Simplified transparency debug system
+  // Store as simple String - will be manually added to getEditableProperties() with picker options
+  private var transparencyDebugMode: String = "Normal"  // One control determines all transparency behavior
+  
+  // Two debug visualizations only
+  @Editor private var showFinalAlpha: Bool = false  // Output finalAlpha as grayscale
+  @Editor private var showClassification: Bool = false  // Flat colors by renderMode: Opaque=gray, OverlayBlend=cyan, CutoutCoverage=magenta, TrueBlend=yellow
+  
+  // CutoutCoverage threshold (only relevant when mode is ForceCutoutCoverage or Normal+renderMode==CutoutCoverage)
+  @Editor(0.0...1.0) private var cutoutThreshold: Float = 0.5  // Cutout threshold for CutoutCoverage mode
 
   // Layout tuning
   @Editor(200...500) var controlsPanelWidth: Float = 320
@@ -249,6 +265,15 @@ final class ModelViewer: RenderLoop {
     case .backspace:
       UISound.select()
       showDebugInfo.toggle()
+    case .period:
+      UISound.select()
+      useDiffuseOnly.toggle()
+    case .comma:
+      UISound.select()
+      showTextureDebug.toggle()
+    case .slash:
+      // Removed debugCutoutStep - use showFinalAlpha and showClassification instead
+      break
     default:
       break
     }
@@ -333,21 +358,21 @@ final class ModelViewer: RenderLoop {
     }
 
     let animation = sceneData.animations[orderedIndex]
-    logger.debug(
+    logger.trace(
       "ModelViewer: Playing animation \(currentAnimationIndex): '\(currentAnimationNames[safe: currentAnimationIndex] ?? "Unknown")'"
     )
-    logger.debug("  Animation duration: \(animation.duration), tps: \(animation.ticksPerSecond)")
-    logger.debug("  Animation channels: \(animation.channels.count)")
+    logger.trace("  Animation duration: \(animation.duration), tps: \(animation.ticksPerSecond)")
+    logger.trace("  Animation channels: \(animation.channels.count)")
     for (idx, channel) in animation.channels.prefix(5).enumerated() {
-      logger.debug(
+      logger.trace(
         "    Channel \(idx): node='\(channel.nodeName)', posKeys=\(channel.positionKeys.count), rotKeys=\(channel.rotationKeys.count), scaleKeys=\(channel.scalingKeys.count)"
       )
     }
 
     // Check mesh bone counts
-    logger.debug("  Mesh instances: \(meshInstances.count)")
+    logger.trace("  Mesh instances: \(meshInstances.count)")
     for (idx, instance) in meshInstances.enumerated() {
-      logger.debug(
+      logger.trace(
         "    Mesh \(idx): bones=\(instance.mesh.numberOfBones), isSkeletal=\(instance.mesh.numberOfBones > 0)")
     }
 
@@ -490,24 +515,306 @@ final class ModelViewer: RenderLoop {
     let view = camera.getViewMatrix()
     let cameraModelMatrix = camera.getModelMatrix()
 
-    meshInstances.forEach { meshInstance in
-      // Bone transforms are already calculated in update() for skeletal meshes
-      // Just draw with the current model matrix
-      let combinedModelMatrix = cameraModelMatrix * meshInstance.transformMatrix
+    // Separate opaque and transparent meshes for proper alpha blending
+    let cameraPosition = camera.position
+    var opaqueMeshes: [(instance: MeshInstance, matrix: mat4, effectiveRenderMode: MeshInstance.RenderMode, useAlphaHash: Bool, useAlphaToCoverage: Bool, usePolygonOffset: Bool)] = []
+    var transparentMeshes: [(instance: MeshInstance, matrix: mat4, distance: Float, effectiveRenderMode: MeshInstance.RenderMode, useAlphaHash: Bool, useAlphaToCoverage: Bool, usePolygonOffset: Bool)] = []
 
+    for meshInstance in meshInstances {
+      let combinedModelMatrix = cameraModelMatrix * meshInstance.transformMatrix
+      
+      // Extract world position from transform matrix (translation is in column 3)
+      let worldPosition = vec3(
+        combinedModelMatrix[3].x,
+        combinedModelMatrix[3].y,
+        combinedModelMatrix[3].z
+      )
+      
+      // Calculate distance from camera for sorting
+      let distance = length(worldPosition - cameraPosition)
+      
+      // Compute effective renderMode and flags based on transparencyDebugMode
+      let effectiveRenderMode = computeEffectiveRenderMode(actualRenderMode: meshInstance.renderMode)
+      let (useAlphaHash, useAlphaToCoverage, usePolygonOffset) = computeEffectiveFlags(
+        transparencyDebugMode: transparencyDebugMode,
+        effectiveRenderMode: effectiveRenderMode,
+        actualUseAlphaHash: meshInstance.useAlphaHash
+      )
+      
+      // Separate meshes by effective render mode (may be overridden by transparencyDebugMode):
+      // - Opaque: render in opaque pass (no blending, depth write ON)
+      // - CutoutCoverage: render in opaque pass with alpha-to-coverage or discard (no blending, depth write ON)
+      //   This avoids transparent self-occlusion between overlapping alpha cards
+      // - OverlayBlend: render in transparent pass (sorted, depth write OFF, blending ON, no dither/cutoff)
+      // - Translucent: render in transparent pass (sorted, depth write OFF)
+      let needsTransparentPass: Bool
+      switch effectiveRenderMode {
+      case .opaque, .cutoutCoverage:
+        // Opaque and CutoutCoverage: render in opaque pass
+        needsTransparentPass = false
+      case .overlayBlend, .translucent:
+        // OverlayBlend and Translucent: always render in transparent pass
+        needsTransparentPass = true
+      }
+      
+      if needsTransparentPass {
+        transparentMeshes.append((meshInstance, combinedModelMatrix, distance, effectiveRenderMode, useAlphaHash, useAlphaToCoverage, usePolygonOffset))
+      } else {
+        opaqueMeshes.append((meshInstance, combinedModelMatrix, effectiveRenderMode, useAlphaHash, useAlphaToCoverage, usePolygonOffset))
+      }
+    }
+
+    // Count meshes by render mode and log material names for debugging (one-frame snapshot)
+    var opaqueCount = 0
+    var cutoutCoverageCount = 0
+    var overlayBlendCount = 0
+    var trueBlendCount = 0
+    var opaqueMaterials: [String] = []
+    var cutoutMaterials: [String] = []
+    var overlayMaterials: [String] = []
+    var trueBlendMaterials: [String] = []
+    
+    for (meshInstance, _, effectiveRenderMode, _, _, _) in opaqueMeshes {
+      // Get material name from the mesh instance's stored material properties
+      let materialName = meshInstance.materialName ?? "<unnamed>"
+      switch effectiveRenderMode {
+      case .opaque: 
+        opaqueCount += 1
+        opaqueMaterials.append(materialName)
+      case .cutoutCoverage: 
+        cutoutCoverageCount += 1
+        cutoutMaterials.append(materialName)
+      case .overlayBlend: 
+        overlayBlendCount += 1
+        overlayMaterials.append(materialName)
+      case .translucent: 
+        trueBlendCount += 1
+        trueBlendMaterials.append(materialName)
+      }
+    }
+    for (meshInstance, _, _, effectiveRenderMode, _, _, _) in transparentMeshes {
+      // Get material name from the mesh instance's stored material properties
+      let materialName = meshInstance.materialName ?? "<unnamed>"
+      switch effectiveRenderMode {
+      case .opaque: 
+        opaqueCount += 1
+        opaqueMaterials.append(materialName)
+      case .cutoutCoverage: 
+        cutoutCoverageCount += 1
+        cutoutMaterials.append(materialName)
+      case .overlayBlend: 
+        overlayBlendCount += 1
+        overlayMaterials.append(materialName)
+      case .translucent: 
+        trueBlendCount += 1
+        trueBlendMaterials.append(materialName)
+      }
+    }
+    
+    logger.trace("📊 Draw counts: Opaque=\(opaqueCount), CutoutCoverage=\(cutoutCoverageCount), OverlayBlend=\(overlayBlendCount), TrueBlend=\(trueBlendCount)")
+    if !opaqueMaterials.isEmpty {
+      logger.trace("  Opaque materials: \(opaqueMaterials.joined(separator: ", "))")
+    }
+    if !cutoutMaterials.isEmpty {
+      logger.trace("  CutoutCoverage materials: \(cutoutMaterials.joined(separator: ", "))")
+    }
+    if !overlayMaterials.isEmpty {
+      logger.trace("  OverlayBlend materials: \(overlayMaterials.joined(separator: ", "))")
+    }
+    if !trueBlendMaterials.isEmpty {
+      logger.trace("  TrueBlend materials: \(trueBlendMaterials.joined(separator: ", "))")
+    }
+    
+    // Render opaque meshes first (OPAQUE and CutoutCoverage)
+    // Sort by render mode only (purely alpha-driven, no name-based logic)
+    // Order: (1) opaque (face, body, eyes), (2) cutoutCoverage (hair)
+    // Eyes render with depth write OFF, so they can be in the same pass as other opaque
+    let sortedOpaqueMeshes = opaqueMeshes.sorted(by: { (mesh1: (instance: MeshInstance, matrix: mat4, effectiveRenderMode: MeshInstance.RenderMode, useAlphaHash: Bool, useAlphaToCoverage: Bool, usePolygonOffset: Bool), mesh2: (instance: MeshInstance, matrix: mat4, effectiveRenderMode: MeshInstance.RenderMode, useAlphaHash: Bool, useAlphaToCoverage: Bool, usePolygonOffset: Bool)) -> Bool in
+      // Compute render priority: opaque=0, cutoutCoverage=1
+      func renderModePriority(_ mode: MeshInstance.RenderMode) -> Int {
+        switch mode {
+        case .opaque: return 0
+        case .cutoutCoverage: return 1
+        case .overlayBlend, .translucent: return 2  // Shouldn't be in opaque pass, but handle gracefully
+        }
+      }
+      return renderModePriority(mesh1.effectiveRenderMode) < renderModePriority(mesh2.effectiveRenderMode)
+    })
+    for (meshInstance, combinedModelMatrix, effectiveRenderMode, useAlphaHash, useAlphaToCoverage, usePolygonOffset) in sortedOpaqueMeshes {
+      guard effectiveRenderMode == .opaque else { continue }
       meshInstance.draw(
         projection: projection,
         view: view,
         modelMatrix: combinedModelMatrix,
-        cameraPosition: camera.position,
+        cameraPosition: cameraPosition,
         lightDirection: light.direction,
         lightColor: light.color,
         lightIntensity: light.intensity,
         fillLightDirection: fillLight.direction,
         fillLightColor: fillLight.color,
         fillLightIntensity: fillLight.intensity,
-        diffuseOnly: false
+        diffuseOnly: useDiffuseOnly,
+        showTextureDebug: showTextureDebug,
+        effectiveRenderMode: effectiveRenderMode,
+        showFinalAlpha: showFinalAlpha,
+        showClassification: showClassification,
+        cutoutThreshold: cutoutThreshold,
+        showUVDebug: showUVDebug,
+        showUVRaw: showUVRaw,
+        renderPassName: "ModelViewerOpaque",
+        useAlphaHash: useAlphaHash,
+        useAlphaToCoverage: useAlphaToCoverage,
+        usePolygonOffset: usePolygonOffset,
+        debugForceTransparentColor: false  // Opaque pass never forces transparent color
       )
+    }
+    
+    // Second pass: CutoutCoverage (hair) with depth write ON
+    glDepthMask(true)  // Depth write ON for hair
+    for (meshInstance, combinedModelMatrix, effectiveRenderMode, useAlphaHash, useAlphaToCoverage, usePolygonOffset) in sortedOpaqueMeshes {
+      // Only render cutoutCoverage meshes in second pass (hair)
+      guard effectiveRenderMode == .cutoutCoverage else { continue }
+      meshInstance.draw(
+        projection: projection,
+        view: view,
+        modelMatrix: combinedModelMatrix,
+        cameraPosition: cameraPosition,
+        lightDirection: light.direction,
+        lightColor: light.color,
+        lightIntensity: light.intensity,
+        fillLightDirection: fillLight.direction,
+        fillLightColor: fillLight.color,
+        fillLightIntensity: fillLight.intensity,
+        diffuseOnly: useDiffuseOnly,
+        showTextureDebug: showTextureDebug,
+        effectiveRenderMode: effectiveRenderMode,
+        showFinalAlpha: showFinalAlpha,
+        showClassification: showClassification,
+        cutoutThreshold: cutoutThreshold,
+        showUVDebug: showUVDebug,
+        showUVRaw: showUVRaw,
+        renderPassName: "ModelViewerCutoutCoverage",
+        useAlphaHash: useAlphaHash,
+        useAlphaToCoverage: useAlphaToCoverage,
+        usePolygonOffset: usePolygonOffset,
+        debugForceTransparentColor: false
+      )
+    }
+
+    // Render transparent meshes last (OverlayBlend and Translucent)
+    // OverlayBlend (brows/lashes) are decal-style overlays - depth test ON, no depth write, no sorting needed
+    // Translucent materials are sorted back-to-front (farthest first) for proper blending
+    let overlayBlendMeshes = transparentMeshes.filter { $0.effectiveRenderMode == .overlayBlend }
+    let translucentMeshes = transparentMeshes.filter { $0.effectiveRenderMode == .translucent }
+    let sortedTranslucentMeshes = translucentMeshes.sorted(by: { $0.distance > $1.distance })
+    
+    // Render OverlayBlend decals first (depth test ON, no sorting)
+    logger.trace("🔵 OverlayBlend decals: drawing \(overlayBlendMeshes.count) meshes")
+    for (meshInstance, combinedModelMatrix, _, effectiveRenderMode, useAlphaHash, useAlphaToCoverage, usePolygonOffset) in overlayBlendMeshes {
+      meshInstance.draw(
+        projection: projection,
+        view: view,
+        modelMatrix: combinedModelMatrix,
+        cameraPosition: cameraPosition,
+        lightDirection: light.direction,
+        lightColor: light.color,
+        lightIntensity: light.intensity,
+        fillLightDirection: fillLight.direction,
+        fillLightColor: fillLight.color,
+        fillLightIntensity: fillLight.intensity,
+        diffuseOnly: useDiffuseOnly,
+        showTextureDebug: showTextureDebug,
+        effectiveRenderMode: effectiveRenderMode,
+        showFinalAlpha: showFinalAlpha,
+        showClassification: showClassification,
+        cutoutThreshold: cutoutThreshold,
+        showUVDebug: showUVDebug,
+        showUVRaw: showUVRaw,
+        renderPassName: "ModelViewerOverlayBlend",
+        useAlphaHash: useAlphaHash,
+        useAlphaToCoverage: useAlphaToCoverage,
+        usePolygonOffset: usePolygonOffset,
+        debugForceTransparentColor: false  // OverlayBlend outputs real alpha, no debug override
+      )
+    }
+    
+    // Render Translucent materials last (sorted back-to-front)
+    logger.trace("🔵 Translucent pass: drawing \(sortedTranslucentMeshes.count) meshes")
+    for (meshInstance, combinedModelMatrix, _, effectiveRenderMode, useAlphaHash, useAlphaToCoverage, usePolygonOffset) in sortedTranslucentMeshes {
+      meshInstance.draw(
+        projection: projection,
+        view: view,
+        modelMatrix: combinedModelMatrix,
+        cameraPosition: cameraPosition,
+        lightDirection: light.direction,
+        lightColor: light.color,
+        lightIntensity: light.intensity,
+        fillLightDirection: fillLight.direction,
+        fillLightColor: fillLight.color,
+        fillLightIntensity: fillLight.intensity,
+        diffuseOnly: useDiffuseOnly,
+        showTextureDebug: showTextureDebug,
+        effectiveRenderMode: effectiveRenderMode,
+        showFinalAlpha: showFinalAlpha,
+        showClassification: showClassification,
+        cutoutThreshold: cutoutThreshold,
+        showUVDebug: showUVDebug,
+        showUVRaw: showUVRaw,
+        renderPassName: "ModelViewerTranslucent",
+        useAlphaHash: useAlphaHash,
+        useAlphaToCoverage: useAlphaToCoverage,
+        usePolygonOffset: usePolygonOffset,
+        debugForceTransparentColor: false
+      )
+    }
+  }
+  
+  /// Compute effective renderMode based on transparencyDebugMode override
+  private func computeEffectiveRenderMode(actualRenderMode: MeshInstance.RenderMode) -> MeshInstance.RenderMode {
+    switch transparencyDebugMode {
+    case "ForceOpaque":
+      return .opaque
+    case "ForceOverlayBlend":
+      return .overlayBlend
+    case "ForceCutoutCoverage":
+      return .cutoutCoverage
+    case "ForceTrueBlend":
+      return .translucent
+    default: // "Normal"
+      return actualRenderMode
+    }
+  }
+  
+  /// Compute effective flags based on transparencyDebugMode and effectiveRenderMode
+  /// All decisions are made here in ModelViewer before calling draw()
+  /// OverlayBlend materials should NEVER use alpha-hash, alpha-to-coverage, or polygon offset
+  private func computeEffectiveFlags(
+    transparencyDebugMode: String,
+    effectiveRenderMode: MeshInstance.RenderMode,
+    actualUseAlphaHash: Bool
+  ) -> (useAlphaHash: Bool, useAlphaToCoverage: Bool, usePolygonOffset: Bool) {
+    switch transparencyDebugMode {
+    case "ForceOpaque":
+      return (false, false, false)
+    case "ForceOverlayBlend":
+      // ForceOverlayBlend: no dither, no discard, no polygon offset - just smooth blending
+      return (false, false, false)
+    case "ForceCutoutCoverage":
+      // ForceCutoutCoverage: always use alpha-to-coverage (preferred for hair cards)
+      return (true, true, true)  // useAlphaHash=true, useAlphaToCoverage=true, usePolygonOffset=true
+    case "ForceTrueBlend":
+      return (false, false, false)
+    default: // "Normal"
+      switch effectiveRenderMode {
+      case .cutoutCoverage:
+        // Normal mode with CutoutCoverage: use alpha-to-coverage by default
+        return (actualUseAlphaHash, true, true)  // Default to alpha-to-coverage and polygon offset
+      case .overlayBlend:
+        // OverlayBlend: never use alpha-hash, alpha-to-coverage, or polygon offset
+        return (false, false, false)
+      default:
+        return (false, false, false)
+      }
     }
   }
 

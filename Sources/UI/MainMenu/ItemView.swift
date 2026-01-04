@@ -13,6 +13,7 @@
   // Loading state
   private var isLoading: Bool = false
   private var isLoadingTextures: Bool = false
+  private var isModelReady: Bool = false  // Prevents drawing model until textures are ready or timeout occurs
   private let loadingSpinner = ProgressIndicator()
   private var textureLoadingTask: Task<Void, Never>?
 
@@ -47,7 +48,11 @@
 
     // Start async loading if model is available
     if let modelPath = item.modelPath {
-      Task { await loadModelAsync(path: modelPath) }
+      Task { @MainActor in
+        await logger.measureOnMainActor("ItemView model ready for \(item.name)", level: .info) {
+          await loadModelAsync(path: modelPath)
+        }
+      }
     }
   }
 
@@ -80,18 +85,56 @@
           await MainActor.run {
             isLoadingTextures = false
             loadingSpinner.isVisible = false
+            isModelReady = true  // Model is ready to show with textures
           }
         } else {
-          // Show meshes immediately, load textures in background
-          // Keep spinner visible for texture loading
+          // Try to load textures within 1 second threshold
+          // If they complete quickly, wait and show with textures
+          // Otherwise, show model immediately and load textures in background
           let instances = meshInstances
-          textureLoadingTask = Task.detached(priority: .userInitiated) { [weak self] in
+          let textureLoadTask = Task { [instances] in
             await instances.loadTexturesConcurrently()
-            guard let self else { return }
-            await MainActor.run {
-              logger.trace("✅ ItemView textures loaded (background)")
-              self.isLoadingTextures = false
-              self.loadingSpinner.isVisible = false
+          }
+          
+          // Race between texture loading and 1 second timeout
+          await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+              await textureLoadTask.value
+              return true  // Textures completed
+            }
+            group.addTask {
+              try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 seconds
+              return false  // Timeout occurred
+            }
+            
+            // Get the first result (either textures done or timeout)
+            if let texturesCompleted = await group.next(), texturesCompleted {
+              // Textures completed within threshold - hide spinner and show model
+              await MainActor.run {
+                isLoadingTextures = false
+                loadingSpinner.isVisible = false
+                isModelReady = true  // Model is ready to show with textures
+              }
+              // Cancel remaining tasks
+              group.cancelAll()
+            } else {
+              // Timeout occurred - show model immediately, continue loading textures in background
+              await MainActor.run {
+                isModelReady = true  // Show model even without textures
+              }
+              // Don't cancel textureLoadTask, let it continue in background
+              textureLoadingTask = Task.detached(priority: .userInitiated) { [weak self] in
+                // Wait for the original texture loading to complete
+                await textureLoadTask.value
+                guard let self else { return }
+                await MainActor.run {
+                  logger.trace("✅ ItemView textures loaded (background)")
+                  self.isLoadingTextures = false
+                  self.loadingSpinner.isVisible = false
+                }
+              }
+              // Cancel remaining tasks in group
+              group.cancelAll()
             }
           }
         }
@@ -222,8 +265,8 @@
       shader.setFloat("uDust", value: 0.06)
     }
 
-    // Draw 3D model if available
-    if !meshInstances.isEmpty {
+    // Draw 3D model if available and ready
+    if !meshInstances.isEmpty && isModelReady {
       draw3DModel()
       
       // Show loading spinner in bottom-left corner (with fade animation) when textures are loading
@@ -272,7 +315,15 @@
         fillLightDirection: fillLight.direction,
         fillLightColor: fillLight.color,
         fillLightIntensity: fillLight.intensity,
-        diffuseOnly: useDiffuseOnly
+        diffuseOnly: useDiffuseOnly,
+        effectiveRenderMode: meshInstance.renderMode,
+        showFinalAlpha: false,
+        showClassification: false,
+        cutoutThreshold: 0.5,
+        renderPassName: "ItemViewModel",
+        useAlphaHash: meshInstance.useAlphaHash,
+        useAlphaToCoverage: true,
+        usePolygonOffset: false
       )
     }
   }

@@ -111,6 +111,8 @@ public final class Engine {
 
     if STARTED_FROM_XCODE {
       LoggingSystem.bootstrap { OSLogHandler(label: $0) }
+    } else {
+      LoggingSystem.bootstrap { PrettyConsoleLogHandler(label: $0) }
     }
 
     //print(ProcessInfo.processInfo.environment)
@@ -145,6 +147,7 @@ public final class Engine {
     GLFWWindow.hints.contextVersion = (4, 1)
     GLFWWindow.hints.openGLProfile = .core
     GLFWWindow.hints.openGLCompatibility = .forward
+    GLFWWindow.hints.msaaSampleCount = 4
     #if os(macOS)
       GLFWWindow.hints.retinaFramebuffer = false
     #endif
@@ -279,7 +282,7 @@ public final class Engine {
 
       // //PauseScreenStack(),
 
-      // DeathScreenStack(),
+       DeathScreenStack(),
 
        DialogDemo(),
        MapView(scene: "shooting_range"),
@@ -293,6 +296,8 @@ public final class Engine {
        UIDemo(),
        MovieDemo(),
       ModelViewer(),
+      CharacterSelectScreen(),
+      ParticlesDemo(),
 //       CreditsScreen(),
 
       // InventoryView(),

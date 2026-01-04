@@ -56,7 +56,7 @@ final class OptionsScreen: Screen {
         UISound.select()
         self.currentPanel = .audio
         // Load devices only when user actually opens the audio panel
-        self.audioPanel.ensureDevicesLoaded()
+        // self.audioPanel.ensureDevicesLoaded()
       },
       ListMenu.MenuItem(id: "language", label: "Language") {
         UISound.select()

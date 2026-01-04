@@ -4,8 +4,10 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoord;
 layout(location = 3) in vec3 aTangent;
 layout(location = 4) in vec3 aBitangent;
+layout(location = 7) in vec2 aTexCoord1;
 
 out vec2 TexCoord;
+out vec2 TexCoord1;
 out vec3 Normal;
 out vec3 FragPos;
 out vec3 Tangent;
@@ -25,4 +27,5 @@ void main() {
 
   gl_Position = projection * view * vec4(FragPos, 1.0);
   TexCoord = aTexCoord;
+  TexCoord1 = aTexCoord1;
 }

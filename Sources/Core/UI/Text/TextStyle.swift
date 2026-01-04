@@ -193,5 +193,21 @@ extension TextStyle {
       return baseStyle.withColor(.gray400).withStroke(width: 2, color: .gray700)
     }
   }
+  
+  /// Creates a boxed menu item style for left-aligned menus (slightly smaller text)
+  /// White for selected, gray for unselected, left-aligned text
+  static func menuItemBoxedLeft(selected: Bool, disabled: Bool) -> TextStyle {
+    let baseStyle = menuItem.withAlignment(.left).withFontSize(28)  // Slightly smaller (28 vs 32)
+
+    if disabled {
+      return baseStyle.withColor(.gray500).withStroke(width: 2, color: .gray900)
+    } else if selected {
+      // White text for selected
+      return baseStyle.withColor(.white).withStroke(width: 2, color: .gray700)
+    } else {
+      // Gray text for unselected
+      return baseStyle.withColor(.gray400).withStroke(width: 2, color: .gray700)
+    }
+  }
 
 }

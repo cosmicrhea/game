@@ -37,7 +37,7 @@ class Nexus: Script {
   }
 
   func door3() async {
-    if await confirm("Go to the test room?", "Go through", "Stay here") {
+    if await confirm("Go to the test chamberrrr?", "Go through", "Stay here") {
       await goTo(scene: "test")
     }
   }

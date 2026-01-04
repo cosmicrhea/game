@@ -19,6 +19,7 @@ public enum PromptGroup: String, CaseIterable {
   case modelViewerControls
   case itemView
   case mapView
+  case characterSelect
 
   // static let allCases: [PromptGroup] = [
   //   .skip,
@@ -176,6 +177,16 @@ public enum PromptGroup: String, CaseIterable {
           ["playstation_button\(usesColorIcons ? "_color" : "")_square"],
         ],
         "Close": [
+          ["mouse_right"], ["xbox_button\(usesColorIcons ? "_color" : "")_b"],
+          ["playstation_button\(usesColorIcons ? "_color" : "")_circle"],
+        ],
+      ],
+      .characterSelect: [
+        "Select": [
+          ["keyboard_space_icon"], ["xbox_button\(usesColorIcons ? "_color" : "")_a"],
+          ["playstation_button\(usesColorIcons ? "_color" : "")_cross"],
+        ],
+        "Return": [
           ["mouse_right"], ["xbox_button\(usesColorIcons ? "_color" : "")_b"],
           ["playstation_button\(usesColorIcons ? "_color" : "")_circle"],
         ],

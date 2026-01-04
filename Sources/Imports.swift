@@ -9,6 +9,7 @@
 @_exported import struct Foundation.Date
 @_exported import class Foundation.DateFormatter
 @_exported import class Foundation.FileManager
+@_exported import func Foundation.NSHomeDirectory
 @_exported import class Foundation.JSONSerialization
 @_exported import struct Foundation.Locale
 @_exported import class Foundation.NSArray

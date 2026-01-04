@@ -188,8 +188,8 @@ class ItemInspectionCamera {
       zoomVelocity *= zoomFriction
     }
 
-    // Apply pan momentum
-    if length(panVelocity) > 0.01 {
+    // Apply pan momentum only when not actively dragging
+    if !isDragging, length(panVelocity) > 0.01 {
       let panDelta = panVelocity * deltaTime
       target += panDelta
       panOffset += panDelta
@@ -226,6 +226,10 @@ class ItemInspectionCamera {
       let upVector = vec3(0, 1, 0)
 
       let panDelta = rightVector * xOffset * panSensitivity + upVector * yOffset * panSensitivity
+      // If the user reverses direction, clear accumulated momentum to avoid a snap.
+      if dot(panVelocity, panDelta) < 0.0 {
+        panVelocity = vec3(0, 0, 0)
+      }
       panVelocity += panDelta
 
       // Clamp pan velocity
@@ -237,6 +241,7 @@ class ItemInspectionCamera {
       // Apply pan immediately for responsive feel
       panOffset += panDelta
       target += panDelta
+      updateCameraPosition()
     } else {
       // Rotation mode: rotate the model
       isPanning = false

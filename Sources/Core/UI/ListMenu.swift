@@ -5,8 +5,10 @@ public class ListMenu {
   public enum Style {
     /// Default style: left-aligned, red selected text, indentation animation
     case `default`
-    /// Boxed style: centered, white/gray text, focus ring around selected item
+    /// Boxed style: left-aligned, white/gray text, focus ring around selected item
     case boxed
+    /// Boxed center style: centered, white/gray text, focus ring around selected item
+    case boxedCenter
   }
 
   // MARK: - MenuItem
@@ -227,7 +229,27 @@ public class ListMenu {
         effectiveLabel.draw(at: Point(finalX, baseY), style: finalStyle)
 
       case .boxed:
-        // Boxed style: centered with focus ring and white/gray text
+        // Boxed style: left-aligned with focus ring and white/gray text (smaller text)
+        let finalStyle = TextStyle.menuItemBoxedLeft(selected: isSelected, disabled: isDisabled)
+        let baseX = position.x
+        let textPadding: Float = 12  // Padding from left edge
+
+        // Draw focus ring first
+        if isSelected {
+          let itemRect = Rect(
+            x: baseX,
+            y: baseY - 8,
+            width: itemWidth,
+            height: 48
+          )
+          focusRing.draw(around: itemRect, intensity: 1.0, padding: 6)
+        }
+
+        // Draw text on top (left-aligned with padding)
+        effectiveLabel.draw(at: Point(baseX + textPadding, baseY + 2), style: finalStyle, anchor: .bottomLeft)
+
+      case .boxedCenter:
+        // Boxed center style: centered with focus ring and white/gray text
         let finalStyle = TextStyle.menuItemBoxed(selected: isSelected, disabled: isDisabled)
         let centerX = position.x
 
@@ -303,6 +325,14 @@ public class ListMenu {
           height: menuItemHeight
         )
       case .boxed:
+        // Left-aligned hit detection
+        itemBounds = Rect(
+          x: position.x,
+          y: itemY,
+          width: itemWidth,
+          height: menuItemHeight
+        )
+      case .boxedCenter:
         // Centered hit detection
         itemBounds = Rect(
           x: position.x - itemWidth / 2,

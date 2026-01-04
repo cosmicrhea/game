@@ -1,4 +1,3 @@
-import CGLTF
 import GLTF
 import GLMath
 
@@ -14,10 +13,14 @@ extension Mesh {
     positions: [Float],
     normals: [Float]?,
     uvs: [Float]?,
+    uvs1: [Float]?,
     tangents: [Float]?,
+    uv0AccessorDebug: String? = nil,
+    uv1AccessorDebug: String? = nil,
     indexData: [UInt32]?,
     vertexCount: Int,
     materialIndex: Int,
+    tangentsProvided: Bool = false,
     numberOfBones: Int = 0,
     bones: [Bone] = []
   ) {
@@ -44,8 +47,11 @@ extension Mesh {
           positions: [],
           normals: nil,
           uvs: nil,
+          uvs1: nil,
           tangents: nil,
           bitangents: nil,
+          uv0AccessorDebug: nil,
+          uv1AccessorDebug: nil,
           faces: [],
           bones: []
         )
@@ -103,7 +109,7 @@ extension Mesh {
     }
 
     // Calculate tangent space if needed
-    if tangents == nil, let normals = normals, let uvs = uvs, !validFaces.isEmpty {
+    if tangents == nil, !tangentsProvided, let normals = normals, let uvs = uvs, !validFaces.isEmpty {
       var tangentAccum: [vec3] = Array(repeating: vec3(0, 0, 0), count: finalVertexCount)
       var bitangentAccum: [vec3] = Array(repeating: vec3(0, 0, 0), count: finalVertexCount)
 
@@ -163,21 +169,22 @@ extension Mesh {
         bitangentsArray.append(b.z)
       }
 
-      self.init(
-        name: name,
-        numberOfVertices: finalVertexCount,
-        numberOfFaces: validFaces.count,
-        numberOfBones: numberOfBones,
-        materialIndex: materialIndex,
-        positions: positions,
-        normals: normals,
-        uvs: uvs,
-        tangents: tangentsArray,
-        bitangents: bitangentsArray,
-        faces: validFaces,
-        bones: bones
-      )
-      return
+    self.init(
+      name: name,
+      numberOfVertices: finalVertexCount,
+      numberOfFaces: validFaces.count,
+      numberOfBones: numberOfBones,
+      materialIndex: materialIndex,
+      positions: positions,
+      normals: normals,
+      uvs: uvs,
+      uvs1: uvs1,
+      tangents: tangentsArray,
+      bitangents: bitangentsArray,
+      faces: validFaces,
+      bones: bones
+    )
+    return
     } else if let normals = normals, let tangents = tangents, normals.count == tangents.count {
       // Calculate bitangents from normals and tangents
       var bitangentsArray: [Float] = []
@@ -202,6 +209,7 @@ extension Mesh {
       positions: positions,
       normals: normals,
       uvs: uvs,
+      uvs1: uvs1,
       tangents: tangents,
       bitangents: bitangents,
       faces: validFaces,
@@ -215,9 +223,14 @@ extension Mesh {
     var positions: [Float] = []
     var normals: [Float]?
     var uvs: [Float]?
+    var uvs1: [Float]?
     var tangents: [Float]?
     var bitangents: [Float]?
     var vertexCount = 0
+    var tangentsProvided = false
+    var uv0AccessorDebug: String? = nil
+    var uv1AccessorDebug: String? = nil
+    var hasTexcoord0 = false
 
     for attribute in gltfPrimitive.attributes {
       switch attribute.type {
@@ -238,16 +251,37 @@ extension Mesh {
           normals = data
         }
       case .texcoord:
-        if attribute.index == 0, let data = attribute.data.unpackFloats() {
-          uvs = data
+        if attribute.index == 0 {
+          hasTexcoord0 = true
+          let accessorStride = attribute.data.stride
+          let bufferViewStride = attribute.data.bufferView?.stride ?? 0
+          let accessorOffset = attribute.data.offset
+          uv0AccessorDebug =
+            "componentType=\(attribute.data.componentType) type=\(attribute.data.type) count=\(attribute.data.count) accessorOffset=\(accessorOffset) accessorStride=\(accessorStride) bufferViewStride=\(bufferViewStride) normalized=\(attribute.data.normalized)"
+          if let data = attribute.data.unpackFloats() {
+            uvs = data
+          }
+        } else if attribute.index == 1 {
+          let accessorStride = attribute.data.stride
+          let bufferViewStride = attribute.data.bufferView?.stride ?? 0
+          let accessorOffset = attribute.data.offset
+          uv1AccessorDebug =
+            "componentType=\(attribute.data.componentType) type=\(attribute.data.type) count=\(attribute.data.count) accessorOffset=\(accessorOffset) accessorStride=\(accessorStride) bufferViewStride=\(bufferViewStride) normalized=\(attribute.data.normalized)"
+          if let data = attribute.data.unpackFloats() {
+            uvs1 = data
+          }
         }
       case .tangent:
+        tangentsProvided = true
         if let data = attribute.data.unpackFloats() {
           tangents = data
         }
       default:
         break
       }
+    }
+    if hasTexcoord0 && uvs == nil {
+      logger.error("❌ Mesh '\(gltfMesh.name)' TEXCOORD_0 accessor present but failed to unpack.")
     }
 
     var faces: [Face] = []
@@ -362,7 +396,7 @@ extension Mesh {
     }
 
     // Calculate tangent space if tangents are missing but we have normals and UVs
-    if tangents == nil, let normals = normals, let uvs = uvs, !validFaces.isEmpty {
+    if tangents == nil, !tangentsProvided, let normals = normals, let uvs = uvs, !validFaces.isEmpty {
       var tangentAccum: [vec3] = Array(repeating: vec3(0, 0, 0), count: finalVertexCount)
       var bitangentAccum: [vec3] = Array(repeating: vec3(0, 0, 0), count: finalVertexCount)
 
@@ -454,8 +488,11 @@ extension Mesh {
       positions: positions,
       normals: normals,
       uvs: uvs,
+      uvs1: uvs1,
       tangents: tangents,
       bitangents: bitangents,
+      uv0AccessorDebug: uv0AccessorDebug,
+      uv1AccessorDebug: uv1AccessorDebug,
       faces: validFaces,
       bones: []
     )
@@ -468,8 +505,13 @@ extension Material {
     _ gltfMaterial: GLTFMaterial, materialIndex: Int, document: GLTFDocument, imageToEmbeddedIndex: [String: Int] = [:]
   ) {
     // Helper function to get texture path
-    func getTexturePath(from textureView: GLTFTextureView, document: GLTFDocument, imageToEmbeddedIndex: [String: Int])
-      -> String?
+    func getTextureInfo(
+      from textureView: GLTFTextureView,
+      document: GLTFDocument,
+      imageToEmbeddedIndex: [String: Int],
+      defaultWrap: GLTFWrapMode
+    )
+      -> Material.TextureInfo?
     {
       guard let texture = textureView.texture,
         let image = texture.image
@@ -477,25 +519,42 @@ extension Material {
         return nil
       }
 
+      let texCoordIndex = textureView.transform.hasTexcoord ? textureView.transform.texcoord : textureView.texcoord
+
       if image.bufferView != nil {
         let hasName = !image.name.isEmpty && image.name != "<unnamed>"
         let hasUri = !image.uri.isEmpty && image.uri != "<unnamed>"
 
-        logger.debug(
+        logger.trace(
           "Looking up embedded texture: name='\(image.name)', uri='\(image.uri)', hasName=\(hasName), hasUri=\(hasUri)")
 
         if hasName, let embeddedIndex = imageToEmbeddedIndex[image.name] {
-          logger.debug("Found embedded texture by name: '\(image.name)' -> *\(embeddedIndex)")
-          return "*\(embeddedIndex)"
+          logger.trace("Found embedded texture by name: '\(image.name)' -> *\(embeddedIndex)")
+          let sampler = texture.sampler
+          let wrapS = sampler?.wrapS ?? defaultWrap
+          let wrapT = sampler?.wrapT ?? defaultWrap
+          return Material.TextureInfo(
+            path: "*\(embeddedIndex)", wrapS: wrapS, wrapT: wrapT, texCoord: texCoordIndex, samplerIndex: nil
+          )
         }
         if hasUri, let embeddedIndex = imageToEmbeddedIndex[image.uri] {
-          logger.debug("Found embedded texture by URI: '\(image.uri)' -> *\(embeddedIndex)")
-          return "*\(embeddedIndex)"
+          logger.trace("Found embedded texture by URI: '\(image.uri)' -> *\(embeddedIndex)")
+          let sampler = texture.sampler
+          let wrapS = sampler?.wrapS ?? defaultWrap
+          let wrapT = sampler?.wrapT ?? defaultWrap
+          return Material.TextureInfo(
+            path: "*\(embeddedIndex)", wrapS: wrapS, wrapT: wrapT, texCoord: texCoordIndex, samplerIndex: nil
+          )
         }
         let imageIdentifier = hasName ? image.name : (hasUri ? image.uri : "")
         if !imageIdentifier.isEmpty, let embeddedIndex = imageToEmbeddedIndex[imageIdentifier] {
-          logger.debug("Found embedded texture by identifier: '\(imageIdentifier)' -> *\(embeddedIndex)")
-          return "*\(embeddedIndex)"
+          logger.trace("Found embedded texture by identifier: '\(imageIdentifier)' -> *\(embeddedIndex)")
+          let sampler = texture.sampler
+          let wrapS = sampler?.wrapS ?? defaultWrap
+          let wrapT = sampler?.wrapT ?? defaultWrap
+          return Material.TextureInfo(
+            path: "*\(embeddedIndex)", wrapS: wrapS, wrapT: wrapT, texCoord: texCoordIndex, samplerIndex: nil
+          )
         }
         logger.warning(
           "Could not find embedded texture index for image: name='\(image.name)', uri='\(image.uri)'. Available keys: \(Array(imageToEmbeddedIndex.keys).prefix(10))"
@@ -503,7 +562,12 @@ extension Material {
       }
 
       if !image.uri.isEmpty && image.uri != "<unnamed>" {
-        return image.uri
+        let sampler = texture.sampler
+        let wrapS = sampler?.wrapS ?? defaultWrap
+        let wrapT = sampler?.wrapT ?? defaultWrap
+        return Material.TextureInfo(
+          path: image.uri, wrapS: wrapS, wrapT: wrapT, texCoord: texCoordIndex, samplerIndex: nil
+        )
       }
 
       return nil
@@ -516,9 +580,9 @@ extension Material {
     var opacity: Float
     var metallic: Float
     var roughness: Float
-    var diffuseTexturePath: String?
-    var metallicTexturePath: String?
-    var roughnessTexturePath: String?
+    var diffuseTexture: Material.TextureInfo?
+    var metallicTexture: Material.TextureInfo?
+    var roughnessTexture: Material.TextureInfo?
 
     if gltfMaterial.hasPBRMetallicRoughness {
       let pbr = gltfMaterial.pbrMetallicRoughness
@@ -529,15 +593,24 @@ extension Material {
       roughness = pbr.roughnessFactor
 
       if pbr.baseColorTexture.texture != nil {
-        diffuseTexturePath = getTexturePath(
-          from: pbr.baseColorTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
+        let diffuseDefaultWrap: GLTFWrapMode = gltfMaterial.alphaMode == .blend ? .clamp_to_edge : .repeat
+        diffuseTexture = getTextureInfo(
+          from: pbr.baseColorTexture,
+          document: document,
+          imageToEmbeddedIndex: imageToEmbeddedIndex,
+          defaultWrap: diffuseDefaultWrap
+        )
       }
 
       if pbr.metallicRoughnessTexture.texture != nil {
         // Metallic-roughness texture contains both in one texture
-        metallicTexturePath = getTexturePath(
-          from: pbr.metallicRoughnessTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
-        roughnessTexturePath = metallicTexturePath
+        metallicTexture = getTextureInfo(
+          from: pbr.metallicRoughnessTexture,
+          document: document,
+          imageToEmbeddedIndex: imageToEmbeddedIndex,
+          defaultWrap: .repeat
+        )
+        roughnessTexture = metallicTexture
       }
     } else {
       baseColor = vec3(0.8, 0.8, 0.8)
@@ -546,31 +619,85 @@ extension Material {
       roughness = 0.5
     }
 
-    var normalTexturePath: String?
+    var normalTexture: Material.TextureInfo?
     if gltfMaterial.normalTexture.texture != nil {
-      normalTexturePath = getTexturePath(
-        from: gltfMaterial.normalTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
+      normalTexture = getTextureInfo(
+        from: gltfMaterial.normalTexture,
+        document: document,
+        imageToEmbeddedIndex: imageToEmbeddedIndex,
+        defaultWrap: .repeat
+      )
     }
 
-    var aoTexturePath: String?
+    var aoTexture: Material.TextureInfo?
     if gltfMaterial.occlusionTexture.texture != nil {
-      aoTexturePath = getTexturePath(
-        from: gltfMaterial.occlusionTexture, document: document, imageToEmbeddedIndex: imageToEmbeddedIndex)
+      aoTexture = getTextureInfo(
+        from: gltfMaterial.occlusionTexture,
+        document: document,
+        imageToEmbeddedIndex: imageToEmbeddedIndex,
+        defaultWrap: .repeat
+      )
     }
 
     let emissiveFactor = gltfMaterial.emissiveFactor
     let emissive = vec3(emissiveFactor[0], emissiveFactor[1], emissiveFactor[2])
+
+    let alphaMode = gltfMaterial.alphaMode
+    let alphaCutoff = gltfMaterial.alphaCutoff
+    let isDoubleSided = gltfMaterial.isDoubleSided
+    
+    // Determine depth bias role from glTF material metadata or mesh index
+    // NO NAME-BASED HEURISTICS - explicit render intent only
+    // For now, default to .none; can be set via glTF extras/metadata if needed
+    let depthBiasRole: Material.DepthBiasRole = .none
+
+    // NOTE: We intentionally honor glTF alphaMode exactly.
+    // If you see unexpected semi-transparency, the root cause is either:
+    // 1) the source glTF truly marks the material as BLEND, or
+    // 2) our texture loader is producing unexpected alpha values.
+    // This warning helps catch assets that are BLEND despite having full opacity.
+    if alphaMode == .blend && opacity >= 0.999 {
+      logger.trace(
+        "⚠️ Material '\(gltfMaterial.name.isEmpty ? "<unnamed>" : gltfMaterial.name)' is alphaMode=BLEND with opacity=\(opacity). If this looks wrong, check baseColorTexture alpha and Blender material Blend Mode."
+      )
+    }
 
     self.baseColor = baseColor
     self.opacity = opacity
     self.metallic = metallic
     self.roughness = roughness
     self.emissive = emissive
-    self.diffuseTexturePath = diffuseTexturePath
-    self.normalTexturePath = normalTexturePath
-    self.metallicTexturePath = metallicTexturePath
-    self.roughnessTexturePath = roughnessTexturePath
-    self.aoTexturePath = aoTexturePath
+    self.alphaMode = alphaMode
+    self.alphaCutoff = alphaCutoff
+    self.isDoubleSided = isDoubleSided
+    self.depthBiasRole = depthBiasRole
+    self.diffuseTexture = diffuseTexture
+    self.normalTexture = normalTexture
+    self.metallicTexture = metallicTexture
+    self.roughnessTexture = roughnessTexture
+    self.aoTexture = aoTexture
+
+    // Log material information for transparency debugging
+    let alphaModeString: String
+    switch alphaMode {
+    case .opaque:
+      alphaModeString = "OPAQUE"
+    case .mask:
+      alphaModeString = "MASK"
+    case .blend:
+      alphaModeString = "BLEND"
+    @unknown default:
+      alphaModeString = "UNKNOWN"
+    }
+    // Apple/Godot-style transparency participation: engine marks transparent only if
+    // alphaMode == BLEND AND (opacity < 0.999 OR texture has non-opaque alpha)
+    // This treats alphaMode as permission, not obligation
+    // Note: renderMode and alphaProfile are determined at texture load time in MeshInstance
+    // This initial log shows the glTF material properties; final renderMode is logged after texture loading
+    let materialName = self.name ?? "<unnamed>"
+    logger.debug(
+      "📦 Material[\(materialIndex)]: name='\(materialName)', alphaMode=\(alphaModeString), opacity=\(opacity), doubleSided=\(isDoubleSided) (renderMode will be computed from alpha profile after texture load)"
+    )
   }
 }
 
@@ -738,7 +865,11 @@ extension Scene {
       let positions: [Float]
       let normals: [Float]?
       let uvs: [Float]?
+      let uvs1: [Float]?
+      let uv0AccessorDebug: String?
+      let uv1AccessorDebug: String?
       let tangents: [Float]?
+      let tangentsProvided: Bool
       let indexData: [UInt32]?
       let vertexCount: Int
       let materialIndex: Int
@@ -768,7 +899,12 @@ extension Scene {
         var positions: [Float] = []
         var normals: [Float]?
         var uvs: [Float]?
+        var uvs1: [Float]?
         var tangents: [Float]?
+        var uv0AccessorDebug: String? = nil
+        var uv1AccessorDebug: String? = nil
+        var hasTexcoord0 = false
+        var tangentsProvided = false
         var jointsData: [UInt16]? = nil
         var weightsData: [Float]? = nil
         var vertexCount = 0
@@ -785,9 +921,23 @@ extension Scene {
             normals = attribute.data.unpackFloats()
           case .texcoord:
             if attribute.index == 0 {
+              hasTexcoord0 = true
+              let accessorStride = attribute.data.stride
+              let bufferViewStride = attribute.data.bufferView?.stride ?? 0
+              let accessorOffset = attribute.data.offset
+              uv0AccessorDebug =
+                "componentType=\(attribute.data.componentType) type=\(attribute.data.type) count=\(attribute.data.count) accessorOffset=\(accessorOffset) accessorStride=\(accessorStride) bufferViewStride=\(bufferViewStride) normalized=\(attribute.data.normalized)"
               uvs = attribute.data.unpackFloats()
+            } else if attribute.index == 1 {
+              let accessorStride = attribute.data.stride
+              let bufferViewStride = attribute.data.bufferView?.stride ?? 0
+              let accessorOffset = attribute.data.offset
+              uv1AccessorDebug =
+                "componentType=\(attribute.data.componentType) type=\(attribute.data.type) count=\(attribute.data.count) accessorOffset=\(accessorOffset) accessorStride=\(accessorStride) bufferViewStride=\(bufferViewStride) normalized=\(attribute.data.normalized)"
+              uvs1 = attribute.data.unpackFloats()
             }
           case .tangent:
+            tangentsProvided = true
             tangents = attribute.data.unpackFloats()
           case .joints:
             // JOINTS_0 attribute: bone indices per vertex (usually UNSIGNED_BYTE or UNSIGNED_SHORT, vec4)
@@ -833,6 +983,9 @@ extension Scene {
             break
           }
         }
+        if hasTexcoord0 && uvs == nil {
+          logger.error("❌ Mesh '\(gltfMesh.name)' TEXCOORD_0 accessor present but failed to unpack.")
+        }
 
         // Extract indices
         if let indices = primitive.indices {
@@ -845,7 +998,11 @@ extension Scene {
             positions: positions,
             normals: normals,
             uvs: uvs,
+            uvs1: uvs1,
+            uv0AccessorDebug: uv0AccessorDebug,
+            uv1AccessorDebug: uv1AccessorDebug,
             tangents: tangents,
+            tangentsProvided: tangentsProvided,
             indexData: indexData,
             vertexCount: vertexCount,
             materialIndex: materialIndex,
@@ -877,7 +1034,7 @@ extension Scene {
 
       var bones: [Bone] = []
       if let jointsData = extracted.jointsData, let weightsData = extracted.weightsData {
-        logger.debug(
+        logger.trace(
           "🔍 Mesh '\(extracted.name)' has JOINTS_0 (\(jointsData.count) values) and WEIGHTS_0 (\(weightsData.count) values)"
         )
 
@@ -904,11 +1061,11 @@ extension Scene {
         if owningNode == nil {
           logger.warning("⚠️ Could not find owning node for mesh '\(extracted.name)'")
         } else {
-          logger.debug("✅ Found owning node '\(owningNode!.name)' for mesh '\(extracted.name)'")
+          logger.trace("✅ Found owning node '\(owningNode!.name)' for mesh '\(extracted.name)'")
         }
 
         if let node = owningNode, let skin = node.skin {
-          logger.debug("✅ Node '\(node.name)' has skin with \(skin.joints.count) joints")
+          logger.trace("✅ Node '\(node.name)' has skin with \(skin.joints.count) joints")
           var inverseBindMatrices: [mat4] = []
           if let ibmAccessor = skin.inverseBindMatrices {
             if let matrixData = ibmAccessor.unpackFloats() {
@@ -989,16 +1146,16 @@ extension Scene {
               ))
 
             if i < 3 {
-              logger.debug("  Bone[\(i)] = '\(jointNode.name)' (from skin.joints[\(i)])")
+              logger.trace("  Bone[\(i)] = '\(jointNode.name)' (from skin.joints[\(i)])")
             }
           }
 
-          logger.debug("📦 Loaded \(bones.count) bones for mesh '\(extracted.name)'")
+          logger.trace("📦 Loaded \(bones.count) bones for mesh '\(extracted.name)'")
           if !bones.isEmpty {
-            logger.debug("  Bone names: \(bones.compactMap { $0.name })")
-            logger.debug("  Bone indices: 0..<\(bones.count)")
+            logger.trace("  Bone names: \(bones.compactMap { $0.name })")
+            logger.trace("  Bone indices: 0..<\(bones.count)")
             if let firstBone = bones.first {
-              logger.debug(
+              logger.trace(
                 "  First bone '\(firstBone.name ?? "Unknown")' offset matrix translation: (\(firstBone.offsetMatrix[3].x), \(firstBone.offsetMatrix[3].y), \(firstBone.offsetMatrix[3].z))"
               )
             }
@@ -1015,10 +1172,14 @@ extension Scene {
         positions: extracted.positions,
         normals: extracted.normals,
         uvs: extracted.uvs,
+        uvs1: extracted.uvs1,
         tangents: extracted.tangents,
+        uv0AccessorDebug: extracted.uv0AccessorDebug,
+        uv1AccessorDebug: extracted.uv1AccessorDebug,
         indexData: extracted.indexData,
         vertexCount: extracted.vertexCount,
         materialIndex: extracted.materialIndex,
+        tangentsProvided: extracted.tangentsProvided,
         numberOfBones: bones.count,
         bones: bones
       )
@@ -1070,7 +1231,7 @@ extension Scene {
       return embeddedTexture
     }
 
-    logger.debug("Total embedded textures: \(embeddedTextures.count), mapping entries: \(imageToEmbeddedIndex.count)")
+    logger.trace("Total embedded textures: \(embeddedTextures.count), mapping entries: \(imageToEmbeddedIndex.count)")
 
     // Skip materials if requested (useful for MapView where materials aren't needed)
     let materials: [Material]

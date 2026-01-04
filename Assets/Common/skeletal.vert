@@ -6,8 +6,10 @@ layout(location = 3) in vec3 aTangent;
 layout(location = 4) in vec3 aBitangent;
 layout(location = 5) in ivec4 aBoneIndices;
 layout(location = 6) in vec4 aBoneWeights;
+layout(location = 7) in vec2 aTexCoord1;
 
 out vec2 TexCoord;
+out vec2 TexCoord1;
 out vec3 Normal;
 out vec3 FragPos;
 out vec3 Tangent;
@@ -87,4 +89,5 @@ void main() {
   mat4 viewModel = view * model;
   gl_Position = projection * viewModel * totalPosition;
   TexCoord = aTexCoord;
+  TexCoord1 = aTexCoord1;
 }

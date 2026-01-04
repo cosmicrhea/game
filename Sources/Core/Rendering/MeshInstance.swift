@@ -1,5 +1,4 @@
 import ImageFormats
-import CGLTF
 import GLTF
 
 // Flag to disable HDRI loading for now
@@ -38,7 +37,7 @@ final class TextureCache: @unchecked Sendable {
   static let shared = TextureCache()
 
   private var cache: [String: GLuint] = [:]
-  private var inflightLoads: [String: Task<GLuint, Error>] = [:]
+  private var inflightLoads: [String: Task<(GLuint, Bool, MeshInstance.AlphaProfile?), Error>] = [:]
   private let lock = NSLock()
 
   private init() {}
@@ -51,14 +50,14 @@ final class TextureCache: @unchecked Sendable {
   }
   
   /// Get an in-flight load task if one exists
-  nonisolated func getInflightLoad(for path: String) -> Task<GLuint, Error>? {
+  nonisolated func getInflightLoad(for path: String) -> Task<(GLuint, Bool, MeshInstance.AlphaProfile?), Error>? {
     lock.lock()
     defer { lock.unlock() }
     return inflightLoads[path]
   }
   
   /// Register an in-flight load task
-  nonisolated func registerInflightLoad(_ task: Task<GLuint, Error>, for path: String) {
+  nonisolated func registerInflightLoad(_ task: Task<(GLuint, Bool, MeshInstance.AlphaProfile?), Error>, for path: String) {
     lock.lock()
     defer { lock.unlock() }
     inflightLoads[path] = task
@@ -116,6 +115,7 @@ struct MeshVertex {
   var position: (Float, Float, Float)
   var normal: (Float, Float, Float)
   var uv: (Float, Float)
+  var uv1: (Float, Float)
   var tangent: (Float, Float, Float)
   var bitangent: (Float, Float, Float)
 
@@ -213,6 +213,32 @@ class MeshInstance {
   var roughness: Float = 0.5
   var emissive: vec3 = vec3(0.0, 0.0, 0.0)
   var opacity: Float = 1.0
+  var alphaMode: GLTFAlphaMode = .opaque
+  var alphaCutoff: Float = 0.5
+  var isDoubleSided: Bool = false
+  var depthBiasRole: Material.DepthBiasRole = .none  // Explicit depth bias role (no name-based heuristics)
+  
+  // Texture alpha analysis for BLEND participation logic
+  var hasNonOpaqueAlpha: Bool = false  // True if baseColorTexture has alpha < 0.999
+  var alphaProfile: AlphaProfile? = nil  // Alpha distribution profile for automatic classification
+  
+  // Render mode derived from alpha profile (computed once, used everywhere)
+  // Clean 3-mode transparency system: Opaque, CutoutCoverage, OverlayBlend
+  // Translucent remains for truly translucent materials (glass, etc.)
+  enum RenderMode {
+    case opaque          // minA > 0.98: skin/body/clothes (opaque pass, depth write ON, blending OFF)
+    case cutoutCoverage  // pctMid <= 0.01: hair cards/foliage (opaque pass, depth write ON, alpha-to-coverage or discard)
+    case overlayBlend    // pctMid > 0.01: makeup/decals/brows (transparent pass, depth write OFF, blending ON, no dither/cutoff)
+    case translucent     // Legacy: truly translucent materials (glass, etc.) - transparent pass, sorted, depth write OFF
+  }
+  var renderMode: RenderMode = .opaque  // Final render mode for this material
+  var useAlphaHash: Bool = false  // Use alpha-hashed dither for cutoutCoverage (derived from renderMode)
+  var materialName: String? = nil  // Store material name for debugging
+  private var lastLoggedRenderPass: String? = nil
+  private var lastLoggedRenderMode: RenderMode? = nil
+  private var didWarnNoMSAAForCutout: Bool = false
+  private var didLogUVBounds: Bool = false
+  private var didLogMissingTexcoord0: Bool = false
 
   // Node reference for checking visibility (optional)
   weak var node: Node?
@@ -238,6 +264,8 @@ class MeshInstance {
     GLStats.incrementBuffers()
     glGenBuffers(1, &EBO)
     GLStats.incrementBuffers()
+
+    logUVBoundsIfNeeded()
 
     glBindVertexArray(VAO)
     glBindBuffer(GL_ARRAY_BUFFER, VBO)
@@ -271,10 +299,26 @@ class MeshInstance {
       UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.normal)!))
 
     // vertex texture coords
-    glEnableVertexAttribArray(2)
-    glVertexAttribPointer(
-      2, 2, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
-      UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.uv)!))
+    if let uvs = mesh.uvs, !uvs.isEmpty {
+      glEnableVertexAttribArray(2)
+      glVertexAttribPointer(
+        2, 2, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+        UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.uv)!))
+    } else {
+      glDisableVertexAttribArray(2)
+      glVertexAttrib2f(2, 0, 0)
+    }
+
+    // vertex uv1
+    if let uvs1 = mesh.uvs1, !uvs1.isEmpty {
+      glEnableVertexAttribArray(7)
+      glVertexAttribPointer(
+        7, 2, GL_FLOAT, false, GLsizei(MemoryLayout<MeshVertex>.stride),
+        UnsafeRawPointer(bitPattern: MemoryLayout.offset(of: \MeshVertex.uv1)!))
+    } else {
+      glDisableVertexAttribArray(7)
+      glVertexAttrib2f(7, 0, 0)
+    }
 
     // vertex tangents
     glEnableVertexAttribArray(3)
@@ -550,19 +594,19 @@ class MeshInstance {
     buildMeshToNodeMap(node: sceneData.rootNode)
 
     // Debug: Print root node structure
-    logger.debug(
+    logger.trace(
       "Root node: '\(sceneData.rootNode.name)', children: \(sceneData.rootNode.children.count), meshes: \(sceneData.rootNode.meshes.count)"
     )
-    logger.debug(
+    logger.trace(
       "Root node transform translation: (\(sceneData.rootNode.transformation[3].x), \(sceneData.rootNode.transformation[3].y), \(sceneData.rootNode.transformation[3].z))"
     )
 
     // Debug: Print mesh-to-node mapping
-    logger.debug("Mesh-to-node mapping:")
+    logger.trace("Mesh-to-node mapping:")
     for (meshIndex, node) in meshToNodeMap.sorted(by: { $0.key < $1.key }) {
-      logger.debug("  Mesh \(meshIndex) -> Node '\(node.name)' (has \(node.meshes.count) meshes)")
+      logger.trace("  Mesh \(meshIndex) -> Node '\(node.name)' (has \(node.meshes.count) meshes)")
     }
-      logger.debug("Total meshes: \(sceneData.meshes.count), Mapped: \(meshToNodeMap.count)")
+      logger.trace("Total meshes: \(sceneData.meshes.count), Mapped: \(meshToNodeMap.count)")
 
       return sceneData.meshes
       .enumerated()
@@ -581,9 +625,9 @@ class MeshInstance {
             let translation = vec3(m[3].x, m[3].y, m[3].z)
             let localTranslation = vec3(
               node!.transformation[3].x, node!.transformation[3].y, node!.transformation[3].z)
-            logger.debug("Mesh \(index) ('\(mesh.name ?? "unnamed")') transform from node '\(node!.name)':")
-            logger.debug("  World translation: (\(translation.x), \(translation.y), \(translation.z))")
-            logger.debug("  Local translation: (\(localTranslation.x), \(localTranslation.y), \(localTranslation.z))")
+            logger.trace("Mesh \(index) ('\(mesh.name ?? "unnamed")') transform from node '\(node!.name)':")
+            logger.trace("  World translation: (\(translation.x), \(translation.y), \(translation.z))")
+            logger.trace("  Local translation: (\(localTranslation.x), \(localTranslation.y), \(localTranslation.z))")
             if let parent = node!.parent {
               let parentTranslation = vec3(
                 parent.transformation[3].x, parent.transformation[3].y, parent.transformation[3].z)
@@ -594,13 +638,13 @@ class MeshInstance {
                 vec3(parent.transformation[1].x, parent.transformation[1].y, parent.transformation[1].z))
               let parentScaleZ = length(
                 vec3(parent.transformation[2].x, parent.transformation[2].y, parent.transformation[2].z))
-              logger.debug(
+              logger.trace(
                 "  Parent '\(parent.name)' translation: (\(parentTranslation.x), \(parentTranslation.y), \(parentTranslation.z))"
               )
-              logger.debug("  Parent scale: (\(parentScaleX), \(parentScaleY), \(parentScaleZ))")
-              logger.debug("  Parent has parent: \(parent.parent != nil)")
+              logger.trace("  Parent scale: (\(parentScaleX), \(parentScaleY), \(parentScaleZ))")
+              logger.trace("  Parent has parent: \(parent.parent != nil)")
             } else {
-              logger.debug("  Has parent: false")
+              logger.trace("  Has parent: false")
             }
           }
         }
@@ -669,15 +713,51 @@ class MeshInstance {
     draw(
       projection: projection, view: view, modelMatrix: transformMatrix, cameraPosition: cameraPosition,
       lightDirection: lightDirection, lightColor: lightColor, lightIntensity: lightIntensity,
-      fillLightDirection: fillLightDirection, fillLightColor: fillLightColor, fillLightIntensity: fillLightIntensity)
+      fillLightDirection: fillLightDirection, fillLightColor: fillLightColor, fillLightIntensity: fillLightIntensity,
+      effectiveRenderMode: renderMode,
+      showFinalAlpha: false, showClassification: false, cutoutThreshold: 0.5, showUVDebug: false, showUVRaw: false,
+      renderPassName: "DefaultPass",
+      useAlphaHash: false, useAlphaToCoverage: false, usePolygonOffset: false,
+      debugForceTransparentColor: false)
   }
 
   func draw(
     projection: mat4, view: mat4, modelMatrix: mat4, cameraPosition: vec3, lightDirection: vec3, lightColor: vec3,
     lightIntensity: Float, fillLightDirection: vec3, fillLightColor: vec3, fillLightIntensity: Float,
-    diffuseOnly: Bool = false
+    diffuseOnly: Bool = false, showTextureDebug: Bool = false,
+    effectiveRenderMode: RenderMode,
+    showFinalAlpha: Bool = false, showClassification: Bool = false, cutoutThreshold: Float = 0.5,
+    showUVDebug: Bool = false, showUVRaw: Bool = false,
+    renderPassName: String = "UnknownPass",
+    useAlphaHash: Bool = false, useAlphaToCoverage: Bool = false, usePolygonOffset: Bool = false,
+    debugForceTransparentColor: Bool = false  // Temporary debug: force cyan with 0.5 alpha
   ) {
     program.use()
+
+    logDrawIfNeeded(passName: renderPassName, effectiveRenderMode: effectiveRenderMode)
+
+    var effectiveUseAlphaToCoverage = effectiveRenderMode == .cutoutCoverage ? useAlphaToCoverage : false
+    var effectiveUseAlphaHash = useAlphaHash
+    var effectiveCutoutThreshold = cutoutThreshold
+    if effectiveRenderMode == .cutoutCoverage && useAlphaToCoverage {
+      var sampleCount: GLint = 0
+      glGetIntegerv(GL_SAMPLES, &sampleCount)
+      let multisampleEnabled = glIsEnabled(GL_MULTISAMPLE) == GLboolean(GL_TRUE)
+      let msaaEnabled = sampleCount > 1 && multisampleEnabled
+      logger.trace(
+        "🧪 MSAA state for '\(materialName ?? "<unnamed>")': GL_SAMPLES=\(sampleCount), GL_MULTISAMPLE=\(multisampleEnabled ? "ON" : "OFF")"
+      )
+      if !msaaEnabled {
+        effectiveUseAlphaToCoverage = false
+        effectiveUseAlphaHash = true
+        if !didWarnNoMSAAForCutout {
+          logger.warning(
+            "⚠️ CutoutCoverage requested alpha-to-coverage without MSAA; falling back to alpha-hash for '\(materialName ?? "<unnamed>")'"
+          )
+          didWarnNoMSAAForCutout = true
+        }
+      }
+    }
 
     // Set matrices
     program.setMat4("projection", value: projection)
@@ -713,8 +793,36 @@ class MeshInstance {
     // Set HDRI environment map uniforms
     program.setBool("hasEnvironmentMap", value: hasEnvironmentMap)
 
-    // Set debug uniforms
+    // Set debug uniforms (all decisions made in ModelViewer, just pass through)
     program.setBool("diffuseOnly", value: diffuseOnly)
+    program.setBool("showTextureDebug", value: showTextureDebug)
+    program.setBool("showUVDebug", value: showUVDebug)
+    program.setBool("showUVRaw", value: showUVRaw)
+    let baseColorTexCoord = material?.diffuseTexture?.texCoord ?? 0
+    program.setInt("baseColorTexCoord", value: Int32(baseColorTexCoord))
+    let missingTexcoord0 = baseColorTexCoord == 0 && (mesh.uvs == nil || mesh.uvs?.isEmpty == true)
+    program.setBool("missingTexcoord0", value: missingTexcoord0)
+    if missingTexcoord0 && !didLogMissingTexcoord0 {
+      didLogMissingTexcoord0 = true
+      logger.error("❌ Mesh '\(mesh.name ?? "<unnamed>")' missing TEXCOORD_0 while baseColorTexCoord=0.")
+    }
+    program.setBool("isDoubleSided", value: isDoubleSided)
+    program.setBool("useAlphaHash", value: effectiveUseAlphaHash)
+    program.setBool("isOverlayBlend", value: effectiveRenderMode == .overlayBlend)
+    // Pass renderModeId for accurate classification debug (not alphaMode - glTF often marks opaque as BLEND)
+    let renderModeId: Int32
+    switch effectiveRenderMode {
+    case .opaque: renderModeId = 0
+    case .cutoutCoverage: renderModeId = 1
+    case .overlayBlend: renderModeId = 2
+    case .translucent: renderModeId = 3
+    }
+    program.setInt("renderModeId", value: renderModeId)
+    program.setFloat("cutoutThreshold", value: effectiveCutoutThreshold)
+    program.setBool("showFinalAlpha", value: showFinalAlpha)
+    program.setBool("showClassification", value: showClassification)
+    program.setBool("useAlphaToCoverage", value: effectiveUseAlphaToCoverage)
+    program.setBool("debugForceTransparentColor", value: debugForceTransparentColor)  // Temporary debug mode
 
     // Set material properties
     program.setVec3("baseColor", value: (baseColor.x, baseColor.y, baseColor.z))
@@ -722,6 +830,21 @@ class MeshInstance {
     program.setFloat("roughness", value: roughness)
     program.setVec3("emissive", value: (emissive.x, emissive.y, emissive.z))
     program.setFloat("opacity", value: opacity)
+    
+    // Set alpha mode (0=OPAQUE, 1=MASK, 2=BLEND)
+    let alphaModeInt: Int32
+    switch alphaMode {
+    case .opaque:
+      alphaModeInt = 0
+    case .mask:
+      alphaModeInt = 1
+    case .blend:
+      alphaModeInt = 2
+    @unknown default:
+      alphaModeInt = 0
+    }
+    program.setInt("alphaMode", value: alphaModeInt)
+    program.setFloat("alphaCutoff", value: alphaCutoff)
 
     // Bind textures to texture units
     if hasDiffuseTexture {
@@ -757,12 +880,257 @@ class MeshInstance {
       glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap)
     }
 
+    // Use pre-computed render mode (derived from alpha profile)
+    // This ensures consistent behavior across logging, pass routing, and GL state
+    // renderMode drives GL state, not alphaMode
+    
+    // Save and configure OpenGL state for proper rendering
+    let wasBlendEnabled = glIsEnabled(GL_BLEND)
+    let wasDepthTestEnabled = glIsEnabled(GL_DEPTH_TEST)
+    let wasCullFaceEnabled = glIsEnabled(GL_CULL_FACE)
+    let wasPolygonOffsetEnabled = glIsEnabled(GL_POLYGON_OFFSET_FILL)
+    let wasAlphaToCoverageEnabled = glIsEnabled(GL_SAMPLE_ALPHA_TO_COVERAGE)
+    var savedDepthMask: GLboolean = true
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &savedDepthMask)
+    
+    // Handle double-sided rendering (for hair cards like eyebrows/eyelashes)
+    if isDoubleSided {
+      glDisable(GL_CULL_FACE)
+    } else {
+      glEnable(GL_CULL_FACE)
+      glCullFace(GL_BACK)
+    }
+    
+    // Configure GL state based on effectiveRenderMode (may be overridden by transparencyDebugMode)
+    switch effectiveRenderMode {
+    case .opaque:
+      // Opaque: no blending, depth test ON, depth write ON
+      // Standard opaque rendering - depth write ON for proper occlusion
+      glDisable(GL_BLEND)
+      glEnable(GL_DEPTH_TEST)
+      glDepthFunc(GL_LEQUAL)
+      glDepthMask(true)  // Depth write ON for opaque
+      glDisable(GL_POLYGON_OFFSET_FILL)  // No polygon offset for opaque
+      
+    case .cutoutCoverage:
+      // CutoutCoverage/hair cards: use alpha-to-coverage (MSAA) or dither, no blending, depth test ON, depth write ON, opaque pass
+      // This avoids transparent self-occlusion between overlapping alpha cards
+      glDisable(GL_BLEND)
+      glEnable(GL_DEPTH_TEST)
+      glDepthFunc(GL_LEQUAL)
+      glDepthMask(true)  // Depth write ON for stable hair rendering
+      
+      // Enable alpha-to-coverage (MSAA) for smooth coverage without visible striping
+      // This matches Godot/Apple behavior and fixes coverage artifacts on hair cards
+      if effectiveUseAlphaToCoverage {
+        glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+      } else {
+        glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+      }
+      
+      // Enable polygon offset for cutoutCoverage haircards to fix coplanar z-fighting with skin
+      // Character shaders do not write gl_FragDepth, so polygon offset works correctly
+      // Reduced magnitude to fix hairline black fringe (was -2.0, now -0.5)
+      if usePolygonOffset {
+        glEnable(GL_POLYGON_OFFSET_FILL)
+        glPolygonOffset(-0.5, -0.5)  // Reduced offset to fix hairline fringe
+      } else {
+        glDisable(GL_POLYGON_OFFSET_FILL)
+      }
+      
+    case .overlayBlend:
+      // OverlayBlend: makeup/decals/eyebrows - decal-style overlay rendering
+      // Alpha is a coverage mask, not true transparency - render as decal overlay
+      // Depth test ON - clip against skin geometry (don't render through face)
+      // Depth write OFF - don't occlude things behind (decals don't write depth)
+      // Blending ON - alpha is coverage mask for blending
+      glEnable(GL_DEPTH_TEST)   // Depth test ON - clip against skin
+      glDepthFunc(GL_LEQUAL)    // Standard depth comparison
+      glDepthMask(false)         // Depth write OFF (decals don't occlude)
+      glEnable(GL_BLEND)         // Enable blending
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  // Standard alpha blending
+      glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)  // No alpha-to-coverage for smooth blending
+      glDisable(GL_POLYGON_OFFSET_FILL)  // No polygon offset for overlay blend decals
+      
+    case .translucent:
+      // True translucent: normal BLEND, sorted, depth write OFF
+      // Only enable blending if material actually needs it
+      let needsBlending = opacity < 0.999 || hasNonOpaqueAlpha
+      if needsBlending {
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  // Standard alpha blending
+        glEnable(GL_DEPTH_TEST)
+        glDepthFunc(GL_LEQUAL)
+        glDepthMask(false)  // Depth write OFF for transparent objects
+      } else {
+        // Translucent material but effectively opaque: render as opaque
+        glDisable(GL_BLEND)
+        glEnable(GL_DEPTH_TEST)
+        glDepthFunc(GL_LEQUAL)
+        glDepthMask(true)
+      }
+    }
+
+    // Verify we're using filled triangles (GL_TRIANGLES with default GL_FILL mode)
+    // Polygon offset (GL_POLYGON_OFFSET_FILL) only affects filled primitives
+    // This draw call uses GL_TRIANGLES, which is correct for polygon offset
     glBindVertexArray(VAO)
     glDrawElements(GL_TRIANGLES, GLsizei(mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
     glBindVertexArray(0)
+
+    // Restore OpenGL state if we changed it
+    switch effectiveRenderMode {
+    case .opaque:
+      // Restore blending state
+      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+      // Restore depth mask
+      glDepthMask(savedDepthMask)
+      // Restore polygon offset
+      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+      // Restore alpha-to-coverage
+      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+      // Restore depth test state
+      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+      
+    case .cutoutCoverage:
+      // Restore blending state
+      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+      // Restore depth mask
+      glDepthMask(savedDepthMask)
+      // Restore polygon offset
+      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+      // Restore alpha-to-coverage
+      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+      // Restore depth test state
+      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+      
+    case .overlayBlend:
+      // Restore blending state
+      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+      // Restore depth mask
+      glDepthMask(savedDepthMask)
+      // Restore polygon offset
+      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+      // Restore alpha-to-coverage
+      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+      // Restore depth test state
+      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+      
+    case .translucent:
+      // Restore blending state
+      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+      // Restore depth mask
+      glDepthMask(savedDepthMask)
+      // Restore polygon offset
+      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+      // Restore alpha-to-coverage
+      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+      // Restore depth test state
+      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+    }
+    
+    // Restore cull face state to what it was before we changed it
+    if isDoubleSided {
+      // We disabled culling, so restore it if it was enabled
+      if wasCullFaceEnabled {
+        glEnable(GL_CULL_FACE)
+      }
+    } else {
+      // We enabled culling, so restore it if it was disabled
+      if !wasCullFaceEnabled {
+        glDisable(GL_CULL_FACE)
+      }
+    }
   }
 
   // MARK: - Async Texture Loading
+  
+  /// Alpha profile computed from texture alpha channel distribution
+  /// Used for automatic classification of BLEND materials
+  struct AlphaProfile {
+    let minA: Float
+    let maxA: Float
+    let pctOpaque: Float      // Percentage of pixels with alpha > 0.98
+    let pctTransparent: Float // Percentage of pixels with alpha < 0.02
+    let pctMid: Float         // Percentage of pixels with 0.02 <= alpha <= 0.98
+  }
+  
+  /// Compute alpha profile by sampling alpha channel sparsely (every 8th pixel)
+  /// Returns profile with minA, maxA, and percentage distributions
+  private nonisolated func computeAlphaProfile(_ image: ImageFormats.Image<ImageFormats.RGBA>) -> AlphaProfile {
+    let bytes = image.bytes
+    let pixelCount = image.width * image.height
+    guard pixelCount > 0 else {
+      return AlphaProfile(minA: 1.0, maxA: 1.0, pctOpaque: 1.0, pctTransparent: 0.0, pctMid: 0.0)
+    }
+    
+    // Sample every 8th pixel for performance (or every pixel if small texture)
+    let sampleStride = max(1, min(8, pixelCount / 1000))
+    var minAlpha: Float = 1.0
+    var maxAlpha: Float = 0.0
+    var opaqueCount: Int = 0
+    var transparentCount: Int = 0
+    var midCount: Int = 0
+    var totalSamples: Int = 0
+    
+    for i in stride(from: 0, to: pixelCount, by: sampleStride) {
+      let alphaIndex = i * 4 + 3
+      if alphaIndex < bytes.count {
+        let alphaByte = bytes[alphaIndex]
+        let alpha = Float(alphaByte) / 255.0
+        minAlpha = min(minAlpha, alpha)
+        maxAlpha = max(maxAlpha, alpha)
+        totalSamples += 1
+        
+        if alpha > 0.98 {
+          opaqueCount += 1
+        } else if alpha < 0.02 {
+          transparentCount += 1
+        } else {
+          midCount += 1
+        }
+      }
+    }
+    
+    let total = Float(totalSamples)
+    return AlphaProfile(
+      minA: minAlpha,
+      maxA: maxAlpha,
+      pctOpaque: total > 0 ? Float(opaqueCount) / total : 1.0,
+      pctTransparent: total > 0 ? Float(transparentCount) / total : 0.0,
+      pctMid: total > 0 ? Float(midCount) / total : 0.0
+    )
+  }
+  
+  /// Scan texture alpha channel to determine if it has non-opaque pixels
+  /// Returns true if minAlpha < 0.999 (has meaningful transparency)
+  /// DEPRECATED: Use computeAlphaProfile instead for more detailed analysis
+  private nonisolated func scanTextureAlpha(_ image: ImageFormats.Image<ImageFormats.RGBA>) -> Bool {
+    let bytes = image.bytes
+    let pixelCount = image.width * image.height
+    guard pixelCount > 0 else { return false }
+    
+    // Sample alpha channel (every 4th byte, starting at index 3)
+    // Use stride sampling for performance (sample every Nth pixel)
+    let sampleStride = max(1, pixelCount / 1000)  // Sample up to 1000 pixels
+    var minAlpha: Float = 1.0
+    
+    for i in stride(from: 0, to: pixelCount, by: sampleStride) {
+      let alphaIndex = i * 4 + 3
+      if alphaIndex < bytes.count {
+        let alphaByte = bytes[alphaIndex]
+        let alpha = Float(alphaByte) / 255.0
+        minAlpha = min(minAlpha, alpha)
+        
+        // Early exit if we find non-opaque alpha
+        if minAlpha < 0.999 {
+          return true
+        }
+      }
+    }
+    
+    return minAlpha < 0.999
+  }
   
   /// Decode an image on a background thread (CPU-intensive work)
   private nonisolated func decodeImage(data: [UInt8], formatHint: String, displayPath: String, formattedBytes: String) async throws -> DecodedImage {
@@ -772,23 +1140,23 @@ class MeshInstance {
     
     // Decode on background thread
     if isPNG {
-      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+      let image = try logger.measure("\(formattedBytes) decoded \(displayPath)", level: .debug) {
         try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: data) { _ in }
       }
       return .rgba(image: image)
     } else if isWebP {
-      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+      let image = try logger.measure("\(formattedBytes) decoded \(displayPath)", level: .debug) {
         try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: data)
       }
       return .rgba(image: image)
     } else if isJPEG {
-      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+      let image = try logger.measure("\(formattedBytes) decoded \(displayPath)", level: .debug) {
         try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: data)
       }
       return .rgb(image: image)
     } else {
       // Try generic loader
-      let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
+      let image = try logger.measure("\(formattedBytes) decoded \(displayPath)", level: .debug) {
         try ImageFormats.Image<ImageFormats.RGBA>.load(from: data)
       }
       return .rgba(image: image)
@@ -796,7 +1164,11 @@ class MeshInstance {
   }
   
   /// Upload decoded image to GPU on main thread (OpenGL requirement)
-  private func uploadToGPU(decodedImage: DecodedImage, displayPath: String, formattedBytes: String) -> GLuint {
+  private func uploadToGPU(
+    decodedImage: DecodedImage, displayPath: String, formattedBytes: String,
+    wrapS: GLTFWrapMode, wrapT: GLTFWrapMode,
+    flipY: Bool, isSRGB: Bool, minFilter: GLint, mipmapped: Bool
+  ) -> GLuint {
     // Lock to prevent concurrent OpenGL texture uploads from stomping on each other's state
     textureUploadLock.lock()
     defer { textureUploadLock.unlock() }
@@ -821,9 +1193,9 @@ class MeshInstance {
     }
     
     // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrap(wrapS))
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrap(wrapT))
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     
     if glGetError() != GL_NO_ERROR {
@@ -835,8 +1207,14 @@ class MeshInstance {
     // Upload to GPU
     switch decodedImage {
     case .rgba(let image):
-      image.bytes.withUnsafeBytes { bytes in
-        logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+      let bytesToUpload: [UInt8]
+      if flipY {
+        bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+      } else {
+        bytesToUpload = image.bytes
+      }
+      bytesToUpload.withUnsafeBytes { bytes in
+        logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
           glTexImage2D(
             GL_TEXTURE_2D, 0, GL_RGBA,
             GLsizei(image.width), GLsizei(image.height),
@@ -844,8 +1222,14 @@ class MeshInstance {
         }
       }
     case .rgb(let image):
-      image.bytes.withUnsafeBytes { bytes in
-        logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+      let bytesToUpload: [UInt8]
+      if flipY {
+        bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 3)
+      } else {
+        bytesToUpload = image.bytes
+      }
+      bytesToUpload.withUnsafeBytes { bytes in
+        logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
           glTexImage2D(
             GL_TEXTURE_2D, 0, GL_RGB,
             GLsizei(image.width), GLsizei(image.height),
@@ -867,31 +1251,49 @@ class MeshInstance {
   }
   
   /// Load a single texture asynchronously (decode on background, upload on main thread)
-  /// Returns (textureID, hasTexture) tuple
-  private func loadTextureAsync(path: String, context: String) async -> (GLuint, Bool) {
+  /// Returns (textureID, hasTexture, hasNonOpaqueAlpha, alphaProfile) tuple
+  /// hasNonOpaqueAlpha is true if the texture has alpha < 0.999 (only for RGBA textures)
+  /// alphaProfile contains detailed alpha distribution for automatic classification
+  private func loadTextureAsync(
+    path: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool,
+    context: String
+  ) async
+    -> (GLuint, Bool, Bool, AlphaProfile?)
+  {
     // Create stable cache key
-    let cacheKey = path.hasPrefix("*") ? "\(sceneIdentifier)#\(path)" : path
+    let cacheKey = textureCacheKey(
+      path: path, wrapS: wrapS, wrapT: wrapT, flipY: flipY, isSRGB: isSRGB, minFilter: minFilter,
+      mipmapped: mipmapped
+    )
     
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
       logger.trace("Using cached texture for key \(cacheKey)")
-      return (cachedTexture, true)
+      // For cached textures, we can't scan alpha, so assume opaque (conservative)
+      return (cachedTexture, true, false, nil)
     }
     
     // Check if already loading
     if let inflightTask = TextureCache.shared.getInflightLoad(for: cacheKey) {
       logger.trace("Waiting for in-flight texture load: \(cacheKey)")
       do {
-        let textureID = try await inflightTask.value
-        return (textureID, true)
+        let (textureID, _, _) = try await inflightTask.value
+        // For in-flight textures, we can't scan alpha, so assume opaque (conservative)
+        return (textureID, true, false, nil)
       } catch {
         logger.error("In-flight texture load failed for \(cacheKey): \(error)")
-        return (0, false)
+        return (0, false, false, nil)
       }
     }
     
     // Start new load
-    let loadTask = Task<GLuint, Error> {
+    let loadTask = Task<(GLuint, Bool, AlphaProfile?), Error> {
       // Get texture data
       let (data, formatHint, displayPath, formattedBytes): ([UInt8], String, String, String)
       
@@ -957,14 +1359,33 @@ class MeshInstance {
         formattedBytes = textureData.count.formatBytes()
       }
       
-      logger.debug("loading \(formattedBytes) \(displayPath)")
+      logger.trace("loading \(formattedBytes) \(displayPath)")
       
       // Decode on background thread
       let decodedImage = try await decodeImage(data: data, formatHint: formatHint, displayPath: displayPath, formattedBytes: formattedBytes)
       
+      // Compute alpha profile for automatic classification (only for RGBA images)
+      let hasNonOpaqueAlpha: Bool
+      let alphaProfile: AlphaProfile?
+      if case .rgba(let image) = decodedImage {
+        let profile = computeAlphaProfile(image)
+        alphaProfile = profile
+        hasNonOpaqueAlpha = profile.minA < 0.999
+        if hasNonOpaqueAlpha {
+          logger.trace("Texture '\(displayPath)' alpha profile: minA=\(profile.minA), maxA=\(profile.maxA), opaque=\(profile.pctOpaque*100)%, transparent=\(profile.pctTransparent*100)%, mid=\(profile.pctMid*100)%")
+        }
+      } else {
+        // RGB images (JPEG) have no alpha channel, so always opaque
+        hasNonOpaqueAlpha = false
+        alphaProfile = nil
+      }
+      
       // Upload to GPU on main thread (explicitly hop to MainActor)
       let uploadedTextureID = await MainActor.run {
-        uploadToGPU(decodedImage: decodedImage, displayPath: displayPath, formattedBytes: formattedBytes)
+        uploadToGPU(
+          decodedImage: decodedImage, displayPath: displayPath, formattedBytes: formattedBytes,
+          wrapS: wrapS, wrapT: wrapT, flipY: flipY, isSRGB: isSRGB, minFilter: minFilter, mipmapped: mipmapped
+        )
       }
       
       guard uploadedTextureID != 0 else {
@@ -975,7 +1396,7 @@ class MeshInstance {
       TextureCache.shared.cacheTexture(uploadedTextureID, for: cacheKey)
       TextureCache.shared.removeInflightLoad(for: cacheKey)
       
-      return uploadedTextureID
+      return (uploadedTextureID, hasNonOpaqueAlpha, alphaProfile)
     }
     
     // Register in-flight load
@@ -983,12 +1404,12 @@ class MeshInstance {
     
     // Wait for result
     do {
-      let loadedTextureID = try await loadTask.value
-      return (loadedTextureID, true)
+      let (loadedTextureID, hasNonOpaqueAlpha, alphaProfile) = try await loadTask.value
+      return (loadedTextureID, true, hasNonOpaqueAlpha, alphaProfile)
     } catch {
       logger.error("Failed to load texture \(path): \(error)")
       TextureCache.shared.removeInflightLoad(for: cacheKey)
-      return (0, false)
+      return (0, false, false, nil)
     }
   }
   
@@ -1003,28 +1424,81 @@ class MeshInstance {
     let context = getTextureContext(material: material)
 
     // Load all PBR texture types
-    if let path = material.diffuseTexturePath {
-      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+    if let info = material.diffuseTexture {
+      let effectiveWrapS: GLTFWrapMode = info.path == "*1" ? .clamp_to_edge : info.wrapS
+      let effectiveWrapT: GLTFWrapMode = info.path == "*1" ? .clamp_to_edge : info.wrapT
+      let (textureID, hasTexture, hasNonOpaqueAlpha, alphaProfile) = await loadTextureAsync(
+        path: info.path, wrapS: effectiveWrapS, wrapT: effectiveWrapT,
+        flipY: false, isSRGB: true, minFilter: GL_LINEAR, mipmapped: false,
+        context: context
+      )
       diffuseTexture = textureID
       hasDiffuseTexture = hasTexture
+      // Store alpha analysis for BLEND participation logic
+      self.hasNonOpaqueAlpha = hasNonOpaqueAlpha
+      self.alphaProfile = alphaProfile
+    } else {
+      // No texture means no alpha channel, so always opaque
+      self.hasNonOpaqueAlpha = false
+      self.alphaProfile = nil
     }
-    if let path = material.normalTexturePath {
-      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+    
+    // Compute render mode from alpha profile (after all textures loaded)
+    // This ensures renderMode is available for logging, pass routing, and GL state
+    computeRenderMode()
+    
+    // Log render mode and alpha profile for debugging
+    let renderModeString: String
+    switch renderMode {
+    case .opaque: renderModeString = "Opaque"
+    case .cutoutCoverage: renderModeString = "CutoutCoverage"
+    case .overlayBlend: renderModeString = "OverlayBlend"
+    case .translucent: renderModeString = "Translucent"
+    }
+    let materialName = material.name ?? "<unnamed>"
+    let alphaModeStr = alphaMode == .blend ? "BLEND" : (alphaMode == .mask ? "MASK" : "OPAQUE")
+    if let profile = alphaProfile {
+      logger.trace(
+        "🎨 Material '\(materialName)': renderMode=\(renderModeString), alphaMode=\(alphaModeStr), alphaProfile(minA=\(profile.minA), pctOpaque=\(profile.pctOpaque*100)%, pctTransparent=\(profile.pctTransparent*100)%, pctMid=\(profile.pctMid*100)%), useAlphaHash=\(useAlphaHash), isOverlayBlend=\(renderMode == .overlayBlend)"
+      )
+    } else {
+      logger.trace(
+        "🎨 Material '\(materialName)': renderMode=\(renderModeString), alphaMode=\(alphaModeStr), noAlphaProfile, opacity=\(opacity), useAlphaHash=\(useAlphaHash), isOverlayBlend=\(renderMode == .overlayBlend)"
+      )
+    }
+    if let info = material.normalTexture {
+      let (textureID, hasTexture, _, _) = await loadTextureAsync(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        context: context
+      )
       normalTexture = textureID
       hasNormalTexture = hasTexture
     }
-    if let path = material.roughnessTexturePath {
-      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+    if let info = material.roughnessTexture {
+      let (textureID, hasTexture, _, _) = await loadTextureAsync(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        context: context
+      )
       roughnessTexture = textureID
       hasRoughnessTexture = hasTexture
     }
-    if let path = material.metallicTexturePath {
-      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+    if let info = material.metallicTexture {
+      let (textureID, hasTexture, _, _) = await loadTextureAsync(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        context: context
+      )
       metallicTexture = textureID
       hasMetallicTexture = hasTexture
     }
-    if let path = material.aoTexturePath {
-      let (textureID, hasTexture) = await loadTextureAsync(path: path, context: context)
+    if let info = material.aoTexture {
+      let (textureID, hasTexture, _, _) = await loadTextureAsync(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        context: context
+      )
       aoTexture = textureID
       hasAoTexture = hasTexture
     }
@@ -1042,34 +1516,259 @@ class MeshInstance {
     let context = getTextureContext(material: material)
 
     // Load all PBR texture types
-    if let path = material.diffuseTexturePath {
-      loadTextureFromPath(path: path, textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture, context: context)
+    if let info = material.diffuseTexture {
+      let effectiveWrapS: GLTFWrapMode = info.path == "*1" ? .clamp_to_edge : info.wrapS
+      let effectiveWrapT: GLTFWrapMode = info.path == "*1" ? .clamp_to_edge : info.wrapT
+      loadTextureFromPath(
+        path: info.path, wrapS: effectiveWrapS, wrapT: effectiveWrapT,
+        flipY: false, isSRGB: true, minFilter: GL_LINEAR, mipmapped: false,
+        textureID: &diffuseTexture, hasTexture: &hasDiffuseTexture, context: context
+      )
     }
-    if let path = material.normalTexturePath {
-      loadTextureFromPath(path: path, textureID: &normalTexture, hasTexture: &hasNormalTexture, context: context)
+    if let info = material.normalTexture {
+      loadTextureFromPath(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        textureID: &normalTexture, hasTexture: &hasNormalTexture, context: context
+      )
     }
-    if let path = material.roughnessTexturePath {
-      loadTextureFromPath(path: path, textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture, context: context)
+    if let info = material.roughnessTexture {
+      loadTextureFromPath(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        textureID: &roughnessTexture, hasTexture: &hasRoughnessTexture, context: context
+      )
     }
-    if let path = material.metallicTexturePath {
-      loadTextureFromPath(path: path, textureID: &metallicTexture, hasTexture: &hasMetallicTexture, context: context)
+    if let info = material.metallicTexture {
+      loadTextureFromPath(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        textureID: &metallicTexture, hasTexture: &hasMetallicTexture, context: context
+      )
     }
-    if let path = material.aoTexturePath {
-      loadTextureFromPath(path: path, textureID: &aoTexture, hasTexture: &hasAoTexture, context: context)
+    if let info = material.aoTexture {
+      loadTextureFromPath(
+        path: info.path, wrapS: info.wrapS, wrapT: info.wrapT,
+        flipY: false, isSRGB: false, minFilter: GL_LINEAR, mipmapped: false,
+        textureID: &aoTexture, hasTexture: &hasAoTexture, context: context
+      )
     }
   }
 
+  /// Compute render mode from alpha profile and material properties
+  /// Called after texture loading to determine final rendering behavior
+  /// Clean classification based on alpha profile (no name heuristics)
+  private func computeRenderMode() {
+    if alphaMode == .blend, let profile = alphaProfile {
+      let maxExtent = meshMaxExtent()
+      // Automatic classification based on alpha profile
+      if profile.minA > 0.98 {
+        // (1) Opaque: minA > 0.98
+        renderMode = .opaque
+        useAlphaHash = false
+      } else {
+        let dominance = profile.pctOpaque + profile.pctTransparent
+        let isBimodal = profile.minA < 0.1 && profile.maxA > 0.9 && profile.pctMid < 0.02
+        let hairLikeCoverage = profile.pctOpaque > 0.5 && profile.pctTransparent > 0.1
+        let mixedCoverage = profile.pctOpaque > 0.3 && profile.pctTransparent > 0.2
+        let isSmallDecal = maxExtent > 0 && maxExtent < 0.2
+        if dominance > 0.98 || isBimodal || profile.pctMid <= 0.05 || hairLikeCoverage || mixedCoverage {
+          // (2) CutoutCoverage: dominant opaque/transparent or bimodal alpha (hair cards/foliage)
+          renderMode = .cutoutCoverage
+          useAlphaHash = true  // Use alpha-to-coverage or dither for hair cards
+        } else if profile.pctMid > 0.01 {
+          // (3) OverlayBlend: pctMid > 1% for smooth decals (brows/lashes/makeup)
+          renderMode = .overlayBlend
+          useAlphaHash = false
+        } else {
+          // (4) CutoutCoverage: fallback for coverage
+          renderMode = .cutoutCoverage
+          useAlphaHash = true
+        }
+
+        if renderMode == .cutoutCoverage && isSmallDecal {
+          renderMode = .overlayBlend
+          useAlphaHash = false
+        }
+      }
+
+    } else if alphaMode == .blend {
+      // Fallback: if no profile but alphaMode == BLEND, check opacity
+      // If opacity is effectively 1.0, treat as opaque (skin without texture alpha)
+      if opacity >= 0.999 {
+        renderMode = .opaque
+        useAlphaHash = false
+      } else {
+        // Otherwise default to overlayBlend (smooth blending)
+        renderMode = .overlayBlend
+        useAlphaHash = false
+      }
+    } else if alphaMode == .mask {
+      // MASK mode: use cutout-style rendering (discard in shader)
+      renderMode = .cutoutCoverage
+      useAlphaHash = false  // MASK uses alphaCutoff discard, not dither
+    } else {
+      // OPAQUE mode
+      renderMode = .opaque
+      useAlphaHash = false
+    }
+  }
+
+  private func meshMaxExtent() -> Float {
+    guard !mesh.positions.isEmpty else { return 0 }
+    var minX: Float = Float.infinity
+    var minY: Float = Float.infinity
+    var minZ: Float = Float.infinity
+    var maxX: Float = -Float.infinity
+    var maxY: Float = -Float.infinity
+    var maxZ: Float = -Float.infinity
+
+    let count = mesh.positions.count / 3
+    for i in 0..<count {
+      let x = mesh.positions[i * 3 + 0]
+      let y = mesh.positions[i * 3 + 1]
+      let z = mesh.positions[i * 3 + 2]
+      minX = min(minX, x)
+      minY = min(minY, y)
+      minZ = min(minZ, z)
+      maxX = max(maxX, x)
+      maxY = max(maxY, y)
+      maxZ = max(maxZ, z)
+    }
+
+    let extentX = maxX - minX
+    let extentY = maxY - minY
+    let extentZ = maxZ - minZ
+    return max(extentX, max(extentY, extentZ))
+  }
+  
   private func loadMaterialProperties(material: Material) {
+    // Store material name for debugging only (not used for rendering decisions)
+    self.materialName = material.name
     baseColor = material.baseColor
     metallic = material.metallic
     roughness = material.roughness
     emissive = material.emissive
     opacity = material.opacity
+    alphaMode = material.alphaMode
+    alphaCutoff = material.alphaCutoff
+    isDoubleSided = material.isDoubleSided
+    depthBiasRole = material.depthBiasRole  // Explicit depth bias role
   }
 
-  private func loadTextureFromPath(path: String, textureID: inout GLuint, hasTexture: inout Bool, context: String) {
+  private func renderModeLabel(_ mode: RenderMode) -> String {
+    switch mode {
+    case .opaque:
+      return "Opaque"
+    case .cutoutCoverage:
+      return "CutoutCoverage"
+    case .overlayBlend:
+      return "OverlayBlend"
+    case .translucent:
+      return "Translucent"
+    }
+  }
+
+  private func glWrap(_ wrap: GLTFWrapMode) -> GLint {
+    return GLint(wrap.rawValue)
+  }
+
+  private func flippedImageBytes(_ bytes: [UInt8], width: Int, height: Int, channels: Int) -> [UInt8] {
+    let rowBytes = width * channels
+    guard rowBytes > 0 else { return bytes }
+    var flipped = [UInt8](repeating: 0, count: bytes.count)
+    for y in 0..<height {
+      let srcStart = y * rowBytes
+      let dstStart = (height - 1 - y) * rowBytes
+      flipped[dstStart..<dstStart + rowBytes] = bytes[srcStart..<srcStart + rowBytes]
+    }
+    return flipped
+  }
+
+  private func textureCacheKey(
+    path: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool
+  ) -> String {
+    let wrapKey = "#wrapS=\(wrapS.rawValue),wrapT=\(wrapT.rawValue)"
+    let stateKey = "#flipY=\(flipY),srgb=\(isSRGB),minFilter=\(minFilter),mip=\(mipmapped)"
+    return path.hasPrefix("*") ? "\(sceneIdentifier)#\(path)\(wrapKey)\(stateKey)" : "\(path)\(wrapKey)\(stateKey)"
+  }
+
+  private func logUVBoundsIfNeeded() {
+    guard !didLogUVBounds else { return }
+    didLogUVBounds = true
+
+    func uvBoundsLabel(_ label: String, uvs: [Float]?) -> String {
+      guard let uvs, !uvs.isEmpty else {
+        return "\(label)=missing"
+      }
+      var minU: Float = Float.infinity
+      var minV: Float = Float.infinity
+      var maxU: Float = -Float.infinity
+      var maxV: Float = -Float.infinity
+      let pairCount = uvs.count / 2
+      for i in 0..<pairCount {
+        let u = uvs[i * 2 + 0]
+        let v = uvs[i * 2 + 1]
+        minU = min(minU, u)
+        minV = min(minV, v)
+        maxU = max(maxU, u)
+        maxV = max(maxV, v)
+      }
+      return "\(label)=min(\(minU), \(minV)) max(\(maxU), \(maxV))"
+    }
+
+    let name = mesh.name ?? "<unnamed>"
+    let uv0Label = uvBoundsLabel("UV0", uvs: mesh.uvs)
+    let uv1Label = uvBoundsLabel("UV1", uvs: mesh.uvs1)
+    logger.trace("🧭 Mesh '\(name)' UV bounds: \(uv0Label), \(uv1Label)")
+
+  }
+
+  private func logDrawIfNeeded(passName: String, effectiveRenderMode: RenderMode) {
+    let pass = passName.isEmpty ? "UnknownPass" : passName
+    if pass == lastLoggedRenderPass && effectiveRenderMode == lastLoggedRenderMode {
+      return
+    }
+
+    lastLoggedRenderPass = pass
+    lastLoggedRenderMode = effectiveRenderMode
+
+    let name = material?.name ?? materialName ?? "<unnamed>"
+    let renderModeString = renderModeLabel(effectiveRenderMode)
+    if let profile = alphaProfile {
+      logger.trace(
+        "🧾 Draw material '\(name)': pass=\(pass), renderMode=\(renderModeString), alphaProfile(minA=\(profile.minA), pctOpaque=\(profile.pctOpaque * 100)%, pctTransparent=\(profile.pctTransparent * 100)%, pctMid=\(profile.pctMid * 100)%)"
+      )
+    } else {
+      logger.trace(
+        "🧾 Draw material '\(name)': pass=\(pass), renderMode=\(renderModeString), alphaProfile=none"
+      )
+    }
+  }
+
+  private func loadTextureFromPath(
+    path: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool,
+    textureID: inout GLuint,
+    hasTexture: inout Bool,
+    context: String
+  ) {
     // Create stable cache key across loads for embedded textures by using scene file path
-    let cacheKey = path.hasPrefix("*") ? "\(sceneIdentifier)#\(path)" : path
+    let cacheKey = textureCacheKey(
+      path: path, wrapS: wrapS, wrapT: wrapT, flipY: flipY, isSRGB: isSRGB, minFilter: minFilter,
+      mipmapped: mipmapped
+    )
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
@@ -1081,15 +1780,33 @@ class MeshInstance {
 
     // Check if it's an embedded texture (starts with "*")
     if path.hasPrefix("*") {
-      loadEmbeddedTexture(texturePath: path, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture, context: context)
+      loadEmbeddedTexture(
+        texturePath: path, cacheKey: cacheKey, wrapS: wrapS, wrapT: wrapT,
+        flipY: flipY, isSRGB: isSRGB, minFilter: minFilter, mipmapped: mipmapped,
+        textureID: &textureID, hasTexture: &hasTexture, context: context
+      )
     } else {
-      logger.debug("Loading external texture: \(path)")
-      loadExternalTexture(texturePath: path, textureID: &textureID, hasTexture: &hasTexture, context: context)
+      logger.trace("Loading external texture: \(path)")
+      loadExternalTexture(
+        texturePath: path, wrapS: wrapS, wrapT: wrapT,
+        flipY: flipY, isSRGB: isSRGB, minFilter: minFilter, mipmapped: mipmapped,
+        textureID: &textureID, hasTexture: &hasTexture, context: context
+      )
     }
   }
 
   private func loadEmbeddedTexture(
-    texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool, context: String
+    texturePath: String,
+    cacheKey: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool,
+    textureID: inout GLuint,
+    hasTexture: inout Bool,
+    context: String
   ) {
     // Extract texture index from "*0", "*1", "*10", etc.
     // Drop the "*" prefix and parse the remaining string as an integer
@@ -1118,13 +1835,29 @@ class MeshInstance {
       "Embedded texture [\(textureIndex)]: data size=\(embeddedTexture.data.count) bytes, formatHint=\(embeddedTexture.formatHint ?? "nil")"
     )
     createOpenGLTexture(
-      from: embeddedTexture, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID,
+      from: embeddedTexture, texturePath: texturePath, cacheKey: cacheKey, wrapS: wrapS, wrapT: wrapT,
+      flipY: flipY, isSRGB: isSRGB, minFilter: minFilter, mipmapped: mipmapped,
+      textureID: &textureID,
       hasTexture: &hasTexture, context: context)
   }
 
-  private func loadExternalTexture(texturePath: String, textureID: inout GLuint, hasTexture: inout Bool, context: String) {
+  private func loadExternalTexture(
+    texturePath: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool,
+    textureID: inout GLuint,
+    hasTexture: inout Bool,
+    context: String
+  ) {
     // Create cache key for external textures
-    let cacheKey = texturePath
+    let cacheKey = textureCacheKey(
+      path: texturePath, wrapS: wrapS, wrapT: wrapT, flipY: flipY, isSRGB: isSRGB, minFilter: minFilter,
+      mipmapped: mipmapped
+    )
 
     // Check cache first
     if let cachedTexture = TextureCache.shared.getCachedTexture(for: cacheKey) {
@@ -1142,7 +1875,9 @@ class MeshInstance {
     // Try to load from the resolved path
     if let textureData = try? Data(contentsOf: textureURL) {
       loadTextureFromData(
-        textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture, context: context)
+        textureData, texturePath: texturePath, cacheKey: cacheKey, wrapS: wrapS, wrapT: wrapT,
+        flipY: flipY, isSRGB: isSRGB, minFilter: minFilter, mipmapped: mipmapped,
+        textureID: &textureID, hasTexture: &hasTexture, context: context)
       return
     }
 
@@ -1157,7 +1892,9 @@ class MeshInstance {
       let bundleURL = URL(fileURLWithPath: bundlePath)
       if let textureData = try? Data(contentsOf: bundleURL) {
         loadTextureFromData(
-          textureData, texturePath: texturePath, cacheKey: cacheKey, textureID: &textureID, hasTexture: &hasTexture, context: context)
+          textureData, texturePath: texturePath, cacheKey: cacheKey, wrapS: wrapS, wrapT: wrapT,
+          flipY: flipY, isSRGB: isSRGB, minFilter: minFilter, mipmapped: mipmapped,
+          textureID: &textureID, hasTexture: &hasTexture, context: context)
         return
       }
     }
@@ -1166,7 +1903,18 @@ class MeshInstance {
   }
 
   private func loadTextureFromData(
-    _ data: Data, texturePath: String, cacheKey: String, textureID: inout GLuint, hasTexture: inout Bool, context: String
+    _ data: Data,
+    texturePath: String,
+    cacheKey: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool,
+    textureID: inout GLuint,
+    hasTexture: inout Bool,
+    context: String
   ) {
     // Create a temporary EmbeddedTexture-like structure
     let dataArray = Array(data)
@@ -1179,21 +1927,27 @@ class MeshInstance {
 
     let displayPath = "\(bundleRelativeScenePath)\(texturePath)\(context)"
     let formattedBytes = data.count.formatBytes()
-    logger.debug("loading \(formattedBytes) \(displayPath)")
+    logger.trace("loading \(formattedBytes) \(displayPath)")
 
     do {
       if isPNG {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGBA>.loadPNG(from: dataArray) { _ in }
         }
-        image.bytes.withUnsafeBytes { bytes in
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrap(wrapS))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrap(wrapT))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGBA,
               GLsizei(image.width), GLsizei(image.height),
@@ -1205,14 +1959,20 @@ class MeshInstance {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
         }
-        image.bytes.withUnsafeBytes { bytes in
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrap(wrapS))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrap(wrapT))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGBA,
               GLsizei(image.width), GLsizei(image.height),
@@ -1224,14 +1984,20 @@ class MeshInstance {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
         }
-        image.bytes.withUnsafeBytes { bytes in
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 3)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrap(wrapS))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrap(wrapT))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGB,
               GLsizei(image.width), GLsizei(image.height),
@@ -1244,14 +2010,20 @@ class MeshInstance {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
         }
-        image.bytes.withUnsafeBytes { bytes in
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
           glGenTextures(1, &textureID)
           glBindTexture(GL_TEXTURE_2D, textureID)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrap(wrapS))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrap(wrapT))
+          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter)
           glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGBA,
               GLsizei(image.width), GLsizei(image.height),
@@ -1275,6 +2047,12 @@ class MeshInstance {
     from embeddedTexture: EmbeddedTexture,
     texturePath: String,
     cacheKey: String,
+    wrapS: GLTFWrapMode,
+    wrapT: GLTFWrapMode,
+    flipY: Bool,
+    isSRGB: Bool,
+    minFilter: GLint,
+    mipmapped: Bool,
     textureID: inout GLuint,
     hasTexture: inout Bool,
     context: String
@@ -1283,9 +2061,9 @@ class MeshInstance {
     glBindTexture(GL_TEXTURE_2D, textureID)
 
     // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrap(wrapS))
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrap(wrapT))
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
     let data = embeddedTexture.data
@@ -1323,8 +2101,14 @@ class MeshInstance {
             logger.debug("Loading PNG texture: \(progress * 100)%")
           }
         }
-        image.bytes.withUnsafeBytes { bytes in
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGBA,
               GLsizei(image.width), GLsizei(image.height),
@@ -1335,8 +2119,14 @@ class MeshInstance {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGBA>.loadWebP(from: dataArray)
         }
-        image.bytes.withUnsafeBytes { bytes in
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGBA,
               GLsizei(image.width), GLsizei(image.height),
@@ -1347,8 +2137,14 @@ class MeshInstance {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGB>.loadJPEG(from: dataArray)
         }
-        image.bytes.withUnsafeBytes { bytes in
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 3)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGB,
               GLsizei(image.width), GLsizei(image.height),
@@ -1360,8 +2156,14 @@ class MeshInstance {
         let image = try logger.measure("decoded \(formattedBytes) \(displayPath)", level: .debug) {
           try ImageFormats.Image<ImageFormats.RGBA>.load(from: dataArray)
         }
-        image.bytes.withUnsafeBytes { bytes in
-          logger.measure("uploaded \(formattedBytes) \(displayPath)", level: .debug) {
+        let bytesToUpload: [UInt8]
+        if flipY {
+          bytesToUpload = flippedImageBytes(image.bytes, width: image.width, height: image.height, channels: 4)
+        } else {
+          bytesToUpload = image.bytes
+        }
+        bytesToUpload.withUnsafeBytes { bytes in
+          logger.measure("\(formattedBytes) uploaded \(displayPath)", level: .debug) {
             glTexImage2D(
               GL_TEXTURE_2D, 0, GL_RGBA,
               GLsizei(image.width), GLsizei(image.height),
@@ -1571,6 +2373,12 @@ extension Mesh {
       } else {
         t = (0, 0)
       }
+      let t1: (Float, Float)
+      if let uvs1 = uvs1, uvs1.count >= (i * 2 + 2) {
+        t1 = (uvs1[i * 2 + 0], uvs1[i * 2 + 1])
+      } else {
+        t1 = (0, 0)
+      }
       let tangent: (Float, Float, Float)
       if let tangents = tangents, tangents.count >= (i * 3 + 3) {
         tangent = (tangents[i * 3 + 0], tangents[i * 3 + 1], tangents[i * 3 + 2])
@@ -1591,7 +2399,8 @@ extension Mesh {
         MeshVertex(
           position: p,
           normal: n,
-          uv: t,
+        uv: t,
+        uv1: t1,
           tangent: tangent,
           bitangent: bitangent,
           boneIndices: boneIndices,

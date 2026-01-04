@@ -608,7 +608,15 @@ final class PickupView: RenderLoop {
             fillLightDirection: fillLight.direction,
             fillLightColor: fillLight.color,
             fillLightIntensity: fillLight.intensity,
-            diffuseOnly: false
+            diffuseOnly: false,
+            effectiveRenderMode: meshInstance.renderMode,
+            showFinalAlpha: false,
+            showClassification: false,
+            cutoutThreshold: 0.5,
+            renderPassName: "PickupViewItemFramebuffer",
+            useAlphaHash: meshInstance.useAlphaHash,
+            useAlphaToCoverage: true,
+            usePolygonOffset: false
           )
         }
       }
@@ -642,12 +650,14 @@ final class PickupView: RenderLoop {
             lightDirection: light.direction,
             lightColor: light.color,
             lightIntensity: light.intensity,
-            fillLightDirection: fillLight.direction,
-            fillLightColor: fillLight.color,
-            fillLightIntensity: fillLight.intensity,
-            diffuseOnly: false
-          )
-        }
+          fillLightDirection: fillLight.direction,
+          fillLightColor: fillLight.color,
+          fillLightIntensity: fillLight.intensity,
+          diffuseOnly: false,
+          effectiveRenderMode: meshInstance.renderMode,
+          renderPassName: "PickupViewItemDirect"
+        )
+      }
         
         // Show loading spinner in bottom-left corner when textures loading
         if isLoadingTextures {
@@ -693,7 +703,9 @@ final class PickupView: RenderLoop {
           fillLightDirection: fillLight.direction,
           fillLightColor: fillLight.color,
           fillLightIntensity: fillLight.intensity,
-          diffuseOnly: false
+          diffuseOnly: false,
+          effectiveRenderMode: meshInstance.renderMode,
+          renderPassName: "PickupViewItemTransition"
         )
       }
     }

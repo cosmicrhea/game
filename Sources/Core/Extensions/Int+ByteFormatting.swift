@@ -7,23 +7,23 @@ extension Int {
     
     if self >= gb {
       let value = Double(self) / Double(gb)
-      return String(format: "%.1f GB", value)
+      return String(format: "%4.1f GB", value)
     } else if self >= mb {
       let value = Double(self) / Double(mb)
       if value >= 10 {
-        return String(format: "%.0f MB", value)
+        return String(format: "%4.0f MB", value)
       } else {
-        return String(format: "%.1f MB", value)
+        return String(format: "%4.1f MB", value)
       }
     } else if self >= kb {
       let value = Double(self) / Double(kb)
       if value >= 10 {
-        return String(format: "%.0f KB", value)
+        return String(format: "%4.0f KB", value)
       } else {
-        return String(format: "%.1f KB", value)
+        return String(format: "%4.1f KB", value)
       }
     } else {
-      return "\(self) B"
+      return String(format: "%4d B", self)
     }
   }
 }
