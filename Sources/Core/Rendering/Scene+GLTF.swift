@@ -695,7 +695,7 @@ extension Material {
     // Note: renderMode and alphaProfile are determined at texture load time in MeshInstance
     // This initial log shows the glTF material properties; final renderMode is logged after texture loading
     let materialName = self.name ?? "<unnamed>"
-    logger.debug(
+    logger.trace(
       "📦 Material[\(materialIndex)]: name='\(materialName)', alphaMode=\(alphaModeString), opacity=\(opacity), doubleSided=\(isDoubleSided) (renderMode will be computed from alpha profile after texture load)"
     )
   }
@@ -823,12 +823,27 @@ extension Light {
     let innerConeAngle = lightType == .spot ? gltfLight.spotInnerConeAngle : nil
     let outerConeAngle = lightType == .spot ? gltfLight.spotOuterConeAngle : nil
 
+    // Normalize intensity: Blender often exports very high intensities (e.g., 50000+)
+    // GLTF spec uses candela for point/spot, lux for directional, but Blender's units vary
+    // Clamp to reasonable range and scale down if too high
+    var normalizedIntensity = gltfLight.intensity
+    if normalizedIntensity > 100.0 {
+      // If intensity is very high (likely Blender export issue), scale it down
+      // Assume it's in a different unit system and normalize to 0-10 range
+      normalizedIntensity = min(10.0, normalizedIntensity / 1000.0)
+    } else if normalizedIntensity > 10.0 {
+      // Still high but not extreme, scale more gently
+      normalizedIntensity = min(10.0, normalizedIntensity / 10.0)
+    }
+    // Clamp final value to reasonable range (0.1 to 10.0)
+    normalizedIntensity = max(0.1, min(10.0, normalizedIntensity))
+
     self.init(
       name: lightName,
       direction: direction,
       position: vec3(0, 0, 0),  // Will be set from node transform
       color: color,
-      intensity: gltfLight.intensity,
+      intensity: normalizedIntensity,
       range: gltfLight.range > 0 ? gltfLight.range : 100.0,
       type: lightType,
       innerConeAngle: innerConeAngle,
@@ -1262,9 +1277,12 @@ extension Scene {
 
     // Create mapping from GLTF light to our Light type
     var gltfLightToLight: [UnsafeRawPointer: Light] = [:]
+    logger.trace("💡 GLTF document has \(gltfDocument.lights.count) lights defined")
     for gltfLight in gltfDocument.lights {
       let lightPtr = UnsafeRawPointer(gltfLight.underlying)
-      gltfLightToLight[lightPtr] = Light(gltfLight)
+      let light = Light(gltfLight)
+      gltfLightToLight[lightPtr] = light
+      logger.trace("💡 Found GLTF light: name='\(gltfLight.name)', type=\(gltfLight.type), intensity=\(gltfLight.intensity) -> normalized to \(light.intensity)")
     }
 
     var collectedLights: [(light: Light, nodeName: String)] = []
@@ -1332,6 +1350,9 @@ extension Scene {
           }
           light.position = position
           collectedLights.append((light: light, nodeName: gltfNode.name))
+          logger.trace("💡 Collected light from node '\(gltfNode.name)': type=\(light.type), position=\(position), direction=\(light.direction)")
+        } else {
+          logger.warning("⚠️ Node '\(gltfNode.name)' has light pointer but not found in gltfLightToLight map")
         }
       }
 
@@ -1373,6 +1394,8 @@ extension Scene {
     }
 
     let lights = collectedLights.map { $0.light }
+    
+    logger.trace("💡 Total lights collected from GLTF: \(collectedLights.count) (will be \(lights.count) in Scene)")
 
     self.init(
       filePath: filePath,

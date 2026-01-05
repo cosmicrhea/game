@@ -183,9 +183,9 @@ class MeshInstance {
   var EBO: GLuint = 0
 
   // Skeletal animation support
-  private var boneTransforms: [mat4] = []
+  var boneTransforms: [mat4] = []
   private var boneNames: [String] = []
-  private var isSkeletalMesh: Bool = false
+  var isSkeletalMesh: Bool = false
 
   // Animation - uses shared controller for node transforms
   // Bone transforms are calculated per-mesh from shared node transforms
@@ -730,7 +730,10 @@ class MeshInstance {
     showUVDebug: Bool = false, showUVRaw: Bool = false,
     renderPassName: String = "UnknownPass",
     useAlphaHash: Bool = false, useAlphaToCoverage: Bool = false, usePolygonOffset: Bool = false,
-    debugForceTransparentColor: Bool = false  // Temporary debug: force cyan with 0.5 alpha
+    debugForceTransparentColor: Bool = false,  // Temporary debug: force cyan with 0.5 alpha
+    shadowMapTextureUnit: GLenum? = nil, lightSpaceMatrix: mat4? = nil,
+    isShadowCatcher: Bool = false,
+    shadowCatcherDebugColor: Bool = false  // Debug: render shadow catchers as solid color
   ) {
     program.use()
 
@@ -880,9 +883,32 @@ class MeshInstance {
       glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap)
     }
 
+    // Bind shadow map
+    if let shadowMapTextureUnit = shadowMapTextureUnit, let lightSpaceMatrix = lightSpaceMatrix {
+      program.setInt("shadowMap", value: Int32(shadowMapTextureUnit - GL_TEXTURE0))
+      program.setBool("hasShadowMap", value: true)
+      program.setMat4("lightSpaceMatrix", value: lightSpaceMatrix)
+      glActiveTexture(shadowMapTextureUnit)
+      // Shadow map texture is bound by caller
+    } else {
+      program.setBool("hasShadowMap", value: false)
+    }
+    
+    // Set shadow catcher flag
+    program.setBool("isShadowCatcher", value: isShadowCatcher)
+    
+    // Set shadow intensity (default to very light shadows)
+    let shadowIntensity: Float = isShadowCatcher ? 1.0 : 0.15  // Very light shadows on objects, full on catchers
+    program.setFloat("shadowIntensity", value: shadowIntensity)
+    
+    // Set debug color flag for shadow catchers
+    program.setBool("shadowCatcherDebugColor", value: shadowCatcherDebugColor)
+
     // Use pre-computed render mode (derived from alpha profile)
     // This ensures consistent behavior across logging, pass routing, and GL state
     // renderMode drives GL state, not alphaMode
+    
+    let shouldPreserveGLState = isShadowCatcher
     
     // Save and configure OpenGL state for proper rendering
     let wasBlendEnabled = glIsEnabled(GL_BLEND)
@@ -893,81 +919,83 @@ class MeshInstance {
     var savedDepthMask: GLboolean = true
     glGetBooleanv(GL_DEPTH_WRITEMASK, &savedDepthMask)
     
-    // Handle double-sided rendering (for hair cards like eyebrows/eyelashes)
-    if isDoubleSided {
-      glDisable(GL_CULL_FACE)
-    } else {
-      glEnable(GL_CULL_FACE)
-      glCullFace(GL_BACK)
-    }
-    
-    // Configure GL state based on effectiveRenderMode (may be overridden by transparencyDebugMode)
-    switch effectiveRenderMode {
-    case .opaque:
-      // Opaque: no blending, depth test ON, depth write ON
-      // Standard opaque rendering - depth write ON for proper occlusion
-      glDisable(GL_BLEND)
-      glEnable(GL_DEPTH_TEST)
-      glDepthFunc(GL_LEQUAL)
-      glDepthMask(true)  // Depth write ON for opaque
-      glDisable(GL_POLYGON_OFFSET_FILL)  // No polygon offset for opaque
-      
-    case .cutoutCoverage:
-      // CutoutCoverage/hair cards: use alpha-to-coverage (MSAA) or dither, no blending, depth test ON, depth write ON, opaque pass
-      // This avoids transparent self-occlusion between overlapping alpha cards
-      glDisable(GL_BLEND)
-      glEnable(GL_DEPTH_TEST)
-      glDepthFunc(GL_LEQUAL)
-      glDepthMask(true)  // Depth write ON for stable hair rendering
-      
-      // Enable alpha-to-coverage (MSAA) for smooth coverage without visible striping
-      // This matches Godot/Apple behavior and fixes coverage artifacts on hair cards
-      if effectiveUseAlphaToCoverage {
-        glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+    if !shouldPreserveGLState {
+      // Handle double-sided rendering (for hair cards like eyebrows/eyelashes)
+      if isDoubleSided {
+        glDisable(GL_CULL_FACE)
       } else {
-        glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+        glEnable(GL_CULL_FACE)
+        glCullFace(GL_BACK)
       }
       
-      // Enable polygon offset for cutoutCoverage haircards to fix coplanar z-fighting with skin
-      // Character shaders do not write gl_FragDepth, so polygon offset works correctly
-      // Reduced magnitude to fix hairline black fringe (was -2.0, now -0.5)
-      if usePolygonOffset {
-        glEnable(GL_POLYGON_OFFSET_FILL)
-        glPolygonOffset(-0.5, -0.5)  // Reduced offset to fix hairline fringe
-      } else {
-        glDisable(GL_POLYGON_OFFSET_FILL)
-      }
-      
-    case .overlayBlend:
-      // OverlayBlend: makeup/decals/eyebrows - decal-style overlay rendering
-      // Alpha is a coverage mask, not true transparency - render as decal overlay
-      // Depth test ON - clip against skin geometry (don't render through face)
-      // Depth write OFF - don't occlude things behind (decals don't write depth)
-      // Blending ON - alpha is coverage mask for blending
-      glEnable(GL_DEPTH_TEST)   // Depth test ON - clip against skin
-      glDepthFunc(GL_LEQUAL)    // Standard depth comparison
-      glDepthMask(false)         // Depth write OFF (decals don't occlude)
-      glEnable(GL_BLEND)         // Enable blending
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  // Standard alpha blending
-      glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)  // No alpha-to-coverage for smooth blending
-      glDisable(GL_POLYGON_OFFSET_FILL)  // No polygon offset for overlay blend decals
-      
-    case .translucent:
-      // True translucent: normal BLEND, sorted, depth write OFF
-      // Only enable blending if material actually needs it
-      let needsBlending = opacity < 0.999 || hasNonOpaqueAlpha
-      if needsBlending {
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  // Standard alpha blending
-        glEnable(GL_DEPTH_TEST)
-        glDepthFunc(GL_LEQUAL)
-        glDepthMask(false)  // Depth write OFF for transparent objects
-      } else {
-        // Translucent material but effectively opaque: render as opaque
+      // Configure GL state based on effectiveRenderMode (may be overridden by transparencyDebugMode)
+      switch effectiveRenderMode {
+      case .opaque:
+        // Opaque: no blending, depth test ON, depth write ON
+        // Standard opaque rendering - depth write ON for proper occlusion
         glDisable(GL_BLEND)
         glEnable(GL_DEPTH_TEST)
         glDepthFunc(GL_LEQUAL)
-        glDepthMask(true)
+        glDepthMask(true)  // Depth write ON for opaque
+        glDisable(GL_POLYGON_OFFSET_FILL)  // No polygon offset for opaque
+        
+      case .cutoutCoverage:
+        // CutoutCoverage/hair cards: use alpha-to-coverage (MSAA) or dither, no blending, depth test ON, depth write ON, opaque pass
+        // This avoids transparent self-occlusion between overlapping alpha cards
+        glDisable(GL_BLEND)
+        glEnable(GL_DEPTH_TEST)
+        glDepthFunc(GL_LEQUAL)
+        glDepthMask(true)  // Depth write ON for stable hair rendering
+        
+        // Enable alpha-to-coverage (MSAA) for smooth coverage without visible striping
+        // This matches Godot/Apple behavior and fixes coverage artifacts on hair cards
+        if effectiveUseAlphaToCoverage {
+          glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+        } else {
+          glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+        }
+        
+        // Enable polygon offset for cutoutCoverage haircards to fix coplanar z-fighting with skin
+        // Character shaders do not write gl_FragDepth, so polygon offset works correctly
+        // Reduced magnitude to fix hairline black fringe (was -2.0, now -0.5)
+        if usePolygonOffset {
+          glEnable(GL_POLYGON_OFFSET_FILL)
+          glPolygonOffset(-0.5, -0.5)  // Reduced offset to fix hairline fringe
+        } else {
+          glDisable(GL_POLYGON_OFFSET_FILL)
+        }
+        
+      case .overlayBlend:
+        // OverlayBlend: makeup/decals/eyebrows - decal-style overlay rendering
+        // Alpha is a coverage mask, not true transparency - render as decal overlay
+        // Depth test ON - clip against skin geometry (don't render through face)
+        // Depth write OFF - don't occlude things behind (decals don't write depth)
+        // Blending ON - alpha is coverage mask for blending
+        glEnable(GL_DEPTH_TEST)   // Depth test ON - clip against skin
+        glDepthFunc(GL_LEQUAL)    // Standard depth comparison
+        glDepthMask(false)         // Depth write OFF (decals don't occlude)
+        glEnable(GL_BLEND)         // Enable blending
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  // Standard alpha blending
+        glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)  // No alpha-to-coverage for smooth blending
+        glDisable(GL_POLYGON_OFFSET_FILL)  // No polygon offset for overlay blend decals
+        
+      case .translucent:
+        // True translucent: normal BLEND, sorted, depth write OFF
+        // Only enable blending if material actually needs it
+        let needsBlending = opacity < 0.999 || hasNonOpaqueAlpha
+        if needsBlending {
+          glEnable(GL_BLEND)
+          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  // Standard alpha blending
+          glEnable(GL_DEPTH_TEST)
+          glDepthFunc(GL_LEQUAL)
+          glDepthMask(false)  // Depth write OFF for transparent objects
+        } else {
+          // Translucent material but effectively opaque: render as opaque
+          glDisable(GL_BLEND)
+          glEnable(GL_DEPTH_TEST)
+          glDepthFunc(GL_LEQUAL)
+          glDepthMask(true)
+        }
       }
     }
 
@@ -979,54 +1007,56 @@ class MeshInstance {
     glBindVertexArray(0)
 
     // Restore OpenGL state if we changed it
-    switch effectiveRenderMode {
-    case .opaque:
-      // Restore blending state
-      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
-      // Restore depth mask
-      glDepthMask(savedDepthMask)
-      // Restore polygon offset
-      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
-      // Restore alpha-to-coverage
-      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
-      // Restore depth test state
-      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-      
-    case .cutoutCoverage:
-      // Restore blending state
-      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
-      // Restore depth mask
-      glDepthMask(savedDepthMask)
-      // Restore polygon offset
-      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
-      // Restore alpha-to-coverage
-      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
-      // Restore depth test state
-      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-      
-    case .overlayBlend:
-      // Restore blending state
-      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
-      // Restore depth mask
-      glDepthMask(savedDepthMask)
-      // Restore polygon offset
-      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
-      // Restore alpha-to-coverage
-      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
-      // Restore depth test state
-      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
-      
-    case .translucent:
-      // Restore blending state
-      if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
-      // Restore depth mask
-      glDepthMask(savedDepthMask)
-      // Restore polygon offset
-      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
-      // Restore alpha-to-coverage
-      if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
-      // Restore depth test state
-      if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+    if !shouldPreserveGLState {
+      switch effectiveRenderMode {
+      case .opaque:
+        // Restore blending state
+        if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+        // Restore depth mask
+        glDepthMask(savedDepthMask)
+        // Restore polygon offset
+        if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+        // Restore alpha-to-coverage
+        if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+        // Restore depth test state
+        if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+        
+      case .cutoutCoverage:
+        // Restore blending state
+        if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+        // Restore depth mask
+        glDepthMask(savedDepthMask)
+        // Restore polygon offset
+        if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+        // Restore alpha-to-coverage
+        if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+        // Restore depth test state
+        if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+        
+      case .overlayBlend:
+        // Restore blending state
+        if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+        // Restore depth mask
+        glDepthMask(savedDepthMask)
+        // Restore polygon offset
+        if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+        // Restore alpha-to-coverage
+        if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+        // Restore depth test state
+        if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+        
+      case .translucent:
+        // Restore blending state
+        if wasBlendEnabled { glEnable(GL_BLEND) } else { glDisable(GL_BLEND) }
+        // Restore depth mask
+        glDepthMask(savedDepthMask)
+        // Restore polygon offset
+        if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+        // Restore alpha-to-coverage
+        if wasAlphaToCoverageEnabled { glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE) } else { glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE) }
+        // Restore depth test state
+        if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
+      }
     }
     
     // Restore cull face state to what it was before we changed it

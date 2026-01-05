@@ -63,6 +63,73 @@ uniform vec3 fillLightColor;
 uniform float fillLightIntensity;
 uniform vec3 cameraPosition;
 
+// Shadow map uniforms
+// Use sampler2DShadow for depth textures, but we're doing manual PCF so use sampler2D
+uniform sampler2D shadowMap;
+uniform bool hasShadowMap;
+uniform mat4 lightSpaceMatrix;
+uniform bool isShadowCatcher;  // If true, only render shadows (make base material transparent)
+uniform float shadowIntensity;  // How strong shadows are (0.0 = no shadows, 1.0 = full shadows)
+uniform bool shadowCatcherDebugColor;  // Debug: render shadow catchers as solid color
+
+// Shadow calculation function
+float calculateShadow(vec3 fragPos, vec3 normal, vec3 lightDir) {
+  if (!hasShadowMap) return 0.0;
+  
+  // Transform fragment position to light space
+  vec4 fragPosLightSpace = lightSpaceMatrix * vec4(fragPos, 1.0);
+  
+  // Perspective divide
+  vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+  
+  // Transform to [0,1] range
+  projCoords = projCoords * 0.5 + 0.5;
+  
+  // Check if fragment is outside shadow map
+  if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
+      projCoords.y < 0.0 || projCoords.y > 1.0 ||
+      projCoords.z > 1.0 || projCoords.z < 0.0) {
+    return 0.0; // Outside shadow map, assume lit
+  }
+  
+  // Get closest depth from light's perspective
+  // Note: If using GL_TEXTURE_COMPARE_MODE, texture() returns comparison result (0 or 1)
+  // Otherwise, it returns the depth value directly
+  float closestDepth = texture(shadowMap, projCoords.xy).r;
+  
+  // Get current depth
+  float currentDepth = projCoords.z;
+  
+  // DEBUG: If shadow map is all white (1.0 = far plane), return 0.0 (no shadow)
+  // But also check if currentDepth is valid
+  if (closestDepth >= 0.999 || currentDepth >= 0.999) {
+    return 0.0; // Shadow map not initialized or nothing rendered, assume lit
+  }
+  
+  // Check if current fragment is in shadow
+  // Add bias to prevent shadow acne
+  float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+  
+  // Shadow calculation:
+  // - closestDepth: depth of closest object from light's perspective (from shadow map)
+  // - currentDepth: depth of current fragment from light's perspective
+  // - If currentDepth > closestDepth, something is between us and the light = shadowed
+  // - We add bias to prevent shadow acne (self-shadowing artifacts)
+  float shadow = 0.0;
+  vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+  for (int x = -1; x <= 1; ++x) {
+    for (int y = -1; y <= 1; ++y) {
+      vec2 offset = vec2(x, y) * texelSize;
+      float pcfDepth = texture(shadowMap, projCoords.xy + offset).r;
+      // If current depth (minus bias) is greater than closest depth, we're in shadow
+      shadow += (currentDepth - bias > pcfDepth) ? 1.0 : 0.0;
+    }
+  }
+  shadow /= 9.0;
+  
+  return shadow;
+}
+
 // PBR functions
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
   return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
@@ -156,6 +223,40 @@ void main() {
     return;
   }
   
+  // Shadow matte pass: shadow catchers output ONLY shadowFactor, no lighting/albedo
+  if (isShadowCatcher) {
+    // DEBUG: Render as solid color (cyan) to see geometry
+    if (shadowCatcherDebugColor) {
+      FragColor = vec4(0.0, 1.0, 1.0, 1.0);
+      return;
+    }
+    
+    // Shadow matte: sample shadow map and output shadowFactor
+    // No albedo, no lighting, no normal calculations - pure shadow sampling
+    if (!hasShadowMap) {
+      // No shadow map: output hot magenta to make failure obvious
+      FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+      return;
+    }
+    
+    // Calculate shadow factor from shadow map
+    // We need FragPos and light direction, but skip all lighting calculations
+    vec3 L1 = normalize(-lightDirection);
+    vec3 N = normalize(Normal);  // Use vertex normal only, no normal maps
+    float shadowAmount = calculateShadow(FragPos, N, L1);
+    
+    // Convert shadow amount to shadowFactor for multiply blend
+    // shadowAmount: 0.0 = fully lit, 1.0 = fully shadowed
+    // shadowFactor: 1.0 = fully lit (no darkening), <1.0 = shadowed (darkens)
+    // With multiply blend: result = background * shadowFactor
+    float shadowFactor = 1.0 - (shadowAmount * 0.6);  // 0.6 = shadow darkness (40% minimum brightness)
+    
+    // Output shadowFactor as RGB (grayscale) for multiply blend
+    // This darkens the background where shadowed, leaves it unchanged where lit
+    FragColor = vec4(shadowFactor, shadowFactor, shadowFactor, 1.0);
+    return;  // Early return - skip all lighting/albedo calculations
+  }
+  
   // Handle alpha mode: MASK (discard), BLEND (use alpha), OPAQUE (ignore alpha)
   // alphaMode: 0=OPAQUE, 1=MASK, 2=BLEND
   // CRITICAL: OverlayBlend must NEVER discard, never alpha-hash, never suppress specular
@@ -244,6 +345,14 @@ void main() {
   vec3 L1 = normalize(-lightDirection);
   vec3 H1 = normalize(V + L1);
   float NdotL1 = max(dot(N, L1), 0.0);
+  
+  // Calculate shadow factor for main light
+  // Apply shadow intensity to make shadows lighter
+  float rawShadow = calculateShadow(FragPos, N, L1);
+  float shadowFactor = 1.0 - (rawShadow * shadowIntensity);
+  
+  // Store rawShadow for shadow catchers (they need full shadow intensity)
+  float shadowForCatchers = rawShadow;
   
   // Fill light
   vec3 L2 = normalize(-fillLightDirection);
@@ -354,8 +463,10 @@ void main() {
   vec3 microDetails = vec3(noise);
   
   // Combine all lighting with enhanced effects
+  // Apply shadow factor to main light (diffuse and specular)
+  // Normal rendering (shadow catchers already handled above with early return)
   vec3 color = (ambient + subsurface) * microDetails + 
-               (diffuse1 + enhancedSpecular1) * lightColor * lightIntensity * NdotL1 +
+               (diffuse1 + enhancedSpecular1) * lightColor * lightIntensity * NdotL1 * shadowFactor +
                (diffuse2 + enhancedSpecular2) * fillLightColor * fillLightIntensity * NdotL2 * 0.8 +
                environment +  // Add environment reflections
                emissive;  // Add emissive lighting
@@ -375,6 +486,7 @@ void main() {
   color = mix(vec3(luminance), color, 0.9);
   
   // Output alpha: 
+  // - Shadow catchers: already handled with early return above
   // - OPAQUE mode: always 1.0 (ignore finalAlpha) - critical for depth testing
   // - OverlayBlend: use finalAlpha for coverage-mask blending (alpha is coverage, not true transparency)
   // - CutoutCoverage: use finalAlpha for alpha-to-coverage or discard (already handled above)

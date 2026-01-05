@@ -4,7 +4,8 @@ from os import getenv
 
 
 #SAMPLES = 1
-SAMPLES = 128
+SAMPLES = 10
+#SAMPLES = 128
 #SAMPLES = 512
 #SAMPLES = 1024
 #SAMPLES = 4096

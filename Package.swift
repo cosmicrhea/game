@@ -119,7 +119,7 @@ let package = Package(
       ],
 
       swiftSettings: [
-        .define("HOTLOAD_SHADERS")
+        //.define("HOTLOAD_SHADERS")
         //.define("EDITOR"),
       ],
 

@@ -28,6 +28,9 @@ public final class PlayerController {
   private var previousPlayerPosition: vec3 = vec3(0, 0, 0)
   private let footstepDistanceWalk: Float = 1.2  // Distance between footsteps when walking
   private let footstepDistanceRun: Float = 1.5  // Distance between footsteps when running (faster rate)
+  
+  // Whether to use distance-based footsteps (disabled when using frame-based footsteps)
+  private var useDistanceBasedFootsteps: Bool = true
 
   // Current footstep sound type (defaults to .default)
   private var currentFootstepSound: FootstepSound = .default
@@ -461,23 +464,25 @@ public final class PlayerController {
       movementState = .idle
     }
 
-    // Only accumulate distance and play footsteps if moving
+    // Only accumulate distance and play footsteps if moving (and using distance-based footsteps)
     // RE-like game: no jumping/falling, so footsteps always play when moving
     // let isOnGround = characterController.groundState != .inAir
-    if finalIsMoving {
-      footstepAccumulatedDistance += distanceMoved
+    if useDistanceBasedFootsteps {
+      if finalIsMoving {
+        footstepAccumulatedDistance += distanceMoved
 
-      // Determine footstep rate based on running vs walking
-      let footstepThreshold = speedMultiplier > 1.0 ? footstepDistanceRun : footstepDistanceWalk
+        // Determine footstep rate based on running vs walking
+        let footstepThreshold = speedMultiplier > 1.0 ? footstepDistanceRun : footstepDistanceWalk
 
-      // Play footstep when threshold is reached
-      if footstepAccumulatedDistance >= footstepThreshold {
-        UISound.footstep(currentFootstepSound)
-        footstepAccumulatedDistance = 0.0  // Reset accumulator
+        // Play footstep when threshold is reached
+        if footstepAccumulatedDistance >= footstepThreshold {
+          UISound.footstep(currentFootstepSound)
+          footstepAccumulatedDistance = 0.0  // Reset accumulator
+        }
+      } else {
+        // Not moving - reset accumulator
+        footstepAccumulatedDistance = 0.0
       }
-    } else {
-      // Not moving - reset accumulator
-      footstepAccumulatedDistance = 0.0
     }
 
     // Update previous position for next frame
@@ -513,6 +518,15 @@ public final class PlayerController {
   /// Set the current footstep sound type
   public func setFootstepSound(_ sound: FootstepSound) {
     currentFootstepSound = sound
+  }
+  
+  /// Enable or disable distance-based footsteps (disable when using frame-based footsteps)
+  public func setUseDistanceBasedFootsteps(_ enabled: Bool) {
+    useDistanceBasedFootsteps = enabled
+    if !enabled {
+      // Reset accumulator when disabling
+      footstepAccumulatedDistance = 0.0
+    }
   }
 
   // MARK: - Sensor Box Query Support

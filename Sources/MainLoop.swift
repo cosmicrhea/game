@@ -4,8 +4,11 @@ import GLTF
 import Jolt
 import struct GLMath.Quaternion
 
-private let startingScene = "tunnels"
+private let startingScene = "test"
 private let startingEntry = "1"
+
+// private let startingScene = "tunnels"
+// private let startingEntry = "1"
 
 // private let startingScene = "nexus"
 // private let startingEntry = "8"
@@ -38,6 +41,19 @@ private let startingEntry = "1"
   private enum PlayerCharacter {
     case woman
     case debugCapsule
+    
+    /// Footstep frames for animations (frame numbers where footsteps should play)
+    var footstepFrames: [String: [Int]] {
+      switch self {
+      case .woman:
+        return [
+          "walk": [12, 25],
+          "run": [9, 19],
+        ]
+      case .debugCapsule:
+        return [:]
+      }
+    }
   }
 
   private var playerCharacter: PlayerCharacter = .woman  // Switch to .debugCapsule to use the capsule
@@ -66,6 +82,8 @@ private let startingEntry = "1"
   private var playerAnimationIndices: [PlayerController.MovementState: Int] = [:]
   private var currentPlayerAnimationState: PlayerController.MovementState = .idle
   private var isLoadingPlayerModel: Bool = false
+  // Track last frame we played a footstep on (to avoid playing multiple times per frame)
+  private var lastFootstepFrame: Int = -1
   private let playerHeadLookAtBoneBaseName = "mixamorig:Head"
   private let playerHeadLookAtMaxYawDegrees: Float = 40.0
   private let playerHeadLookAtMaxPitchUpDegrees: Float = 25.0
@@ -80,6 +98,9 @@ private let startingEntry = "1"
 
   // Foreground meshes from scene (nodes with -fg suffix)
   private var foregroundMeshInstances: [MeshInstance] = []
+  
+  // Shadow catcher meshes (nodes with @Shadow hint, may or may not have @Foreground)
+  private var shadowCatcherMeshInstances: [MeshInstance] = []
   
   // Loading state for foreground textures
   private var isLoadingForegroundTextures: Bool = false
@@ -110,6 +131,27 @@ private let startingEntry = "1"
   @Editor @ConfigValue var disableEnemies: Bool = false
   private var showDebugText: Bool = true
   @Editor @ConfigValue var showEnemyDebugOverlay: Bool = false
+  
+  // Shadow debugging
+  @Editor var enableShadows: Bool = true
+  @Editor var shadowsOnAllObjects: Bool = true  // If false, shadows only appear on shadow catchers
+  @Editor var visualizeShadowMap: Bool = false
+  @Editor(80...240) var shadowMapDebugSize: Float = 200.0
+  @Editor var disablePrerenderedEnvironment: Bool = false  // Debug: disable prerendered background
+  @Editor var shadowCatcherDebugColor: Bool = false  // Debug: render shadow catchers as solid color
+  @Editor var lightIntensityMultiplier: Float = 1.0  // Multiply all light intensities by this value
+  
+  // Shadow debug logging timers
+  private var lastShadowLogTime: Double = 0
+  private var lastCatcherLogTime: Double = 0
+  private var lastWarningTime: Double = 0
+  private var hasLoggedShadowMap: Bool = false
+  private var hasLoggedNoShadowMap: Bool = false
+  private var hasLoggedNoLightSpace: Bool = false
+  private var hasLoggedVisualization: Bool = false
+  private var hasLoggedNoShadowMapForViz: Bool = false
+  private var hasLoggedPointLightShadowWarning: Bool = false
+  private var hasLoadedScene: Bool = false
 
   @Editor(-1.0...10.0, displayName: "Mist Start") var mistStartOverride: Float = -1.0 {
     didSet { prerenderedEnvironment?.debugMistStartOverride = mistStartOverride }
@@ -135,6 +177,7 @@ private let startingEntry = "1"
 
   // Prerendered environment renderer
   private var prerenderedEnvironment: PrerenderedEnvironment?
+  private var shadowMap: ShadowMap?
 
   //@Editable
   var nearestNeighbor: Bool = true {
@@ -217,6 +260,11 @@ private let startingEntry = "1"
     physicsWorld = PhysicsWorld(renderLoop: self)
     cameraSystem = CameraSystem()
     playerController = PlayerController(physicsWorld: physicsWorld)
+    
+    // Initialize shadow map
+    shadowMap = ShadowMap(resolution: 2048)
+    // Configure footstep system based on character type
+    playerController.setUseDistanceBasedFootsteps(playerCharacter == .debugCapsule)
     // InteractionSystem needs all three systems, so create it last
     interactionSystem = InteractionSystem(
       physicsWorld: physicsWorld,
@@ -255,26 +303,72 @@ private let startingEntry = "1"
   }
 
   /// Load scene lights and their world transforms
+  /// Note: With GLTF, lights already have position and direction set from node transforms during parsing
+  /// We just need to create world transform matrices from the light's stored data
   private func loadSceneLights() {
-    guard let scene = self.scene else { return }
+    guard let scene = self.scene else {
+      logger.warning("⚠️ [MainLoop] loadSceneLights: scene is nil")
+      return
+    }
     sceneLights.removeAll()
 
+    logger.info("💡 [MainLoop] Loading lights from scene (total lights in scene: \(scene.lights.count))")
+    
     for light in scene.lights {
-      guard let lightName = light.name else { continue }
-
-      // Find the node with the same name as the light
-      if let lightNode = scene.rootNode.findNode(named: lightName) {
-        let worldTransform = lightNode.calculateWorldTransform()
-        sceneLights.append((light: light, worldTransform: worldTransform))
-        logger.trace("💡 Loaded light '\(lightName)' type: \(light.type)")
+      let lightName = light.name ?? "<unnamed>"
+      
+      // Create world transform matrix from light's stored position and direction
+      // Lights already have position and direction set from GLTF node transforms during parsing
+      var worldTransform: mat4
+      
+      if light.type == .directional || light.type == .spot {
+        // For directional/spot lights, create a view matrix looking along the light direction
+        // The position is where the light "starts" from, but for directional lights
+        // we need to create a transform that represents the light's orientation
+        let dir = normalize(light.direction)
+        let target = light.position + dir
+        let up = safeUpVector(for: dir)
+        let viewMatrix = GLMath.lookAt(light.position, target, up)
+        // Invert to get world transform (lookAt gives view matrix, we need world)
+        worldTransform = inverse(viewMatrix)
       } else {
-        logger.warning("⚠️ Light node '\(lightName)' not found in scene graph")
+        // For point lights, just translate to position
+        worldTransform = GLMath.translate(mat4(1), light.position)
       }
+      
+      sceneLights.append((light: light, worldTransform: worldTransform))
+      logger.info("💡 [MainLoop] Loaded light '\(lightName)': type=\(light.type), direction=\(light.direction), color=\(light.color), intensity=\(light.intensity), position=\(light.position)")
     }
 
+    logger.info("💡 [MainLoop] Total loaded lights: \(sceneLights.count)")
     if sceneLights.isEmpty {
-      logger.warning("⚠️ No lights found in scene")
+      logger.warning("⚠️ [MainLoop] No lights found in scene - will use default lighting")
     }
+  }
+
+  private func safeUpVector(for direction: vec3) -> vec3 {
+    let worldUp = vec3(0, 1, 0)
+    let dir = normalize(direction)
+    return abs(dot(dir, worldUp)) > 0.98 ? vec3(0, 0, 1) : worldUp
+  }
+
+  private func worldDirection(from worldTransform: mat4) -> vec3 {
+    let rotMatrix = mat3(
+      vec3(worldTransform[0].x, worldTransform[0].y, worldTransform[0].z),
+      vec3(worldTransform[1].x, worldTransform[1].y, worldTransform[1].z),
+      vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
+    )
+    return normalize(rotMatrix * vec3(0, 0, -1))
+  }
+
+  private func selectShadowLight() -> (light: Light, worldTransform: mat4)? {
+    if let directional = sceneLights.first(where: { $0.light.type == .directional }) {
+      return directional
+    }
+    if let spot = sceneLights.first(where: { $0.light.type == .spot }) {
+      return spot
+    }
+    return sceneLights.first
   }
 
   /// Load foreground meshes from nodes with @Foreground hint
@@ -316,9 +410,49 @@ private let startingEntry = "1"
     }
 
     logger.trace("✅ Loaded \(foregroundMeshInstances.count) foreground mesh instances")
+  }
+  
+  /// Load shadow catcher meshes from nodes with @Shadow hint only
+  private func loadShadowCatcherMeshes(scene: Scene) async {
+    shadowCatcherMeshInstances.removeAll()
     
-    // Load textures asynchronously for all foreground meshes
-    if !foregroundMeshInstances.isEmpty {
+    // Use scene.shadowNodes - these should only contain nodes with @Shadow (not @Foreground)
+    for node in scene.shadowNodes {
+      let name = node.name
+      
+      // Get all meshes from this node
+      for i in 0..<node.numberOfMeshes {
+        let meshIndex = node.meshes[i]
+        if meshIndex < scene.meshes.count {
+          let mesh = scene.meshes[meshIndex]
+          
+          // Only create instance if mesh has vertices
+          guard mesh.numberOfVertices > 0 else { continue }
+          
+          // Get transform matrix for this mesh
+          let transformMatrix = scene.getTransformMatrix(for: meshIndex)
+          
+          // Create MeshInstance
+          let meshInstance = MeshInstance(
+            sceneData: scene,
+            mesh: mesh,
+            transformMatrix: transformMatrix,
+            sceneIdentifier: scene.filePath
+          )
+          
+          // Store node reference
+          meshInstance.node = node
+          
+          shadowCatcherMeshInstances.append(meshInstance)
+          logger.info("🌑 Created shadow catcher MeshInstance for node '\(name)' mesh \(i)")
+        }
+      }
+    }
+    
+    logger.info("🌑 Loaded \(shadowCatcherMeshInstances.count) shadow catcher mesh instances")
+    
+    // Load textures asynchronously for shadow catchers
+    if !shadowCatcherMeshInstances.isEmpty {
       logger.trace("🎨 Loading textures for \(foregroundMeshInstances.count) foreground meshes...")
       isLoadingForegroundTextures = true
       foregroundLoadingSpinner.isVisible = true
@@ -388,50 +522,55 @@ private let startingEntry = "1"
     fillLight: (direction: vec3, color: vec3, intensity: Float)
   ) {
     // Default lighting
-    var mainLight = (direction: vec3(0, -1, 0), color: vec3(1, 1, 1), intensity: Float(1.0))
-    var fillLight = (direction: vec3(-0.3, -0.5, -0.2), color: vec3(0.8, 0.9, 1.0), intensity: Float(0.4))
+    var mainLight = (direction: vec3(0, -1, 0), color: vec3(1, 1, 1), intensity: Float(1.0) * lightIntensityMultiplier)
+    var fillLight = (direction: vec3(-0.3, -0.5, -0.2), color: vec3(0.8, 0.9, 1.0), intensity: Float(0.4) * lightIntensityMultiplier)
+
+    // Removed per-frame log spam
 
     // Use first directional light as main light
     if let firstDirectionalLight = sceneLights.first(where: { $0.light.type == .directional }) {
       let light = firstDirectionalLight.light
       let worldTransform = firstDirectionalLight.worldTransform
 
-      // Transform light direction to world space
-      // Light direction is in local space, transform it using the rotation part of the world transform
-      let localDir = vec3(light.direction.x, light.direction.y, light.direction.z)
-      // Extract rotation matrix (first 3x3) and transform the direction
-      let rotMatrix = mat3(
-        vec3(worldTransform[0].x, worldTransform[0].y, worldTransform[0].z),
-        vec3(worldTransform[1].x, worldTransform[1].y, worldTransform[1].z),
-        vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
-      )
-      let worldDir = normalize(rotMatrix * localDir)
-
-      // Use negative direction (light points toward negative direction)
-      mainLight.direction = -worldDir
+      let worldDir = worldDirection(from: worldTransform)
+      mainLight.direction = worldDir
       mainLight.color = light.color
-      mainLight.intensity = light.intensity
+      mainLight.intensity = light.intensity * lightIntensityMultiplier
 
-      logger.trace(
-        "💡 Using directional light '\(light.name ?? "unnamed")' - direction: \(mainLight.direction), color: \(mainLight.color)"
-      )
+      // Removed per-frame log spam
+    } else if let firstLight = sceneLights.first {
+      // Fallback: Use first light for lighting if no directional light is present
+      let light = firstLight.light
+      let worldTransform = firstLight.worldTransform
+      
+      var worldDir: vec3
+      
+      if light.type == .point {
+        let lightPos = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
+        worldDir = normalize(playerPosition - lightPos)
+      } else {
+        // Spot light - use orientation-based direction
+        worldDir = worldDirection(from: worldTransform)
+      }
+      
+      mainLight.direction = worldDir
+      mainLight.color = light.color
+      mainLight.intensity = light.intensity * lightIntensityMultiplier
+      
+      // Removed per-frame log spam
+    } else {
+      logger.info("💡 [MainLoop] No lights found, using default main light: direction=\(mainLight.direction)")
     }
 
-    // Use second directional light or first point light as fill light if available
+    // Use second light as fill if available
     if sceneLights.count > 1 {
       let secondLight = sceneLights[1]
       let light = secondLight.light
       let worldTransform = secondLight.worldTransform
 
-      if light.type == .directional {
-        let localDir = vec3(light.direction.x, light.direction.y, light.direction.z)
-        let rotMatrix = mat3(
-          vec3(worldTransform[0].x, worldTransform[0].y, worldTransform[0].z),
-          vec3(worldTransform[1].x, worldTransform[1].y, worldTransform[1].z),
-          vec3(worldTransform[2].x, worldTransform[2].y, worldTransform[2].z)
-        )
-        let worldDir = normalize(rotMatrix * localDir)
-        fillLight.direction = -worldDir
+      if light.type == .directional || light.type == .spot {
+        let worldDir = worldDirection(from: worldTransform)
+        fillLight.direction = worldDir
       } else if light.type == .point {
         // For point lights, calculate direction from light position to player
         let lightPos = vec3(worldTransform[3].x, worldTransform[3].y, worldTransform[3].z)
@@ -440,10 +579,161 @@ private let startingEntry = "1"
       }
 
       fillLight.color = light.color
-      fillLight.intensity = light.intensity
+      fillLight.intensity = light.intensity * lightIntensityMultiplier
     }
 
     return (mainLight, fillLight)
+  }
+
+  /// Calculate scene bounds for shadow map
+  private func calculateSceneBounds(scene: Scene) -> (min: vec3, max: vec3) {
+    var minBounds = vec3(Float.infinity, Float.infinity, Float.infinity)
+    var maxBounds = vec3(-Float.infinity, -Float.infinity, -Float.infinity)
+    
+    // Include player position
+    let playerPos = playerPosition
+    minBounds = vec3(min(minBounds.x, playerPos.x), min(minBounds.y, playerPos.y), min(minBounds.z, playerPos.z))
+    maxBounds = vec3(max(maxBounds.x, playerPos.x), max(maxBounds.y, playerPos.y), max(maxBounds.z, playerPos.z))
+    
+    // Include enemy positions
+    for enemy in enemySystem.aliveEnemies {
+      minBounds = vec3(min(minBounds.x, enemy.position.x), min(minBounds.y, enemy.position.y), min(minBounds.z, enemy.position.z))
+      maxBounds = vec3(max(maxBounds.x, enemy.position.x), max(maxBounds.y, enemy.position.y), max(maxBounds.z, enemy.position.z))
+    }
+    
+    // Include foreground mesh bounds
+    for meshInstance in foregroundMeshInstances {
+      guard meshInstance.isVisible() else { continue }
+      let worldPos = vec3(meshInstance.transformMatrix[3].x, meshInstance.transformMatrix[3].y, meshInstance.transformMatrix[3].z)
+      minBounds = vec3(min(minBounds.x, worldPos.x - 5.0), min(minBounds.y, worldPos.y - 5.0), min(minBounds.z, worldPos.z - 5.0))
+      maxBounds = vec3(max(maxBounds.x, worldPos.x + 5.0), max(maxBounds.y, worldPos.y + 5.0), max(maxBounds.z, worldPos.z + 5.0))
+    }
+    
+    // Ensure minimum bounds size
+    let size = maxBounds - minBounds
+    if size.x < 10.0 || size.y < 10.0 || size.z < 10.0 {
+      let center = (minBounds + maxBounds) * 0.5
+      let minSize: Float = 20.0
+      minBounds = center - vec3(minSize, minSize, minSize)
+      maxBounds = center + vec3(minSize, minSize, minSize)
+    }
+    
+    return (minBounds, maxBounds)
+  }
+
+  /// Render shadow pass (depth only from light's perspective)
+  private func renderShadowPass(lightSpaceMatrix: mat4, scene: Scene) {
+    guard let shadowProgram = try? GLProgram("Common/shadow_depth") else {
+      logger.error("Failed to load shadow depth shader")
+      return
+    }
+    
+    guard let shadowSkeletalProgram = try? GLProgram("Common/shadow_depth_skeletal") else {
+      logger.error("Failed to load skeletal shadow depth shader")
+      return
+    }
+    
+    // Enable depth testing
+    glEnable(GL_DEPTH_TEST)
+    glDepthFunc(GL_LESS)
+    glDepthMask(true)
+    glDisable(GL_BLEND)
+    glCullFace(GL_BACK)
+    glEnable(GL_CULL_FACE)
+    
+    var objectsRendered = 0
+    
+    // Render foreground meshes (exclude shadow catchers - they are receivers only)
+    for meshInstance in foregroundMeshInstances {
+      guard meshInstance.isVisible() else { continue }
+      if let node = meshInstance.node, scene.hasHint(node, hint: .shadow) {
+        continue
+      }
+      
+      let program = meshInstance.isSkeletalMesh ? shadowSkeletalProgram : shadowProgram
+      program.use()
+      program.setMat4("lightSpaceMatrix", value: lightSpaceMatrix)
+      program.setMat4("model", value: meshInstance.transformMatrix)
+      
+      // Set bone transforms for skeletal meshes
+      if meshInstance.isSkeletalMesh {
+        program.setInt("numBones", value: Int32(meshInstance.boneTransforms.count))
+        for (index, transform) in meshInstance.boneTransforms.enumerated() {
+          program.setMat4("boneTransforms[\(index)]", value: transform)
+        }
+      }
+      
+      // Bind mesh VAO and draw
+      glBindVertexArray(meshInstance.VAO)
+      glDrawElements(GL_TRIANGLES, GLsizei(meshInstance.mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
+      objectsRendered += 1
+    }
+    
+    // Render player (if using mesh, not capsule)
+    if playerCharacter == .woman && !playerMeshInstances.isEmpty {
+      var adjustedPosition = playerPosition
+      adjustedPosition.y -= playerCharacterYOffset
+      var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
+      modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
+      
+      for meshInstance in playerMeshInstances {
+        let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
+        let program = meshInstance.isSkeletalMesh ? shadowSkeletalProgram : shadowProgram
+        program.use()
+        program.setMat4("lightSpaceMatrix", value: lightSpaceMatrix)
+        program.setMat4("model", value: combinedModelMatrix)
+        
+        // Set bone transforms for skeletal meshes
+        if meshInstance.isSkeletalMesh {
+          program.setInt("numBones", value: Int32(meshInstance.boneTransforms.count))
+          for (index, transform) in meshInstance.boneTransforms.enumerated() {
+            program.setMat4("boneTransforms[\(index)]", value: transform)
+          }
+        }
+        
+        glBindVertexArray(meshInstance.VAO)
+        glDrawElements(GL_TRIANGLES, GLsizei(meshInstance.mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
+        objectsRendered += 1
+      }
+    }
+    
+    // Render enemies (if using capsules)
+    if !disableEnemies {
+      let aliveEnemies = enemySystem.aliveEnemies
+      if !aliveEnemies.isEmpty && !capsuleMeshInstances.isEmpty {
+        for enemy in aliveEnemies {
+          var adjustedPosition = enemy.position
+          adjustedPosition.y -= enemyCapsuleYOffset
+          var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
+          modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
+          
+          for meshInstance in capsuleMeshInstances {
+            let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
+            shadowProgram.setMat4("model", value: combinedModelMatrix)
+            glBindVertexArray(meshInstance.VAO)
+            glDrawElements(GL_TRIANGLES, GLsizei(meshInstance.mesh.faces.count * 3), GL_UNSIGNED_INT, nil)
+            objectsRendered += 1
+          }
+        }
+      }
+    }
+    
+    glBindVertexArray(0)
+    
+    // Debug logging (only log if there's a problem)
+    if objectsRendered == 0 {
+      let currentTime = GLFWSession.currentTime
+      if currentTime - lastShadowLogTime > 5.0 {  // Log every 5 seconds if there's a problem
+        logger.warning("⚠️ Shadow pass rendered 0 objects! Check if player/enemies/foreground meshes are being rendered.")
+        if playerCharacter == .woman {
+          logger.warning("   Player character: .woman, mesh instances: \(playerMeshInstances.count)")
+        } else {
+          logger.warning("   Player character: \(playerCharacter), not rendering in shadow pass")
+        }
+        logger.warning("   Foreground meshes: \(foregroundMeshInstances.count), shadow catchers: \(shadowCatcherMeshInstances.count)")
+        lastShadowLogTime = currentTime
+      }
+    }
   }
 
   /// Syncs `camera`, its node/world transform and prerender near/far from the given camera name
@@ -554,6 +844,8 @@ private let startingEntry = "1"
     let animation = scene.animations[index]
     playerAnimationController.play(animation: animation)
     currentPlayerAnimationState = state
+    // Reset footstep frame tracking when animation changes
+    lastFootstepFrame = -1
   }
 
   private func updatePlayerAnimation(deltaTime: Float) {
@@ -582,6 +874,51 @@ private let startingEntry = "1"
     }
     let finalTransforms = applyPlayerHeadLookAt(to: blendedTransforms, deltaTime: deltaTime)
     playerMeshInstances.forEach { $0.updateBoneTransforms(animatedNodeTransforms: finalTransforms) }
+    
+    // Check for frame-based footsteps
+    checkFrameBasedFootsteps()
+  }
+  
+  private func checkFrameBasedFootsteps() {
+    guard playerCharacter == .woman else { return }
+    guard !playerMeshInstances.isEmpty else { return }
+    guard playerController.movementState != .idle else { return }
+    guard playerAnimationController.playing else { return }
+    guard let scene = playerScene else { return }
+    
+    // Get current animation index and animation
+    guard let animationIndex = playerAnimationIndices[currentPlayerAnimationState],
+          animationIndex < scene.animations.count else { return }
+    
+    let currentAnimation = scene.animations[animationIndex]
+    let animationTime = playerAnimationController.time
+    
+    // Calculate current frame number
+    // Animation time is in seconds (or ticks with ticksPerSecond), convert to frame number
+    // Assuming 30fps animation rate (common for character animations)
+    let animationFPS: Double = 30.0
+    let currentFrame = Int(floor(animationTime * animationFPS))
+    
+    // Reset footstep frame tracking if animation looped (current frame is less than last frame)
+    // This handles the case where animation loops back to the beginning
+    if currentFrame < lastFootstepFrame {
+      lastFootstepFrame = -1
+    }
+    
+    // Skip if we already played a footstep on this frame
+    if currentFrame == lastFootstepFrame {
+      return
+    }
+    
+    // Get footstep frames for current animation state
+    let animationName = currentPlayerAnimationState == .walk ? "walk" : "run"
+    guard let footstepFrames = playerCharacter.footstepFrames[animationName] else { return }
+    
+    // Check if current frame matches any footstep frame
+    if footstepFrames.contains(currentFrame) {
+      UISound.footstep(playerController.footstepSound)
+      lastFootstepFrame = currentFrame
+    }
   }
 
   private func applyPlayerHeadLookAt(to animatedTransforms: [String: mat4], deltaTime: Float) -> [String: mat4] {
@@ -1732,6 +2069,14 @@ private let startingEntry = "1"
   ///   - prerenderedCameraName: Optional camera name for prerendered environment (defaults to "1")
   @MainActor func loadScene(_ sceneName: String, entry: String = "1", prerenderedCameraName: String? = nil) async {
     do {
+      // Reset shadow logging flags for new scene
+      hasLoggedShadowMap = false
+      hasLoggedNoShadowMap = false
+      hasLoggedNoLightSpace = false
+      hasLoggedVisualization = false
+      hasLoggedNoShadowMapForViz = false
+      hasLoggedPointLightShadowWarning = false
+      
       // Update scene name
       self.sceneName = sceneName
 
@@ -1750,6 +2095,7 @@ private let startingEntry = "1"
       print(scene.debugDescription)
 
       // Set the scene
+      hasLoadedScene = true
       self.scene = scene
 
       // Validate footsteps nodes - check that all base names match FootstepSound enum cases
@@ -1813,6 +2159,12 @@ private let startingEntry = "1"
 
       // Load foreground meshes (nodes with -fg suffix)
       await loadForegroundMeshes(scene: scene)
+      
+      // Load shadow catcher meshes (nodes with @Shadow hint)
+      await loadShadowCatcherMeshes(scene: scene)
+      
+      // Load scene lights (must be after scene is set)
+      loadSceneLights()
 
       // Spawn enemies from Enemy_* nodes
       let enemySpawnPoints = extractEnemySpawnPoints(from: scene)
@@ -2174,7 +2526,13 @@ private let startingEntry = "1"
 
       GraphicsContext.current?.renderer.withUIContext {
         // Render prerendered environment first (as background)
-        prerenderedEnvironment?.render(projectionMatrix: projection)
+        if !disablePrerenderedEnvironment {
+          prerenderedEnvironment?.render(projectionMatrix: projection)
+        } else {
+          // Debug mode: clear to a dark color instead
+          glClearColor(0.1, 0.1, 0.15, 1.0)
+          glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        }
 
         // Clear depth buffer after rendering if debug flag is set
         if disableDepth {
@@ -2228,6 +2586,95 @@ private let startingEntry = "1"
 
       // Do not clear depth; we rely on PrerenderedEnvironment writing correct depth
 
+      // Shadow pass: render depth from light's perspective
+      // Note: For fixed camera games, the shadow map is from the light's perspective (not camera),
+      // so it doesn't need to change per camera. However, we cache it per camera and only
+      // recalculate when objects move significantly to optimize performance.
+      var lightSpaceMatrix: mat4?
+      if enableShadows, let shadowMap = shadowMap, let scene = scene {
+        let shadowLight = selectShadowLight()
+
+        var shadowLightDirection: vec3?
+        if let shadowLight = shadowLight {
+          if shadowLight.light.type == .point {
+            if !hasLoggedPointLightShadowWarning {
+              let lightName = shadowLight.light.name ?? "<unnamed>"
+              logger.warning("⚠️ point light shadows not supported yet (requires cubemap). skipping shadow map for \(lightName).")
+              hasLoggedPointLightShadowWarning = true
+              hasLoggedNoLightSpace = true
+            }
+          } else {
+            shadowLightDirection = worldDirection(from: shadowLight.worldTransform)
+          }
+        }
+        
+        if let shadowLightDirection = shadowLightDirection {
+          let sceneBounds = calculateSceneBounds(scene: scene)
+          lightSpaceMatrix = ShadowMap.calculateLightSpaceMatrix(
+            lightDirection: shadowLightDirection,
+            sceneBounds: sceneBounds,
+            shadowDistance: 50.0
+          )
+          
+          if let lightSpaceMatrix = lightSpaceMatrix {
+            shadowMap.bindForWriting()
+            // Clear to white (far plane = 1.0) so unrendered areas appear lit
+            glClearDepth(1.0)
+            glClear(GL_DEPTH_BUFFER_BIT)
+            
+            // Check OpenGL errors before shadow pass
+            var glError = glGetError()
+            if glError != GL_NO_ERROR {
+              logger.warning("⚠️ OpenGL error before shadow pass: \(glError)")
+            }
+            
+            renderShadowPass(lightSpaceMatrix: lightSpaceMatrix, scene: scene)
+            
+            // Check OpenGL errors after shadow pass
+            glError = glGetError()
+            if glError != GL_NO_ERROR {
+              logger.warning("⚠️ OpenGL error after shadow pass: \(glError)")
+            }
+            
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
+            
+            // Restore viewport
+            let viewportSize = Engine.viewportSize
+            glViewport(0, 0, GLsizei(viewportSize.width), GLsizei(viewportSize.height))
+            
+            // Only log shadow map creation once per scene load
+            if !hasLoggedShadowMap {
+              logger.info("🌑 Shadow map created and bound (texture ID: \(shadowMap.getTextureID()))")
+              logger.info("🌑 Light direction: \(shadowLightDirection)")
+              logger.info("🌑 Scene bounds: min=\(sceneBounds.min), max=\(sceneBounds.max)")
+              hasLoggedShadowMap = true
+            }
+          } else {
+            logger.warning("⚠️ Failed to calculate light space matrix for shadows")
+          }
+          
+          // Bind shadow map for reading in main pass (always needed)
+          if lightSpaceMatrix != nil {
+            shadowMap.bindForReading(textureUnit: GL_TEXTURE6)
+          }
+        }
+      } else if enableShadows {
+        if !hasLoggedNoShadowMap {
+          var loggedWarning = false
+          if shadowMap == nil {
+            logger.warning("⚠️ Shadow map is nil - shadows disabled")
+            loggedWarning = true
+          }
+          if scene == nil && hasLoadedScene {
+            logger.warning("⚠️ Scene is nil - shadows disabled")
+            loggedWarning = true
+          }
+          if loggedWarning {
+            hasLoggedNoShadowMap = true
+          }
+        }
+      }
+
       // Draw player character
       let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
       let lighting = getSceneLighting()
@@ -2264,7 +2711,9 @@ private let startingEntry = "1"
             renderPassName: "MainScenePlayer",
             useAlphaHash: meshInstance.useAlphaHash,
             useAlphaToCoverage: true,
-            usePolygonOffset: false
+            usePolygonOffset: false,
+            shadowMapTextureUnit: (enableShadows && shadowsOnAllObjects && lightSpaceMatrix != nil) ? GL_TEXTURE6 : nil,
+            lightSpaceMatrix: lightSpaceMatrix
           )
         }
       } else if !capsuleMeshInstances.isEmpty {
@@ -2296,7 +2745,9 @@ private let startingEntry = "1"
             fillLightIntensity: lighting.fillLight.intensity,
             diffuseOnly: false,
             effectiveRenderMode: meshInstance.renderMode,
-            renderPassName: "MainSceneCapsule"
+            renderPassName: "MainSceneCapsule",
+            shadowMapTextureUnit: lightSpaceMatrix != nil ? GL_TEXTURE6 : nil,
+            lightSpaceMatrix: lightSpaceMatrix
           )
         }
       }
@@ -2344,7 +2795,9 @@ private let startingEntry = "1"
                 renderPassName: "MainSceneEnemy",
                 useAlphaHash: meshInstance.useAlphaHash,
                 useAlphaToCoverage: true,
-                usePolygonOffset: false
+                usePolygonOffset: false,
+                shadowMapTextureUnit: lightSpaceMatrix != nil ? GL_TEXTURE6 : nil,
+                lightSpaceMatrix: lightSpaceMatrix
               )
             }
           }
@@ -2363,6 +2816,11 @@ private let startingEntry = "1"
         for meshInstance in foregroundMeshInstances {
           // Skip if not visible (node is hidden)
           guard meshInstance.isVisible() else { continue }
+          
+          // Skip shadow catchers - they'll be rendered separately after main scene
+          if let node = meshInstance.node, let scene = scene, scene.hasHint(node, hint: .shadow) {
+            continue
+          }
 
           meshInstance.draw(
             projection: projection,
@@ -2377,13 +2835,184 @@ private let startingEntry = "1"
           fillLightIntensity: lighting.fillLight.intensity,
           diffuseOnly: false,
           effectiveRenderMode: meshInstance.renderMode,
-          renderPassName: "MainSceneForeground"
+          renderPassName: "MainSceneForeground",
+          shadowMapTextureUnit: (enableShadows && shadowsOnAllObjects && lightSpaceMatrix != nil) ? GL_TEXTURE6 : nil,
+          lightSpaceMatrix: lightSpaceMatrix
         )
+      }
+      
+      // Render shadow catchers (receive shadows but don't cast them)
+      if enableShadows, let lightSpaceMatrix = lightSpaceMatrix, let shadowMap = shadowMap {
+        // Make sure shadow map is bound before rendering shadow catchers
+        shadowMap.bindForReading(textureUnit: GL_TEXTURE6)
+        
+        if !shadowCatcherMeshInstances.isEmpty {
+          var renderedCatchers = 0
+          var skippedInvisible = 0
+          for meshInstance in shadowCatcherMeshInstances {
+            guard meshInstance.isVisible() else {
+              skippedInvisible += 1
+              continue
+            }
+            
+            renderedCatchers += 1
+            // Shadow matte pass: darken background where shadows are cast
+            // Depth test ON (against prerendered depth plate) - only affect visible pixels
+            // Depth write OFF - don't occlude anything
+            // Multiply blend - darken background, don't overwrite it
+            glEnable(GL_DEPTH_TEST)
+            glDepthFunc(GL_LEQUAL)  // Test against prerendered depth plate
+            glDepthMask(false)  // Don't write depth - shadow catchers are composited over background
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_DST_COLOR, GL_ZERO)  // Multiply blend: result = dst * src (darkens background)
+            glDisable(GL_CULL_FACE)  // Two-sided for shadow catchers (may be needed)
+            
+            meshInstance.draw(
+              projection: projection,
+              view: view,
+              modelMatrix: meshInstance.transformMatrix,
+              cameraPosition: cameraPosition,
+              lightDirection: lighting.mainLight.direction,
+              lightColor: lighting.mainLight.color,
+              lightIntensity: lighting.mainLight.intensity,
+              fillLightDirection: lighting.fillLight.direction,
+              fillLightColor: lighting.fillLight.color,
+              fillLightIntensity: lighting.fillLight.intensity,
+              diffuseOnly: false,
+              effectiveRenderMode: meshInstance.renderMode,
+              renderPassName: "MainSceneShadowCatcher",
+              shadowMapTextureUnit: GL_TEXTURE6,
+              lightSpaceMatrix: lightSpaceMatrix,
+              isShadowCatcher: true,
+              shadowCatcherDebugColor: shadowCatcherDebugColor
+            )
+          }
+          
+          // Restore OpenGL state after shadow matte pass
+          glDepthMask(true)
+          glEnable(GL_CULL_FACE)
+          glCullFace(GL_BACK)
+          
+          // Debug logging (only log if there's a problem)
+          if renderedCatchers == 0 {
+            let currentTime = GLFWSession.currentTime
+            if currentTime - lastCatcherLogTime > 5.0 {  // Log every 5 seconds if there's a problem
+              logger.warning("⚠️ No shadow catchers are visible! Check node visibility.")
+              logger.warning("   Loaded: \(shadowCatcherMeshInstances.count) meshes, skipped invisible: \(skippedInvisible)")
+              lastCatcherLogTime = currentTime
+            }
+          }
+        } else {
+          let currentTime = GLFWSession.currentTime
+          if currentTime - lastWarningTime > 5.0 {
+            logger.warning("⚠️ No shadow catcher mesh instances loaded. Check that nodes with @Shadow hint have meshes.")
+            lastWarningTime = currentTime
+          }
+        }
+      } else if enableShadows {
+        if !hasLoggedNoLightSpace {
+          logger.warning("⚠️ Shadows enabled but lightSpaceMatrix is nil - shadows disabled")
+          hasLoggedNoLightSpace = true
+        }
       }
     }
 
       // Render particles (after 3D meshes, before UI)
       ParticleSystem.shared.render(projection: projection, view: view, cameraPosition: cameraPosition)
+      
+      // Debug: Visualize shadow map
+      if visualizeShadowMap {
+        if let shadowMap = shadowMap {
+          GraphicsContext.current?.renderer.withUIContext {
+            let shadowMapTextureID = shadowMap.getTextureID()
+            let debugSize = shadowMapDebugSize
+            let viewportSize = Engine.viewportSize
+            
+            // Debug logging (once)
+            if !hasLoggedVisualization {
+              logger.info("🌑 Shadow map visualization: texture ID=\(shadowMapTextureID), size=\(debugSize), viewport=\(viewportSize.width)x\(viewportSize.height)")
+              hasLoggedVisualization = true
+            }
+          
+          // Convert screen coordinates to NDC (-1 to 1)
+          // Passthrough shader expects NDC coordinates directly
+          let screenX = viewportSize.width - debugSize - 10
+          let screenY: Float = 10
+          let screenW = debugSize
+          let screenH = debugSize
+          
+          // Convert to NDC: x from [0, width] to [-1, 1], y from [0, height] to [1, -1] (flipped)
+          let ndcLeft = (screenX / viewportSize.width) * 2.0 - 1.0
+          let ndcRight = ((screenX + screenW) / viewportSize.width) * 2.0 - 1.0
+          let ndcTop = 1.0 - (screenY / viewportSize.height) * 2.0
+          let ndcBottom = 1.0 - ((screenY + screenH) / viewportSize.height) * 2.0
+          
+          // Draw shadow map as a simple quad
+          if let passthroughProgram = try? GLProgram("Common/Passthrough") {
+            passthroughProgram.use()
+            
+            // Bind shadow map texture
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_2D, shadowMapTextureID)
+            passthroughProgram.setInt("uTexture", value: 0)
+            
+            // Create quad vertices in NDC space
+            // OpenGL Y is flipped: texture Y=0 is bottom, Y=1 is top
+            let vertices: [Float] = [
+              ndcLeft, ndcTop, 0.0, 1.0,  // top-left (flip texture Y)
+              ndcRight, ndcTop, 1.0, 1.0,  // top-right (flip texture Y)
+              ndcRight, ndcBottom, 1.0, 0.0,  // bottom-right (flip texture Y)
+              ndcLeft, ndcBottom, 0.0, 0.0  // bottom-left (flip texture Y)
+            ]
+            
+            let indices: [UInt32] = [0, 1, 2, 0, 2, 3]
+            
+            var vao: GLuint = 0
+            var vbo: GLuint = 0
+            var ebo: GLuint = 0
+            
+            glGenVertexArrays(1, &vao)
+            glGenBuffers(1, &vbo)
+            glGenBuffers(1, &ebo)
+            
+            glBindVertexArray(vao)
+            
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            vertices.withUnsafeBytes { bytes in
+              glBufferData(GL_ARRAY_BUFFER, bytes.count, bytes.baseAddress, GL_STATIC_DRAW)
+            }
+            
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+            indices.withUnsafeBytes { bytes in
+              glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes.count, bytes.baseAddress, GL_STATIC_DRAW)
+            }
+            
+            // Position attribute (location 0)
+            glEnableVertexAttribArray(0)
+            glVertexAttribPointer(0, 2, GL_FLOAT, false, 16, nil)
+            
+            // Texture coordinate attribute (location 1)
+            glEnableVertexAttribArray(1)
+            glVertexAttribPointer(1, 2, GL_FLOAT, false, 16, UnsafeRawPointer(bitPattern: 8))
+            
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nil)
+            
+            glDeleteVertexArrays(1, &vao)
+            glDeleteBuffers(1, &vbo)
+            glDeleteBuffers(1, &ebo)
+            
+            glBindTexture(GL_TEXTURE_2D, 0)
+          } else {
+            logger.error("⚠️ Failed to load Passthrough shader for shadow map visualization")
+          }
+        }
+        } else {
+          if !hasLoggedNoShadowMapForViz {
+            logger.warning("⚠️ Shadow map visualization enabled but shadowMap is nil")
+            hasLoggedNoShadowMapForViz = true
+          }
+        }
+      }
 
       // Always call nextFrame to maintain consistent timing (even when not visualizing)
       physicsWorld.nextFrame()

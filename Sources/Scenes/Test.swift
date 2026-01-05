@@ -2,6 +2,7 @@
 class Test: Script {
 
   @Ref var catStatue: Node
+  @Ref var stove: Node
   //@SceneReference var stoveCloseup: Camera
 
   func showCat() {
@@ -11,17 +12,19 @@ class Test: Script {
     // }
   }
 
-  func stove() {
+  func stove() async {
     guard catStatue.isHidden else {
-      Task { await cat() }
+      await cat()
       return
     }
 
-    say([
-      "The stove is cold and lifeless.",
-      "There's nothing cooking right now.",
-      "It looks like it hasn't been used in a while.",
-    ])
+    await withPlayerLookingAt(stove) {
+      await say([
+        "The stove is cold and lifeless.",
+        "There's nothing cooking right now.",
+        "It looks like it hasn't been used in a while.",
+      ])
+    }
   }
 
   func cat() async {

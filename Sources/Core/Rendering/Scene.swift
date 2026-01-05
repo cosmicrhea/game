@@ -18,6 +18,7 @@ public enum ImportHint: String, CaseIterable {
   case ledgeLow
   case mapMarker
   case pickup
+  case shadow
   case sparkle
   case trigger
   case waypoint
@@ -69,6 +70,7 @@ public final class Scene: @unchecked Sendable {
   public private(set) var ledgeNodes: [Node] = []
   public private(set) var mapMarkerNodes: [Node] = []
   public private(set) var pickupNodes: [Node] = []
+  public private(set) var shadowNodes: [Node] = []
   public private(set) var sparkleNodes: [Node] = []
   public private(set) var triggerNodes: [Node] = []
   public private(set) var waypointNodes: [Node] = []
@@ -149,6 +151,9 @@ public final class Scene: @unchecked Sendable {
     self.ledgeNodes = collectNodes(withHint: ImportHint.ledge, from: root)
     self.mapMarkerNodes = collectNodes(withHint: ImportHint.mapMarker, from: root)
     self.pickupNodes = collectNodes(withHint: ImportHint.pickup, from: root)
+    // Shadow nodes: only nodes with @Shadow hint, excluding those with @Foreground
+    let allShadowNodes = collectNodes(withHint: ImportHint.shadow, from: root)
+    self.shadowNodes = allShadowNodes.filter { !hasHint($0, hint: .foreground) }
     self.sparkleNodes = collectNodes(withHint: ImportHint.sparkle, from: root)
     self.triggerNodes = collectNodes(withHint: ImportHint.trigger, from: root)
     self.waypointNodes = collectNodes(withHint: ImportHint.waypoint, from: root)
@@ -294,6 +299,11 @@ public final class Scene: @unchecked Sendable {
     pickupNodes.first { $0.baseName == baseName }
   }
 
+  /// Find a shadow node by base name
+  public func shadowNode(named baseName: String) -> Node? {
+    shadowNodes.first { $0.baseName == baseName }
+  }
+
   /// Find a sparkle node by base name
   public func sparkleNode(named baseName: String) -> Node? {
     sparkleNodes.first { $0.baseName == baseName }
@@ -351,6 +361,7 @@ public final class Scene: @unchecked Sendable {
       (.ledge, ledgeNodes),
       (.mapMarker, mapMarkerNodes),
       (.pickup, pickupNodes),
+      (.shadow, shadowNodes),
       (.sparkle, sparkleNodes),
       (.trigger, triggerNodes),
       (.waypoint, waypointNodes),
@@ -375,6 +386,16 @@ public final class Scene: @unchecked Sendable {
       lines.append("Camera Objects (\(cameras.count)):")
       for camera in cameras.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
         lines.append("  - \(camera.name ?? "<unnamed>")")
+      }
+      lines.append("")
+    }
+
+    // Also list all lights from the scene
+    if !lights.isEmpty {
+      lines.append("Light Objects (\(lights.count)):")
+      for light in lights.sorted(by: { ($0.name ?? "") < ($1.name ?? "") }) {
+        let lightInfo = "type=\(light.type), direction=(\(String(format: "%.2f", light.direction.x)), \(String(format: "%.2f", light.direction.y)), \(String(format: "%.2f", light.direction.z))), color=(\(String(format: "%.2f", light.color.x)), \(String(format: "%.2f", light.color.y)), \(String(format: "%.2f", light.color.z))), intensity=\(String(format: "%.2f", light.intensity))"
+        lines.append("  - \(light.name ?? "<unnamed>") [\(lightInfo)]")
       }
       lines.append("")
     }
