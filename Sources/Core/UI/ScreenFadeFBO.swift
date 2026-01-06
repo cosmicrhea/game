@@ -222,7 +222,7 @@ public final class ScreenFadeFBO {
 
     // Create fade shader
     do {
-      fadeShader = try GLProgram("Common/Passthrough", "Effects/fade")
+      fadeShader = try GLProgram.cached("Common/Passthrough", "Effects/fade")
     } catch {
       logger.error("ERROR: Failed to create fade shader: \(error)")
     }

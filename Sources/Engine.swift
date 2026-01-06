@@ -176,6 +176,7 @@ public final class Engine {
 
     window.position = .zero
     window.context.makeCurrent()
+    setupGLDebugCallbacks()
 
     // Enable vsync for consistent frame pacing (fixes laggy movement)
     window.context.setSwapInterval(1)
@@ -223,6 +224,46 @@ public final class Engine {
       guard let self else { return }
       self.editorPanel.updateWindowSize(Size(Float(w), Float(h)))
     }
+  }
+
+  private func setupGLDebugCallbacks() {
+    var flags: GLint = 0
+    glGetIntegerv(GL_CONTEXT_FLAGS, &flags)
+    let debugBit = GLint(GL.GL_CONTEXT_FLAG_DEBUG_BIT)
+    if (flags & debugBit) == 0 {
+      return
+    }
+
+    glEnable(GL_DEBUG_OUTPUT)
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS)
+
+    let callback: GLDEBUGPROC = { _, _, id, severity, _, message, _ in
+      let msg = String(cString: message)
+      let severityLabel: String
+      switch severity {
+      case GL.GLenum(GL.GL_DEBUG_SEVERITY_HIGH):
+        severityLabel = "HIGH"
+      case GL.GLenum(GL.GL_DEBUG_SEVERITY_MEDIUM):
+        severityLabel = "MEDIUM"
+      case GL.GLenum(GL.GL_DEBUG_SEVERITY_LOW):
+        severityLabel = "LOW"
+      case GL.GLenum(GL.GL_DEBUG_SEVERITY_NOTIFICATION):
+        severityLabel = "NOTIFY"
+      default:
+        severityLabel = "UNKNOWN"
+      }
+
+      if severity == GL.GLenum(GL.GL_DEBUG_SEVERITY_NOTIFICATION) {
+        logger.debug("GL DEBUG [\(severityLabel)] \(id): \(msg)")
+      } else {
+        logger.warning("GL DEBUG [\(severityLabel)] \(id): \(msg)")
+      }
+    }
+
+    glDebugMessageCallback(callback, nil)
+    let dontCare = GL.GLenum(GL.GL_DONT_CARE)
+    let enabled = GL.GLboolean(GL.GL_TRUE)
+    glDebugMessageControl(dontCare, dontCare, dontCare, 0, nil, enabled)
   }
 
   private func setupEditorSystem() {

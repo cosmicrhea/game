@@ -16,6 +16,7 @@ public final class PlayerController {
   var position: vec3 = vec3(0, 0, 0)
   var rotation: Float = 0.0
   public private(set) var movementState: MovementState = .idle
+  private var scriptInputLockUntilTime: Double = 0
 
   private var spawnPosition: vec3 = vec3(0, 0, 0)
   private var spawnRotation: Float = 0.0
@@ -241,6 +242,17 @@ public final class PlayerController {
     }
   }
 
+  /// Force the controller into an idle state and suppress input briefly (for script-driven actions).
+  public func forceIdleForScript(lockDuration: Double = 0.2) {
+    movementState = .idle
+    footstepAccumulatedDistance = 0.0
+    previousPlayerPosition = position
+    scriptInputLockUntilTime = GLFWSession.currentTime + lockDuration
+    if let characterController {
+      characterController.linearVelocity = Vec3(x: 0, y: 0, z: 0)
+    }
+  }
+
   /// Check if character is supported (on ground)
   public var isSupported: Bool {
     return characterController?.isSupported ?? false
@@ -258,6 +270,14 @@ public final class PlayerController {
   ) {
     guard let characterController = characterController else { return }
     guard physicsWorld.isReady else { return }
+
+    if GLFWSession.currentTime < scriptInputLockUntilTime {
+      movementState = .idle
+      footstepAccumulatedDistance = 0.0
+      previousPlayerPosition = position
+      characterController.linearVelocity = Vec3(x: 0, y: 0, z: 0)
+      return
+    }
 
     // Tank controls: A/D rotate, W/S move forward/backward (keyboard)
     // Left stick X for rotation, Y for forward/back (gamepad)

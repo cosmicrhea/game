@@ -14,7 +14,7 @@ class GLScreenEffect {
 
   init(_ fragmentShaderName: String) {
     // Pass shader base names (no extensions). Vertex shader is a standard fullscreen quad.
-    shader = try! GLProgram("common/Passthrough", fragmentShaderName)
+    shader = try! GLProgram.cached("common/Passthrough", fragmentShaderName)
 
     let quadVertices: [Float] = [
       // positions   // texCoords

@@ -4,14 +4,14 @@ import GLTF
 import Jolt
 import struct GLMath.Quaternion
 
-private let startingScene = "test"
-private let startingEntry = "1"
+// private let startingScene = "test"
+// private let startingEntry = "1"
 
 // private let startingScene = "tunnels"
 // private let startingEntry = "1"
 
-// private let startingScene = "nexus"
-// private let startingEntry = "8"
+private let startingScene = "nexus"
+private let startingEntry = "8"
 
 // private let startingScene = "chiefs_office"
 // private let startingEntry = "1"
@@ -96,7 +96,7 @@ private let startingEntry = "1"
   private var playerHeadLookAtHasRotation = false
   private var playerHeadLookAtLoggedMissingBone = false
 
-  // Foreground meshes from scene (nodes with -fg suffix)
+  // Foreground meshes from scene (nodes with @Foreground hint)
   private var foregroundMeshInstances: [MeshInstance] = []
   
   // Shadow catcher meshes (nodes with @Shadow hint, may or may not have @Foreground)
@@ -137,6 +137,7 @@ private let startingEntry = "1"
   @Editor var shadowsOnAllObjects: Bool = true  // If false, shadows only appear on shadow catchers
   @Editor var visualizeShadowMap: Bool = false
   @Editor(80...240) var shadowMapDebugSize: Float = 200.0
+  @Editor(0.0...1.0) var shadowIntensity: Float = 0.15  // Shadow darkness on lit objects
   @Editor var disablePrerenderedEnvironment: Bool = false  // Debug: disable prerendered background
   @Editor var shadowCatcherDebugColor: Bool = false  // Debug: render shadow catchers as solid color
   @Editor var lightIntensityMultiplier: Float = 1.0  // Multiply all light intensities by this value
@@ -585,6 +586,122 @@ private let startingEntry = "1"
     return (mainLight, fillLight)
   }
 
+  private func getDefaultLighting() -> (
+    mainLight: (direction: vec3, color: vec3, intensity: Float),
+    fillLight: (direction: vec3, color: vec3, intensity: Float)
+  ) {
+    let mainLight = (
+      direction: vec3(0, -1, 0),
+      color: vec3(1, 1, 1),
+      intensity: Float(1.0) * lightIntensityMultiplier
+    )
+    let fillLight = (
+      direction: vec3(-0.3, -0.5, -0.2),
+      color: vec3(0.8, 0.9, 1.0),
+      intensity: Float(0.4) * lightIntensityMultiplier
+    )
+    return (mainLight, fillLight)
+  }
+
+  private enum RenderBucket: CaseIterable {
+    case opaque
+    case cutout
+    case blend
+  }
+
+  private func renderBucket(for renderMode: MeshInstance.RenderMode) -> RenderBucket {
+    switch renderMode {
+    case .opaque:
+      return .opaque
+    case .cutoutCoverage:
+      return .cutout
+    case .overlayBlend, .translucent:
+      return .blend
+    }
+  }
+
+  private func applyRenderState(for bucket: RenderBucket) {
+    glEnable(GL_DEPTH_TEST)
+    glDepthFunc(GL_LEQUAL)
+    glDisable(GL_POLYGON_OFFSET_FILL)
+    
+    switch bucket {
+    case .opaque:
+      glDisable(GL_BLEND)
+      glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+      glDepthMask(true)
+    case .cutout:
+      glDisable(GL_BLEND)
+      glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+      glDepthMask(true)
+    case .blend:
+      glEnable(GL_BLEND)
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+      glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE)
+      glDepthMask(false)
+    }
+  }
+
+  private func drawMeshInstancesBucketed(
+    _ meshInstances: [MeshInstance],
+    projection: mat4,
+    view: mat4,
+    modelMatrixFor meshMatrix: (MeshInstance) -> mat4,
+    cameraPosition: vec3,
+    lighting: (mainLight: (direction: vec3, color: vec3, intensity: Float),
+               fillLight: (direction: vec3, color: vec3, intensity: Float)),
+    renderPassBaseName: String,
+    shadowMapTextureUnit: GLenum?,
+    lightSpaceMatrix: mat4?,
+    useAlphaToCoverage: Bool,
+    usePolygonOffset: Bool = false,
+    shouldDraw: (MeshInstance) -> Bool = { _ in true }
+  ) {
+    for bucket in RenderBucket.allCases {
+      applyRenderState(for: bucket)
+      let passName: String
+      switch bucket {
+      case .opaque:
+        passName = "\(renderPassBaseName)_Opaque"
+      case .cutout:
+        passName = "\(renderPassBaseName)_Cutout"
+      case .blend:
+        passName = "\(renderPassBaseName)_Blend"
+      }
+      
+      for meshInstance in meshInstances {
+        guard shouldDraw(meshInstance) else { continue }
+        guard renderBucket(for: meshInstance.renderMode) == bucket else { continue }
+        
+        meshInstance.draw(
+          projection: projection,
+          view: view,
+          modelMatrix: meshMatrix(meshInstance),
+          cameraPosition: cameraPosition,
+          lightDirection: lighting.mainLight.direction,
+          lightColor: lighting.mainLight.color,
+          lightIntensity: lighting.mainLight.intensity,
+          fillLightDirection: lighting.fillLight.direction,
+          fillLightColor: lighting.fillLight.color,
+          fillLightIntensity: lighting.fillLight.intensity,
+          diffuseOnly: false,
+          effectiveRenderMode: meshInstance.renderMode,
+          showFinalAlpha: false,
+          showClassification: false,
+          cutoutThreshold: 0.5,
+          renderPassName: passName,
+          useAlphaHash: meshInstance.useAlphaHash,
+          useAlphaToCoverage: (bucket == .cutout) ? useAlphaToCoverage : false,
+          usePolygonOffset: (bucket == .cutout) ? usePolygonOffset : false,
+          useFixedRenderState: true,
+          shadowIntensity: shadowIntensity,
+          shadowMapTextureUnit: shadowMapTextureUnit,
+          lightSpaceMatrix: lightSpaceMatrix
+        )
+      }
+    }
+  }
+
   /// Calculate scene bounds for shadow map
   private func calculateSceneBounds(scene: Scene) -> (min: vec3, max: vec3) {
     var minBounds = vec3(Float.infinity, Float.infinity, Float.infinity)
@@ -623,12 +740,12 @@ private let startingEntry = "1"
 
   /// Render shadow pass (depth only from light's perspective)
   private func renderShadowPass(lightSpaceMatrix: mat4, scene: Scene) {
-    guard let shadowProgram = try? GLProgram("Common/shadow_depth") else {
+    guard let shadowProgram = try? GLProgram.cached("Common/shadow_depth") else {
       logger.error("Failed to load shadow depth shader")
       return
     }
     
-    guard let shadowSkeletalProgram = try? GLProgram("Common/shadow_depth_skeletal") else {
+    guard let shadowSkeletalProgram = try? GLProgram.cached("Common/shadow_depth_skeletal") else {
       logger.error("Failed to load skeletal shadow depth shader")
       return
     }
@@ -846,6 +963,15 @@ private let startingEntry = "1"
     currentPlayerAnimationState = state
     // Reset footstep frame tracking when animation changes
     lastFootstepFrame = -1
+  }
+
+  @MainActor
+  func forcePlayerIdleForScript() {
+    guard playerCharacter == .woman else { return }
+    playerController.forceIdleForScript()
+    if currentPlayerAnimationState != .idle {
+      playPlayerAnimation(for: .idle)
+    }
   }
 
   private func updatePlayerAnimation(deltaTime: Float) {
@@ -2157,7 +2283,7 @@ private let startingEntry = "1"
         logger.warning("⚠️ No camera nodes found to sync in scene '\(sceneName)'")
       }
 
-      // Load foreground meshes (nodes with -fg suffix)
+      // Load foreground meshes (nodes with @Foreground hint)
       await loadForegroundMeshes(scene: scene)
       
       // Load shadow catcher meshes (nodes with @Shadow hint)
@@ -2613,6 +2739,8 @@ private let startingEntry = "1"
           lightSpaceMatrix = ShadowMap.calculateLightSpaceMatrix(
             lightDirection: shadowLightDirection,
             sceneBounds: sceneBounds,
+            centerOverride: playerPosition,
+            orthoSizeOverride: 8.0,
             shadowDistance: 50.0
           )
           
@@ -2689,33 +2817,20 @@ private let startingEntry = "1"
         var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
         modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
 
-        for meshInstance in playerMeshInstances {
-          let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
-
-          meshInstance.draw(
-            projection: projection,
-            view: view,
-            modelMatrix: combinedModelMatrix,
-            cameraPosition: cameraPosition,
-            lightDirection: lighting.mainLight.direction,
-            lightColor: lighting.mainLight.color,
-            lightIntensity: lighting.mainLight.intensity,
-            fillLightDirection: lighting.fillLight.direction,
-            fillLightColor: lighting.fillLight.color,
-            fillLightIntensity: lighting.fillLight.intensity,
-            diffuseOnly: false,
-            effectiveRenderMode: meshInstance.renderMode,
-            showFinalAlpha: false,
-            showClassification: false,
-            cutoutThreshold: 0.5,
-            renderPassName: "MainScenePlayer",
-            useAlphaHash: meshInstance.useAlphaHash,
-            useAlphaToCoverage: true,
-            usePolygonOffset: false,
-            shadowMapTextureUnit: (enableShadows && shadowsOnAllObjects && lightSpaceMatrix != nil) ? GL_TEXTURE6 : nil,
-            lightSpaceMatrix: lightSpaceMatrix
-          )
-        }
+        drawMeshInstancesBucketed(
+          playerMeshInstances,
+          projection: projection,
+          view: view,
+          modelMatrixFor: { meshInstance in
+            modelMatrix * meshInstance.transformMatrix
+          },
+          cameraPosition: cameraPosition,
+          lighting: lighting,
+          renderPassBaseName: "MainScenePlayer",
+          shadowMapTextureUnit: (enableShadows && shadowsOnAllObjects && lightSpaceMatrix != nil) ? GL_TEXTURE6 : nil,
+          lightSpaceMatrix: lightSpaceMatrix,
+          useAlphaToCoverage: true
+        )
       } else if !capsuleMeshInstances.isEmpty {
         // Ensure depth testing/writes are enabled for 3D integration
         glEnable(GL_DEPTH_TEST)
@@ -2729,27 +2844,20 @@ private let startingEntry = "1"
         var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
         modelMatrix = GLMath.rotate(modelMatrix, playerRotation, vec3(0, 1, 0))
 
-        for meshInstance in capsuleMeshInstances {
-          let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
-
-          meshInstance.draw(
-            projection: projection,
-            view: view,
-            modelMatrix: combinedModelMatrix,
-            cameraPosition: cameraPosition,
-            lightDirection: lighting.mainLight.direction,
-            lightColor: lighting.mainLight.color,
-            lightIntensity: lighting.mainLight.intensity,
-            fillLightDirection: lighting.fillLight.direction,
-            fillLightColor: lighting.fillLight.color,
-            fillLightIntensity: lighting.fillLight.intensity,
-            diffuseOnly: false,
-            effectiveRenderMode: meshInstance.renderMode,
-            renderPassName: "MainSceneCapsule",
-            shadowMapTextureUnit: lightSpaceMatrix != nil ? GL_TEXTURE6 : nil,
-            lightSpaceMatrix: lightSpaceMatrix
-          )
-        }
+        drawMeshInstancesBucketed(
+          capsuleMeshInstances,
+          projection: projection,
+          view: view,
+          modelMatrixFor: { meshInstance in
+            modelMatrix * meshInstance.transformMatrix
+          },
+          cameraPosition: cameraPosition,
+          lighting: lighting,
+          renderPassBaseName: "MainSceneCapsule",
+          shadowMapTextureUnit: lightSpaceMatrix != nil ? GL_TEXTURE6 : nil,
+          lightSpaceMatrix: lightSpaceMatrix,
+          useAlphaToCoverage: false
+        )
       }
 
       // Draw enemy capsules
@@ -2771,73 +2879,53 @@ private let startingEntry = "1"
             var modelMatrix = GLMath.translate(mat4(1), adjustedPosition)
             modelMatrix = GLMath.rotate(modelMatrix, enemy.rotation, vec3(0, 1, 0))
 
-            for meshInstance in capsuleMeshInstances {
-              // Combine the mesh's original transform with enemy transform
-              let combinedModelMatrix = modelMatrix * meshInstance.transformMatrix
-
-              // Use a slightly different color to distinguish from player (tint red)
-              meshInstance.draw(
-                projection: projection,
-                view: view,
-                modelMatrix: combinedModelMatrix,
-                cameraPosition: cameraPosition,
-                lightDirection: lighting.mainLight.direction,
-                lightColor: lighting.mainLight.color,
-                lightIntensity: lighting.mainLight.intensity,
-                fillLightDirection: lighting.fillLight.direction,
-                fillLightColor: lighting.fillLight.color,
-                fillLightIntensity: lighting.fillLight.intensity,
-                diffuseOnly: false,
-                effectiveRenderMode: meshInstance.renderMode,
-                showFinalAlpha: false,
-                showClassification: false,
-                cutoutThreshold: 0.5,
-                renderPassName: "MainSceneEnemy",
-                useAlphaHash: meshInstance.useAlphaHash,
-                useAlphaToCoverage: true,
-                usePolygonOffset: false,
-                shadowMapTextureUnit: lightSpaceMatrix != nil ? GL_TEXTURE6 : nil,
-                lightSpaceMatrix: lightSpaceMatrix
-              )
-            }
+            drawMeshInstancesBucketed(
+              capsuleMeshInstances,
+              projection: projection,
+              view: view,
+              modelMatrixFor: { meshInstance in
+                modelMatrix * meshInstance.transformMatrix
+              },
+              cameraPosition: cameraPosition,
+              lighting: lighting,
+              renderPassBaseName: "MainSceneEnemy",
+              shadowMapTextureUnit: lightSpaceMatrix != nil ? GL_TEXTURE6 : nil,
+              lightSpaceMatrix: lightSpaceMatrix,
+              useAlphaToCoverage: true
+            )
           }
         }
       }
 
-      // Draw foreground meshes (nodes with -fg suffix)
+      // Draw foreground meshes (nodes with @Foreground hint)
       if !foregroundMeshInstances.isEmpty {
         glEnable(GL_DEPTH_TEST)
         glDepthMask(true)
         glDepthFunc(GL_LEQUAL)
 
-        let lighting = getSceneLighting()
+        let lighting = getDefaultLighting()
         let cameraPosition = vec3(cameraWorld[3].x, cameraWorld[3].y, cameraWorld[3].z)
 
-        for meshInstance in foregroundMeshInstances {
-          // Skip if not visible (node is hidden)
-          guard meshInstance.isVisible() else { continue }
-          
-          // Skip shadow catchers - they'll be rendered separately after main scene
-          if let node = meshInstance.node, let scene = scene, scene.hasHint(node, hint: .shadow) {
-            continue
-          }
-
-          meshInstance.draw(
-            projection: projection,
-            view: view,
-            modelMatrix: meshInstance.transformMatrix,
-            cameraPosition: cameraPosition,
-            lightDirection: lighting.mainLight.direction,
-            lightColor: lighting.mainLight.color,
-            lightIntensity: lighting.mainLight.intensity,
-          fillLightDirection: lighting.fillLight.direction,
-          fillLightColor: lighting.fillLight.color,
-          fillLightIntensity: lighting.fillLight.intensity,
-          diffuseOnly: false,
-          effectiveRenderMode: meshInstance.renderMode,
-          renderPassName: "MainSceneForeground",
+        drawMeshInstancesBucketed(
+          foregroundMeshInstances,
+          projection: projection,
+          view: view,
+          modelMatrixFor: { meshInstance in
+            meshInstance.transformMatrix
+          },
+          cameraPosition: cameraPosition,
+          lighting: lighting,
+          renderPassBaseName: "MainSceneForeground",
           shadowMapTextureUnit: (enableShadows && shadowsOnAllObjects && lightSpaceMatrix != nil) ? GL_TEXTURE6 : nil,
-          lightSpaceMatrix: lightSpaceMatrix
+          lightSpaceMatrix: lightSpaceMatrix,
+          useAlphaToCoverage: false,
+          shouldDraw: { meshInstance in
+            guard meshInstance.isVisible() else { return false }
+            if let node = meshInstance.node, let scene = scene, scene.hasHint(node, hint: .shadow) {
+              return false
+            }
+            return true
+          }
         )
       }
       
@@ -2881,6 +2969,7 @@ private let startingEntry = "1"
               diffuseOnly: false,
               effectiveRenderMode: meshInstance.renderMode,
               renderPassName: "MainSceneShadowCatcher",
+              shadowIntensity: shadowIntensity,
               shadowMapTextureUnit: GL_TEXTURE6,
               lightSpaceMatrix: lightSpaceMatrix,
               isShadowCatcher: true,
@@ -2915,7 +3004,6 @@ private let startingEntry = "1"
           hasLoggedNoLightSpace = true
         }
       }
-    }
 
       // Render particles (after 3D meshes, before UI)
       ParticleSystem.shared.render(projection: projection, view: view, cameraPosition: cameraPosition)
@@ -2933,79 +3021,79 @@ private let startingEntry = "1"
               logger.info("🌑 Shadow map visualization: texture ID=\(shadowMapTextureID), size=\(debugSize), viewport=\(viewportSize.width)x\(viewportSize.height)")
               hasLoggedVisualization = true
             }
-          
-          // Convert screen coordinates to NDC (-1 to 1)
-          // Passthrough shader expects NDC coordinates directly
-          let screenX = viewportSize.width - debugSize - 10
-          let screenY: Float = 10
-          let screenW = debugSize
-          let screenH = debugSize
-          
-          // Convert to NDC: x from [0, width] to [-1, 1], y from [0, height] to [1, -1] (flipped)
-          let ndcLeft = (screenX / viewportSize.width) * 2.0 - 1.0
-          let ndcRight = ((screenX + screenW) / viewportSize.width) * 2.0 - 1.0
-          let ndcTop = 1.0 - (screenY / viewportSize.height) * 2.0
-          let ndcBottom = 1.0 - ((screenY + screenH) / viewportSize.height) * 2.0
-          
-          // Draw shadow map as a simple quad
-          if let passthroughProgram = try? GLProgram("Common/Passthrough") {
-            passthroughProgram.use()
             
-            // Bind shadow map texture
-            glActiveTexture(GL_TEXTURE0)
-            glBindTexture(GL_TEXTURE_2D, shadowMapTextureID)
-            passthroughProgram.setInt("uTexture", value: 0)
+            // Convert screen coordinates to NDC (-1 to 1)
+            // Passthrough shader expects NDC coordinates directly
+            let screenX = viewportSize.width - debugSize - 10
+            let screenY: Float = 10
+            let screenW = debugSize
+            let screenH = debugSize
             
-            // Create quad vertices in NDC space
-            // OpenGL Y is flipped: texture Y=0 is bottom, Y=1 is top
-            let vertices: [Float] = [
-              ndcLeft, ndcTop, 0.0, 1.0,  // top-left (flip texture Y)
-              ndcRight, ndcTop, 1.0, 1.0,  // top-right (flip texture Y)
-              ndcRight, ndcBottom, 1.0, 0.0,  // bottom-right (flip texture Y)
-              ndcLeft, ndcBottom, 0.0, 0.0  // bottom-left (flip texture Y)
-            ]
+            // Convert to NDC: x from [0, width] to [-1, 1], y from [0, height] to [1, -1] (flipped)
+            let ndcLeft = (screenX / viewportSize.width) * 2.0 - 1.0
+            let ndcRight = ((screenX + screenW) / viewportSize.width) * 2.0 - 1.0
+            let ndcTop = 1.0 - (screenY / viewportSize.height) * 2.0
+            let ndcBottom = 1.0 - ((screenY + screenH) / viewportSize.height) * 2.0
             
-            let indices: [UInt32] = [0, 1, 2, 0, 2, 3]
-            
-            var vao: GLuint = 0
-            var vbo: GLuint = 0
-            var ebo: GLuint = 0
-            
-            glGenVertexArrays(1, &vao)
-            glGenBuffers(1, &vbo)
-            glGenBuffers(1, &ebo)
-            
-            glBindVertexArray(vao)
-            
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            vertices.withUnsafeBytes { bytes in
-              glBufferData(GL_ARRAY_BUFFER, bytes.count, bytes.baseAddress, GL_STATIC_DRAW)
+            // Draw shadow map as a simple quad
+            if let passthroughProgram = try? GLProgram.cached("Common/Passthrough") {
+              passthroughProgram.use()
+              
+              // Bind shadow map texture
+              glActiveTexture(GL_TEXTURE0)
+              glBindTexture(GL_TEXTURE_2D, shadowMapTextureID)
+              passthroughProgram.setInt("uTexture", value: 0)
+              
+              // Create quad vertices in NDC space
+              // OpenGL Y is flipped: texture Y=0 is bottom, Y=1 is top
+              let vertices: [Float] = [
+                ndcLeft, ndcTop, 0.0, 1.0,  // top-left (flip texture Y)
+                ndcRight, ndcTop, 1.0, 1.0,  // top-right (flip texture Y)
+                ndcRight, ndcBottom, 1.0, 0.0,  // bottom-right (flip texture Y)
+                ndcLeft, ndcBottom, 0.0, 0.0  // bottom-left (flip texture Y)
+              ]
+              
+              let indices: [UInt32] = [0, 1, 2, 0, 2, 3]
+              
+              var vao: GLuint = 0
+              var vbo: GLuint = 0
+              var ebo: GLuint = 0
+              
+              glGenVertexArrays(1, &vao)
+              glGenBuffers(1, &vbo)
+              glGenBuffers(1, &ebo)
+              
+              glBindVertexArray(vao)
+              
+              glBindBuffer(GL_ARRAY_BUFFER, vbo)
+              vertices.withUnsafeBytes { bytes in
+                glBufferData(GL_ARRAY_BUFFER, bytes.count, bytes.baseAddress, GL_STATIC_DRAW)
+              }
+              
+              glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+              indices.withUnsafeBytes { bytes in
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes.count, bytes.baseAddress, GL_STATIC_DRAW)
+              }
+              
+              // Position attribute (location 0)
+              glEnableVertexAttribArray(0)
+              glVertexAttribPointer(0, 2, GL_FLOAT, false, 16, nil)
+              
+              // Texture coordinate attribute (location 1)
+              glEnableVertexAttribArray(1)
+              glVertexAttribPointer(1, 2, GL_FLOAT, false, 16, UnsafeRawPointer(bitPattern: 8))
+              
+              glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nil)
+              
+              glDeleteVertexArrays(1, &vao)
+              glDeleteBuffers(1, &vbo)
+              glDeleteBuffers(1, &ebo)
+              
+              glBindTexture(GL_TEXTURE_2D, 0)
+            } else {
+              logger.error("⚠️ Failed to load Passthrough shader for shadow map visualization")
             }
-            
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-            indices.withUnsafeBytes { bytes in
-              glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes.count, bytes.baseAddress, GL_STATIC_DRAW)
-            }
-            
-            // Position attribute (location 0)
-            glEnableVertexAttribArray(0)
-            glVertexAttribPointer(0, 2, GL_FLOAT, false, 16, nil)
-            
-            // Texture coordinate attribute (location 1)
-            glEnableVertexAttribArray(1)
-            glVertexAttribPointer(1, 2, GL_FLOAT, false, 16, UnsafeRawPointer(bitPattern: 8))
-            
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nil)
-            
-            glDeleteVertexArrays(1, &vao)
-            glDeleteBuffers(1, &vbo)
-            glDeleteBuffers(1, &ebo)
-            
-            glBindTexture(GL_TEXTURE_2D, 0)
-          } else {
-            logger.error("⚠️ Failed to load Passthrough shader for shadow map visualization")
           }
-        }
         } else {
           if !hasLoggedNoShadowMapForViz {
             logger.warning("⚠️ Shadow map visualization enabled but shadowMap is nil")

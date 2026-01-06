@@ -36,7 +36,7 @@ public final class ParticleSystem {
   
   private init() {
     // Load particle shader
-    self.shader = try! GLProgram("Common/particle", "Common/particle")
+    self.shader = try! GLProgram.cached("Common/particle", "Common/particle")
     
     // Create shared quad geometry
     setupQuadGeometry()
@@ -409,4 +409,3 @@ public final class ParticleSystem {
     return textureID
   }
 }
-

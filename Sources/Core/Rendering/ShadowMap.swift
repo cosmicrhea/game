@@ -87,10 +87,12 @@ public final class ShadowMap {
   public static func calculateLightSpaceMatrix(
     lightDirection: vec3,
     sceneBounds: (min: vec3, max: vec3),
+    centerOverride: vec3? = nil,
+    orthoSizeOverride: Float? = nil,
     shadowDistance: Float = 50.0
   ) -> mat4 {
     // Calculate scene center and size
-    let center = (sceneBounds.min + sceneBounds.max) * 0.5
+    let center = centerOverride ?? (sceneBounds.min + sceneBounds.max) * 0.5
     let size = sceneBounds.max - sceneBounds.min
     
     // Create orthographic projection from light's perspective
@@ -105,7 +107,7 @@ public final class ShadowMap {
     )
     
     // Orthographic projection covering the scene
-    let orthoSize = max(size.x, max(size.y, size.z)) * 1.5
+    let orthoSize = orthoSizeOverride ?? (max(size.x, max(size.y, size.z)) * 1.5)
     let lightProjection = GLMath.ortho(
       -orthoSize,
       orthoSize,

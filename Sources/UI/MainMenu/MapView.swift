@@ -178,7 +178,7 @@ class MapView: RenderLoop {
 
   init() {
     // Initialize map shader
-    mapShaderProgram = try! GLProgram("Common/mapMesh", "Common/mapMesh")
+    mapShaderProgram = try! GLProgram.cached("Common/mapMesh", "Common/mapMesh")
 
     // Note: Don't auto-sync to current scene - caller should call syncToCurrentScene() explicitly if needed
   }

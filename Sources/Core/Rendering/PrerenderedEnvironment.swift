@@ -62,7 +62,7 @@ final class PrerenderedEnvironment {
 
     // Load the PrerenderedEnvironment shader
     do {
-      shader = try GLProgram("Common/PrerenderedEnvironment")
+      shader = try GLProgram.cached("Common/PrerenderedEnvironment")
       logger.trace("✅ PrerenderedEnvironment shader loaded successfully")
     } catch {
       logger.error("❌ Failed to load PrerenderedEnvironment shader: \(error)")

@@ -350,17 +350,20 @@ public final class InteractionSystem {
     // Convert action name to method name (e.g., "Stove" -> "stove")
     let methodName = detectedActionName.prefix(1).lowercased() + detectedActionName.dropFirst()
 
+    let availableMethods = type(of: sceneScript).availableMethods()
+    guard availableMethods.contains(methodName) else {
+      logger.warning("⚠️ Scene script does not respond to method: \(methodName)")
+      return
+    }
+
     // Call the method dynamically (handles both sync and async)
     if let task = sceneScript.callMethod(named: methodName) {
       // Async method - fire and forget
       Task {
         await task.value
       }
-    } else if type(of: sceneScript).availableMethods().contains(methodName) {
-      // Sync method was called successfully
     } else {
-      // Method not found
-      logger.warning("⚠️ Scene script does not respond to method: \(methodName)")
+      // Sync method was called successfully
     }
 
     // Clear the current action name after the interaction
@@ -505,17 +508,22 @@ public final class InteractionSystem {
     // Convert trigger name to method name (e.g., "Door" -> "door")
     let methodName = triggerName.prefix(1).lowercased() + triggerName.dropFirst()
 
+    let availableMethods = type(of: sceneScript).availableMethods()
+    guard availableMethods.contains(methodName) else {
+      logger.warning("⚠️ Scene script does not respond to trigger method: \(methodName)")
+      return
+    }
+
+    MainLoop.shared?.forcePlayerIdleForScript()
+
     // Call the method dynamically (handles both sync and async)
     if let task = sceneScript.callMethod(named: methodName) {
       // Async method - fire and forget
       Task {
         await task.value
       }
-    } else if type(of: sceneScript).availableMethods().contains(methodName) {
-      // Sync method was called successfully
     } else {
-      // Method not found
-      logger.warning("⚠️ Scene script does not respond to trigger method: \(methodName)")
+      // Sync method was called successfully
     }
   }
 

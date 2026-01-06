@@ -64,12 +64,12 @@ public final class GLRenderer: Renderer {
   // MARK: - Renderer
 
   public init() {
-    self.imageProgram = try! GLProgram("UI/image", "UI/image")
-    self.pathProgram = try! GLProgram("Common/path", "Common/path")
-    self.textProgram = try! GLProgram("UI/text")
-    self.fboProgram = try! GLProgram("UI/fbo", "UI/fbo")
-    self.gradientProgram = try! GLProgram("Common/gradient", "Common/gradient")
-    self.debug3dProgram = try! GLProgram("Common/debug3d", "Common/debug3d")
+    self.imageProgram = try! GLProgram.cached("UI/image", "UI/image")
+    self.pathProgram = try! GLProgram.cached("Common/path", "Common/path")
+    self.textProgram = try! GLProgram.cached("UI/text")
+    self.fboProgram = try! GLProgram.cached("UI/fbo", "UI/fbo")
+    self.gradientProgram = try! GLProgram.cached("Common/gradient", "Common/gradient")
+    self.debug3dProgram = try! GLProgram.cached("Common/debug3d", "Common/debug3d")
 
     // Enable depth testing
     glEnable(GL_DEPTH_TEST)

@@ -175,8 +175,14 @@ class MeshInstance {
   }
 
 
-  // Rendering program
-  private let program: GLProgram
+  // Rendering programs (cached by shader pair)
+  private struct ProgramSet {
+    let opaque: GLProgram
+    let cutout: GLProgram
+    let blend: GLProgram
+    let shadowMatte: GLProgram
+  }
+  private let programs: ProgramSet
 
   var VAO: GLuint = 0
   var VBO: GLuint = 0
@@ -249,13 +255,17 @@ class MeshInstance {
     self.transformMatrix = transformMatrix
     self.sceneIdentifier = sceneIdentifier
 
-    // Create shader program - use skeletal shader if mesh has bones
+    // Create shader programs - use skeletal vertex shader if mesh has bones
     self.isSkeletalMesh = mesh.numberOfBones > 0
+    let vertexName = isSkeletalMesh ? "Common/skeletal" : "Common/basic 2"
+    self.programs = ProgramSet(
+      opaque: try! GLProgram.cached(vertexName, "Common/pbr_opaque"),
+      cutout: try! GLProgram.cached(vertexName, "Common/pbr_cutout"),
+      blend: try! GLProgram.cached(vertexName, "Common/pbr_blend"),
+      shadowMatte: try! GLProgram.cached(vertexName, "Common/shadow_matte")
+    )
     if isSkeletalMesh {
-      self.program = try! GLProgram("Common/skeletal", "Common/basic 2")
       initializeBoneData()
-    } else {
-      self.program = try! GLProgram("Common/basic 2")
     }
 
     glGenVertexArrays(1, &VAO)
@@ -721,6 +731,20 @@ class MeshInstance {
       debugForceTransparentColor: false)
   }
 
+  private func programFor(effectiveRenderMode: RenderMode, isShadowCatcher: Bool) -> GLProgram {
+    if isShadowCatcher {
+      return programs.shadowMatte
+    }
+    switch effectiveRenderMode {
+    case .opaque:
+      return programs.opaque
+    case .cutoutCoverage:
+      return programs.cutout
+    case .overlayBlend, .translucent:
+      return programs.blend
+    }
+  }
+
   func draw(
     projection: mat4, view: mat4, modelMatrix: mat4, cameraPosition: vec3, lightDirection: vec3, lightColor: vec3,
     lightIntensity: Float, fillLightDirection: vec3, fillLightColor: vec3, fillLightIntensity: Float,
@@ -730,11 +754,14 @@ class MeshInstance {
     showUVDebug: Bool = false, showUVRaw: Bool = false,
     renderPassName: String = "UnknownPass",
     useAlphaHash: Bool = false, useAlphaToCoverage: Bool = false, usePolygonOffset: Bool = false,
+    useFixedRenderState: Bool = false,
     debugForceTransparentColor: Bool = false,  // Temporary debug: force cyan with 0.5 alpha
+    shadowIntensity: Float = 0.15,
     shadowMapTextureUnit: GLenum? = nil, lightSpaceMatrix: mat4? = nil,
     isShadowCatcher: Bool = false,
     shadowCatcherDebugColor: Bool = false  // Debug: render shadow catchers as solid color
   ) {
+    let program = programFor(effectiveRenderMode: effectiveRenderMode, isShadowCatcher: isShadowCatcher)
     program.use()
 
     logDrawIfNeeded(passName: renderPassName, effectiveRenderMode: effectiveRenderMode)
@@ -897,9 +924,9 @@ class MeshInstance {
     // Set shadow catcher flag
     program.setBool("isShadowCatcher", value: isShadowCatcher)
     
-    // Set shadow intensity (default to very light shadows)
-    let shadowIntensity: Float = isShadowCatcher ? 1.0 : 0.15  // Very light shadows on objects, full on catchers
-    program.setFloat("shadowIntensity", value: shadowIntensity)
+    // Shadow catchers use full intensity; lit objects use the caller's intensity.
+    let effectiveShadowIntensity: Float = isShadowCatcher ? 1.0 : shadowIntensity
+    program.setFloat("shadowIntensity", value: effectiveShadowIntensity)
     
     // Set debug color flag for shadow catchers
     program.setBool("shadowCatcherDebugColor", value: shadowCatcherDebugColor)
@@ -908,7 +935,7 @@ class MeshInstance {
     // This ensures consistent behavior across logging, pass routing, and GL state
     // renderMode drives GL state, not alphaMode
     
-    let shouldPreserveGLState = isShadowCatcher
+    let shouldPreserveGLState = isShadowCatcher || useFixedRenderState
     
     // Save and configure OpenGL state for proper rendering
     let wasBlendEnabled = glIsEnabled(GL_BLEND)
@@ -997,6 +1024,20 @@ class MeshInstance {
           glDepthMask(true)
         }
       }
+    } else {
+      // Preserve caller's blend/depth state, but still respect per-mesh culling and offsets.
+      if isDoubleSided {
+        glDisable(GL_CULL_FACE)
+      } else {
+        glEnable(GL_CULL_FACE)
+        glCullFace(GL_BACK)
+      }
+      if usePolygonOffset {
+        glEnable(GL_POLYGON_OFFSET_FILL)
+        glPolygonOffset(-0.5, -0.5)
+      } else {
+        glDisable(GL_POLYGON_OFFSET_FILL)
+      }
     }
 
     // Verify we're using filled triangles (GL_TRIANGLES with default GL_FILL mode)
@@ -1057,6 +1098,9 @@ class MeshInstance {
         // Restore depth test state
         if wasDepthTestEnabled { glEnable(GL_DEPTH_TEST) } else { glDisable(GL_DEPTH_TEST) }
       }
+    } else if useFixedRenderState {
+      if wasPolygonOffsetEnabled { glEnable(GL_POLYGON_OFFSET_FILL) } else { glDisable(GL_POLYGON_OFFSET_FILL) }
+      if wasCullFaceEnabled { glEnable(GL_CULL_FACE) } else { glDisable(GL_CULL_FACE) }
     }
     
     // Restore cull face state to what it was before we changed it

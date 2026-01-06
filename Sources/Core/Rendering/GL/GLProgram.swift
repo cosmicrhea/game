@@ -156,6 +156,14 @@ enum GLProgramError: Error {
 
 /// A shader program that loads, compiles, and links OpenGL shaders
 public final class GLProgram: @unchecked Sendable {
+  private struct ProgramCacheKey: Hashable {
+    let vertexName: String
+    let fragmentName: String
+  }
+
+  nonisolated(unsafe) private static var programCache: [ProgramCacheKey: GLProgram] = [:]
+  nonisolated(unsafe) private static let cacheLock = NSLock()
+
   private(set) var programID: GLuint
   private let vertexName: String
   private let fragmentName: String
@@ -177,6 +185,22 @@ public final class GLProgram: @unchecked Sendable {
   /// Looks for vertex shader as "name.vert" and fragment shader as "name.frag"
   public convenience init(_ name: String) throws {
     try self.init(name, name)
+  }
+
+  public static func cached(_ name: String) throws -> GLProgram {
+    try cached(name, name)
+  }
+
+  public static func cached(_ vertexName: String, _ fragmentName: String) throws -> GLProgram {
+    let key = ProgramCacheKey(vertexName: vertexName, fragmentName: fragmentName)
+    cacheLock.lock()
+    defer { cacheLock.unlock() }
+    if let cached = programCache[key] {
+      return cached
+    }
+    let program = try GLProgram(vertexName, fragmentName)
+    programCache[key] = program
+    return program
   }
 
   /// Initialize shader program from separate vertex and fragment base names
